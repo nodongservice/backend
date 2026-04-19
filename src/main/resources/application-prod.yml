@@ -1,0 +1,19 @@
+spring:
+  config:
+    activate:
+      on-profile: prod
+  datasource:
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    driver-class-name: ${DB_DRIVER:org.postgresql.Driver}
+
+bridgework:
+  sync:
+    cron: ${BRIDGEWORK_SYNC_CRON:0 0/30 * * * *}
+    request-timeout: ${BRIDGEWORK_SYNC_TIMEOUT:20s}
+    data-go-kr-service-key: ${DATA_GO_KR_SERVICE_KEY}
+    kric-service-key: ${KRIC_SERVICE_KEY}
+    kric-station-code-file-path: ${KRIC_STATION_CODE_XLSX_PATH}
+    work24-vocational-training-auth-key: ${WORK24_VOCATIONAL_TRAINING_AUTH_KEY}
+    work24-competency-auth-key: ${WORK24_COMPETENCY_AUTH_KEY}

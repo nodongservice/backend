@@ -1,0 +1,104 @@
+server:
+  port: ${SERVER_PORT:8080}
+  shutdown: graceful
+
+spring:
+  application:
+    name: bridgework-backend
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        format_sql: true
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+  lifecycle:
+    timeout-per-shutdown-phase: 20s
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+bridgework:
+  sync:
+    cron: ${BRIDGEWORK_SYNC_CRON:0 0/30 * * * *}
+    request-timeout: ${BRIDGEWORK_SYNC_TIMEOUT:20s}
+    kric-station-code-file-path: ${KRIC_STATION_CODE_XLSX_PATH:}
+    sources:
+      - source-type: KEPAD_RECRUITMENT
+        enabled: ${SYNC_KEPAD_RECRUITMENT_ENABLED:false}
+        base-url: ${SYNC_KEPAD_RECRUITMENT_URL:http://apis.data.go.kr/B552583/job/job_list_env}
+        service-key: ${bridgework.sync.data-go-kr-service-key:}
+        page-size: ${SYNC_KEPAD_RECRUITMENT_PAGE_SIZE:1000}
+        max-pages: ${SYNC_KEPAD_RECRUITMENT_MAX_PAGES:1000}
+        item-id-field: joReqstNo
+      - source-type: KEPAD_JOB_CATEGORY
+        enabled: ${SYNC_KEPAD_JOB_CATEGORY_ENABLED:false}
+        base-url: ${SYNC_KEPAD_JOB_CATEGORY_URL:http://apis.data.go.kr/B552583/jobcode/job_code}
+        service-key: ${bridgework.sync.data-go-kr-service-key:}
+        page-size: ${SYNC_KEPAD_JOB_CATEGORY_PAGE_SIZE:1000}
+        max-pages: ${SYNC_KEPAD_JOB_CATEGORY_MAX_PAGES:1000}
+        item-id-field: clCode
+      - source-type: KEPAD_STANDARD_WORKPLACE
+        enabled: ${SYNC_KEPAD_STANDARD_WORKPLACE_ENABLED:false}
+        base-url: ${SYNC_KEPAD_STANDARD_WORKPLACE_URL:http://apis.data.go.kr/B552583/comp/comp_auth}
+        service-key: ${bridgework.sync.data-go-kr-service-key:}
+        page-size: ${SYNC_KEPAD_STANDARD_WORKPLACE_PAGE_SIZE:1000}
+        max-pages: ${SYNC_KEPAD_STANDARD_WORKPLACE_MAX_PAGES:1000}
+        item-id-field: bsnmNo
+      - source-type: KEPAD_SUPPORT_AGENCY
+        enabled: ${SYNC_KEPAD_SUPPORT_AGENCY_ENABLED:false}
+        base-url: ${SYNC_KEPAD_SUPPORT_AGENCY_URL:http://apis.data.go.kr/B552583/instn/instn_list}
+        service-key: ${bridgework.sync.data-go-kr-service-key:}
+        page-size: ${SYNC_KEPAD_SUPPORT_AGENCY_PAGE_SIZE:1000}
+        max-pages: ${SYNC_KEPAD_SUPPORT_AGENCY_MAX_PAGES:1000}
+        item-id-field: insttCode
+      - source-type: TRANSPORT_SUPPORT_CENTER
+        enabled: ${SYNC_TRANSPORT_SUPPORT_CENTER_ENABLED:false}
+        base-url: ${SYNC_TRANSPORT_SUPPORT_CENTER_URL:https://api.data.go.kr/openapi/tn_pubr_public_tfcwker_mvmn_cnter_api}
+        service-key: ${bridgework.sync.data-go-kr-service-key:}
+        page-size: ${SYNC_TRANSPORT_SUPPORT_CENTER_PAGE_SIZE:1000}
+        max-pages: ${SYNC_TRANSPORT_SUPPORT_CENTER_MAX_PAGES:1000}
+        item-id-field: id
+        query-params:
+          type: json
+      - source-type: RAIL_WHEELCHAIR_LIFT
+        enabled: ${SYNC_RAIL_WHEELCHAIR_LIFT_ENABLED:false}
+        base-url: ${SYNC_RAIL_WHEELCHAIR_LIFT_URL:https://openapi.kric.go.kr/openapi/vulnerableUserInfo/stationWheelchairLiftLocation}
+        service-key: ${bridgework.sync.kric-service-key:}
+        page-size: 1
+        max-pages: 1
+        item-id-field: stinCd
+        query-params:
+          service: vulnerableUserInfo
+          operation: stationWheelchairLiftLocation
+          format: json
+      - source-type: SEOUL_WHEELCHAIR_LIFT
+        enabled: ${SYNC_SEOUL_WHEELCHAIR_LIFT_ENABLED:false}
+        base-url: ${SYNC_SEOUL_WHEELCHAIR_LIFT_URL:https://www.data.go.kr/data/15044262/fileData.do}
+        service-key: ${bridgework.sync.data-go-kr-service-key:}
+        page-size: ${SYNC_SEOUL_WHEELCHAIR_LIFT_PAGE_SIZE:10000}
+        max-pages: ${SYNC_SEOUL_WHEELCHAIR_LIFT_MAX_PAGES:1000}
+        item-id-field: 승강기 일련번호
+      - source-type: VOCATIONAL_TRAINING
+        enabled: ${SYNC_VOCATIONAL_TRAINING_ENABLED:false}
+        base-url: ${SYNC_VOCATIONAL_TRAINING_URL:https://www.work24.go.kr/cm/openApi/call/hr/callOpenApiSvcInfo310L01.do}
+        service-key: ${bridgework.sync.work24-vocational-training-auth-key:}
+        page-size: ${SYNC_VOCATIONAL_TRAINING_PAGE_SIZE:100}
+        max-pages: ${SYNC_VOCATIONAL_TRAINING_MAX_PAGES:1000}
+        item-id-field: trprId
+        items-json-pointer: /HRDNet/srchList/scn_list
+        total-count-json-pointer: /HRDNet/scn_cnt
+      - source-type: JOBSEEKER_COMPETENCY_PROGRAM
+        enabled: ${SYNC_JOBSEEKER_COMPETENCY_PROGRAM_ENABLED:false}
+        base-url: ${SYNC_JOBSEEKER_COMPETENCY_PROGRAM_URL:https://www.work24.go.kr/cm/openApi/call/wk/callOpenApiSvcInfo217L01.do}
+        service-key: ${bridgework.sync.work24-competency-auth-key:}
+        page-size: ${SYNC_JOBSEEKER_COMPETENCY_PROGRAM_PAGE_SIZE:100}
+        max-pages: ${SYNC_JOBSEEKER_COMPETENCY_PROGRAM_MAX_PAGES:1000}
+        items-json-pointer: /empPgmSchdInviteList/empPgmSchdInvite
+        total-count-json-pointer: /empPgmSchdInviteList/total

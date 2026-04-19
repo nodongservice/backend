@@ -1,0 +1,11 @@
+.gradle
+build/
+out/
+*.iml
+.DS_Store
+
+# 민감 정보 파일
+scripts/.env
+
+# 배포 환경 외 로컬 전용 설정
+src/main/resources/application-local.yml
