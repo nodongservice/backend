@@ -20,8 +20,10 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HexFormat;
+import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -72,8 +74,19 @@ public class PublicDataApiClient {
         if (sourceType == PublicDataSourceType.SEOUL_WHEELCHAIR_LIFT) {
             return fetchSeoulWheelchairLiftPage(sourceConfig, pageNo);
         }
-        if (sourceType == PublicDataSourceType.RAIL_WHEELCHAIR_LIFT) {
+        if (sourceType == PublicDataSourceType.NATIONWIDE_BUS_STOP) {
+            return fetchDataGoFileDataPage(sourceConfig, pageNo);
+        }
+        if (sourceType == PublicDataSourceType.RAIL_WHEELCHAIR_LIFT
+                || sourceType == PublicDataSourceType.RAIL_WHEELCHAIR_LIFT_MOVEMENT) {
             return fetchRailWheelchairLiftPage(sourceConfig, pageNo);
+        }
+        if (sourceType == PublicDataSourceType.SEOUL_SUBWAY_ENTRANCE_LIFT
+                || sourceType == PublicDataSourceType.SEOUL_WALKING_NETWORK) {
+            return fetchSeoulOpenApiPage(sourceConfig, pageNo);
+        }
+        if (sourceType == PublicDataSourceType.NATIONWIDE_TRAFFIC_LIGHT) {
+            return fetchDataGoXmlPage(sourceConfig, pageNo);
         }
         if (sourceType == PublicDataSourceType.VOCATIONAL_TRAINING) {
             return fetchVocationalTrainingPage(sourceConfig, pageNo);
@@ -125,18 +138,14 @@ public class PublicDataApiClient {
         Set<String> dedupedExternalIds = new LinkedHashSet<>();
 
         for (String stationName : stationNames) {
-            String requestUri = buildSeoulWheelchairLiftRequestUri(
+            List<PublicDataApiItemDto> stationItems = fetchAllDataGoFileDataItems(
+                    sourceConfig,
                     publicDataPk,
                     publicDataDetailPk,
-                    sourceConfig,
-                    stationName
-            );
-            String responseBody = fetchBody(requestUri, sourceConfig.getSourceType());
-            List<PublicDataApiItemDto> stationItems = parseSeoulWheelchairLiftItems(responseBody, sourceConfig);
-            log.info("[COUNT] source={} station={} detected={}",
-                    sourceConfig.getSourceType(),
+                    "역명",
                     stationName,
-                    stationItems.size());
+                    "station=" + stationName
+            );
 
             for (PublicDataApiItemDto stationItem : stationItems) {
                 if (dedupedExternalIds.add(stationItem.externalId())) {
@@ -149,12 +158,184 @@ public class PublicDataApiClient {
             return new PublicDataApiPageResponseDto(aggregatedItems, false);
         }
 
-        // 역사명 필터가 불일치하는 경우를 대비해 전체 조회를 1회 수행한다.
-        String fallbackRequestUri = buildSeoulWheelchairLiftRequestUri(publicDataPk, publicDataDetailPk, sourceConfig, null);
-        String fallbackResponseBody = fetchBody(fallbackRequestUri, sourceConfig.getSourceType());
-        List<PublicDataApiItemDto> fallbackItems = parseSeoulWheelchairLiftItems(fallbackResponseBody, sourceConfig);
-        log.info("[COUNT] source={} fallback=all detected={}", sourceConfig.getSourceType(), fallbackItems.size());
+        // 역사명 필터가 불일치하는 경우를 대비해 전체 조회를 수행한다.
+        List<PublicDataApiItemDto> fallbackItems = fetchAllDataGoFileDataItems(
+                sourceConfig,
+                publicDataPk,
+                publicDataDetailPk,
+                null,
+                null,
+                "fallback=all"
+        );
         return new PublicDataApiPageResponseDto(fallbackItems, false);
+    }
+
+    private PublicDataApiPageResponseDto fetchDataGoFileDataPage(
+            BridgeWorkSyncProperties.SourceConfig sourceConfig,
+            int pageNo
+    ) {
+        if (pageNo > 1) {
+            return new PublicDataApiPageResponseDto(List.of(), false);
+        }
+
+        String fileDataPageBody = fetchBody(sourceConfig.getBaseUrl(), sourceConfig.getSourceType());
+        String publicDataPk = extractFileDataField(fileDataPageBody, PUBLIC_DATA_PK_PATTERN, "publicDataPk");
+        String publicDataDetailPk = extractFileDataField(fileDataPageBody, PUBLIC_DATA_DETAIL_PK_PATTERN, "publicDataDetailPk");
+
+        List<PublicDataApiItemDto> items = fetchAllDataGoFileDataItems(
+                sourceConfig,
+                publicDataPk,
+                publicDataDetailPk,
+                null,
+                null,
+                "all"
+        );
+        return new PublicDataApiPageResponseDto(items, false);
+    }
+
+    private List<PublicDataApiItemDto> fetchAllDataGoFileDataItems(
+            BridgeWorkSyncProperties.SourceConfig sourceConfig,
+            String publicDataPk,
+            String publicDataDetailPk,
+            String filterField,
+            String filterValue,
+            String contextLabel
+    ) {
+        List<PublicDataApiItemDto> records = new ArrayList<>();
+
+        for (int fileDataPageNo = 1; fileDataPageNo <= sourceConfig.getMaxPages(); fileDataPageNo++) {
+            String requestUri = buildDataGoFileDataRequestUri(
+                    sourceConfig,
+                    publicDataPk,
+                    publicDataDetailPk,
+                    fileDataPageNo,
+                    filterField,
+                    filterValue
+            );
+            String responseBody = fetchBody(requestUri, sourceConfig.getSourceType());
+            FileDataPageResultDto pageResult = parseDataGoFileDataItems(responseBody, sourceConfig);
+
+            log.info("[COUNT] source={} {} page={} detected={}",
+                    sourceConfig.getSourceType(),
+                    contextLabel,
+                    fileDataPageNo,
+                    pageResult.items().size());
+
+            if (pageResult.items().isEmpty()) {
+                break;
+            }
+
+            records.addAll(pageResult.items());
+
+            if (!hasNextPage(pageResult.totalCount(), fileDataPageNo, sourceConfig.getPageSize(), pageResult.items().size())) {
+                break;
+            }
+        }
+
+        return records;
+    }
+
+    private FileDataPageResultDto parseDataGoFileDataItems(
+            String responseBody,
+            BridgeWorkSyncProperties.SourceConfig sourceConfig
+    ) {
+        try {
+            JsonNode rootNode = objectMapper.readTree(responseBody);
+            List<PublicDataApiItemDto> items = mapItems(rootNode.path("data"), sourceConfig);
+            int totalCount = parseInteger(rootNode.path("totalCount").asText(null)).orElse(-1);
+            return new FileDataPageResultDto(items, totalCount);
+        } catch (JsonProcessingException exception) {
+            throw new PayloadParseException("파일데이터 변환 API 응답 파싱 실패: " + sourceConfig.getSourceType(), exception);
+        }
+    }
+
+    private PublicDataApiPageResponseDto fetchSeoulOpenApiPage(
+            BridgeWorkSyncProperties.SourceConfig sourceConfig,
+            int pageNo
+    ) {
+        String serviceName = Optional.ofNullable(sourceConfig.getQueryParams())
+                .map(queryParams -> queryParams.get("serviceName"))
+                .filter(value -> value != null && !value.isBlank())
+                .orElseThrow(() -> new ExternalApiException("서울 열린데이터 serviceName 설정이 비어 있습니다: " + sourceConfig.getSourceType()));
+
+        String requestUri = buildSeoulOpenApiRequestUri(sourceConfig, serviceName, pageNo);
+        String responseBody = fetchBody(requestUri, sourceConfig.getSourceType());
+
+        try {
+            JsonNode rootNode = objectMapper.readTree(responseBody);
+            JsonNode serviceNode = resolveSeoulServiceNode(rootNode, serviceName);
+            validateSeoulOpenApiResultOrThrow(serviceNode, sourceConfig.getSourceType());
+
+            JsonNode rowsNode = serviceNode.path("row");
+            List<PublicDataApiItemDto> items = mapItems(rowsNode, sourceConfig);
+            int totalCount = parseInteger(serviceNode.path("list_total_count").asText(null)).orElse(-1);
+            boolean hasNext = hasNextPage(totalCount, pageNo, sourceConfig.getPageSize(), items.size());
+
+            log.info("[COUNT] source={} serviceName={} page={} detected={} hasNext={}",
+                    sourceConfig.getSourceType(),
+                    serviceName,
+                    pageNo,
+                    items.size(),
+                    hasNext);
+            return new PublicDataApiPageResponseDto(items, hasNext);
+        } catch (JsonProcessingException exception) {
+            throw new PayloadParseException("서울 열린데이터 응답 파싱 실패: " + sourceConfig.getSourceType(), exception);
+        }
+    }
+
+    private JsonNode resolveSeoulServiceNode(JsonNode rootNode, String serviceName) {
+        JsonNode configuredNode = rootNode.path(serviceName);
+        if (configuredNode.isObject()) {
+            return configuredNode;
+        }
+
+        Iterator<Map.Entry<String, JsonNode>> fields = rootNode.fields();
+        while (fields.hasNext()) {
+            Map.Entry<String, JsonNode> entry = fields.next();
+            JsonNode candidateNode = entry.getValue();
+            if (!candidateNode.isObject()) {
+                continue;
+            }
+            if (candidateNode.has("row") || candidateNode.has("list_total_count") || candidateNode.has("RESULT")) {
+                return candidateNode;
+            }
+        }
+
+        return objectMapper.createObjectNode();
+    }
+
+    private void validateSeoulOpenApiResultOrThrow(JsonNode serviceNode, PublicDataSourceType sourceType) {
+        JsonNode resultNode = extractSeoulResultNode(serviceNode);
+        String resultCode = resultNode.path("CODE").asText("").trim();
+        if (resultCode.isBlank()
+                || "INFO-000".equalsIgnoreCase(resultCode)
+                || "INFO-200".equalsIgnoreCase(resultCode)) {
+            return;
+        }
+
+        String message = resultNode.path("MESSAGE").asText("알 수 없는 오류").trim();
+        throw new ExternalApiException(
+                "서울 열린데이터 API 응답 오류(" + sourceType + "): "
+                        + message
+                        + " [CODE=" + resultCode + "]"
+        );
+    }
+
+    private JsonNode extractSeoulResultNode(JsonNode serviceNode) {
+        if (!serviceNode.isObject()) {
+            return objectMapper.createObjectNode();
+        }
+
+        JsonNode nestedResultNode = serviceNode.path("RESULT");
+        if (nestedResultNode.isObject()) {
+            return nestedResultNode;
+        }
+
+        if (serviceNode.has("CODE") || serviceNode.has("MESSAGE")) {
+            return serviceNode;
+        }
+
+        return objectMapper.createObjectNode();
     }
 
     private PublicDataApiPageResponseDto fetchRailWheelchairLiftPage(
@@ -177,7 +358,11 @@ public class PublicDataApiClient {
                 JsonNode rootNode = objectMapper.readTree(responseBody);
                 validateApiResultOrThrow(rootNode, sourceConfig.getSourceType());
                 JsonNode itemsNode = resolveRailItemsNode(rootNode, sourceConfig.getItemsJsonPointer());
-                List<PublicDataApiItemDto> stationItems = mapRailItems(itemsNode, stationReference);
+                List<PublicDataApiItemDto> stationItems = mapRailItems(
+                        itemsNode,
+                        stationReference,
+                        sourceConfig.getSourceType()
+                );
                 log.info("[COUNT] source={} railOprIsttCd={} lnCd={} stinCd={} detected={}",
                         sourceConfig.getSourceType(),
                         stationReference.railOprIsttCd(),
@@ -192,7 +377,7 @@ public class PublicDataApiClient {
                 }
             } catch (JsonProcessingException exception) {
                 throw new PayloadParseException(
-                        "국토교통부 역사별 휠체어리프트 응답 파싱 실패: "
+                        "국가철도공단 역사별 휠체어리프트 응답 파싱 실패: "
                                 + stationReference.railOprIsttCd() + "/" + stationReference.lnCd() + "/" + stationReference.stinCd(),
                         exception
                 );
@@ -200,6 +385,28 @@ public class PublicDataApiClient {
         }
 
         return new PublicDataApiPageResponseDto(aggregatedItems, false);
+    }
+
+    private PublicDataApiPageResponseDto fetchDataGoXmlPage(
+            BridgeWorkSyncProperties.SourceConfig sourceConfig,
+            int pageNo
+    ) {
+        String requestUri = buildRequestUri(sourceConfig, pageNo);
+        String responseBody = fetchBody(requestUri, sourceConfig.getSourceType());
+        JsonNode rootNode = parseXml(responseBody, "공공데이터 XML 응답 파싱 실패: " + sourceConfig.getSourceType());
+
+        validateApiResultOrThrow(rootNode, sourceConfig.getSourceType());
+        JsonNode itemsNode = resolveItemsNode(rootNode, sourceConfig.getItemsJsonPointer());
+        List<PublicDataApiItemDto> items = mapItems(itemsNode, sourceConfig);
+
+        int totalCount = resolveTotalCount(rootNode, sourceConfig.getTotalCountJsonPointer()).orElse(-1);
+        boolean hasNext = hasNextPage(totalCount, pageNo, sourceConfig.getPageSize(), items.size());
+        log.info("[COUNT] source={} page={} detected={} hasNext={}",
+                sourceConfig.getSourceType(),
+                pageNo,
+                items.size(),
+                hasNext);
+        return new PublicDataApiPageResponseDto(items, hasNext);
     }
 
     private PublicDataApiPageResponseDto fetchVocationalTrainingPage(
@@ -292,37 +499,52 @@ public class PublicDataApiClient {
         return builder.build(true).toUriString();
     }
 
-    private String buildSeoulWheelchairLiftRequestUri(String publicDataPk,
-                                                      String publicDataDetailPk,
-                                                      BridgeWorkSyncProperties.SourceConfig sourceConfig,
-                                                      String stationName) {
+    private String buildDataGoFileDataRequestUri(BridgeWorkSyncProperties.SourceConfig sourceConfig,
+                                                 String publicDataPk,
+                                                 String publicDataDetailPk,
+                                                 int pageNo,
+                                                 String filterField,
+                                                 String filterValue) {
         UriComponentsBuilder builder = UriComponentsBuilder
                 .fromHttpUrl("https://api.odcloud.kr/api/" + publicDataPk + "/v1/" + publicDataDetailPk)
                 .queryParam("serviceKey", sourceConfig.getServiceKey())
-                .queryParam("page", 1)
+                .queryParam("page", pageNo)
                 .queryParam("perPage", sourceConfig.getPageSize())
                 .queryParam("returnType", "JSON");
 
-        if (stationName != null && !stationName.isBlank()) {
-            // fileData 변환 API는 컬럼명 기반 필터를 지원하므로 역명으로 전체 역을 순회 조회한다.
-            builder.queryParam("역명", stationName.trim());
+        if (filterField != null && !filterField.isBlank() && filterValue != null && !filterValue.isBlank()) {
+            // fileData 변환 API는 컬럼명 기반 필터를 지원한다.
+            builder.queryParam(filterField.trim(), filterValue.trim());
         }
 
         applyQueryParams(builder, sourceConfig.getQueryParams());
         return builder.build(true).toUriString();
     }
 
-    private List<PublicDataApiItemDto> parseSeoulWheelchairLiftItems(
-            String responseBody,
-            BridgeWorkSyncProperties.SourceConfig sourceConfig
+    private String buildSeoulOpenApiRequestUri(
+            BridgeWorkSyncProperties.SourceConfig sourceConfig,
+            String serviceName,
+            int pageNo
     ) {
-        try {
-            JsonNode rootNode = objectMapper.readTree(responseBody);
-            JsonNode itemsNode = rootNode.path("data");
-            return mapItems(itemsNode, sourceConfig);
-        } catch (JsonProcessingException exception) {
-            throw new PayloadParseException("서울교통공사 파일데이터 응답 파싱 실패", exception);
+        int start = (pageNo - 1) * sourceConfig.getPageSize() + 1;
+        int end = pageNo * sourceConfig.getPageSize();
+
+        UriComponentsBuilder builder = UriComponentsBuilder
+                .fromHttpUrl(sourceConfig.getBaseUrl())
+                .pathSegment(sourceConfig.getServiceKey(), "json", serviceName, String.valueOf(start), String.valueOf(end));
+
+        if (sourceConfig.getQueryParams() != null && !sourceConfig.getQueryParams().isEmpty()) {
+            sourceConfig.getQueryParams().forEach((key, value) -> {
+                if ("serviceName".equals(key)) {
+                    return;
+                }
+                if (value != null && !value.isBlank()) {
+                    builder.queryParam(key, value);
+                }
+            });
         }
+
+        return builder.build(true).toUriString();
     }
 
     private String buildRailWheelchairLiftRequestUri(
@@ -390,7 +612,8 @@ public class PublicDataApiClient {
         boolean hasResponseTypeParam = queryParams.keySet().stream()
                 .anyMatch(key -> "type".equalsIgnoreCase(key)
                         || "_type".equalsIgnoreCase(key)
-                        || "returnType".equalsIgnoreCase(key));
+                        || "returnType".equalsIgnoreCase(key)
+                        || "dataType".equalsIgnoreCase(key));
 
         if (!hasResponseTypeParam) {
             builder.queryParam("_type", "json");
@@ -530,20 +753,29 @@ public class PublicDataApiClient {
 
     private List<PublicDataApiItemDto> mapRailItems(
             JsonNode itemsNode,
-            KricStationCodeLoader.StationReference stationReference
+            KricStationCodeLoader.StationReference stationReference,
+            PublicDataSourceType sourceType
     ) {
         List<PublicDataApiItemDto> items = new ArrayList<>();
 
         if (itemsNode.isArray()) {
             for (JsonNode itemNode : itemsNode) {
-                items.add(toRailItem(itemNode, stationReference));
+                items.add(toRailItem(itemNode, stationReference, sourceType));
             }
             return items;
         }
 
         if (itemsNode.isObject()) {
             if (containsRailField(itemsNode)) {
-                items.add(toRailItem(itemsNode, stationReference));
+                items.add(toRailItem(itemsNode, stationReference, sourceType));
+                return items;
+            }
+
+            boolean hasWrapperKey = List.of("item", "items", "list", "row", "body", "data", "result", "response", "header")
+                    .stream()
+                    .anyMatch(itemsNode::has);
+            if (!hasWrapperKey && itemsNode.size() > 0) {
+                items.add(toRailItem(itemsNode, stationReference, sourceType));
                 return items;
             }
 
@@ -551,14 +783,22 @@ public class PublicDataApiClient {
                 JsonNode nestedNode = itemsNode.path(nestedKey);
                 if (nestedNode.isArray()) {
                     for (JsonNode childNode : nestedNode) {
-                        items.add(toRailItem(childNode, stationReference));
+                        items.add(toRailItem(childNode, stationReference, sourceType));
                     }
                     if (!items.isEmpty()) {
                         return items;
                     }
-                } else if (nestedNode.isObject() && containsRailField(nestedNode)) {
-                    items.add(toRailItem(nestedNode, stationReference));
-                    return items;
+                } else if (nestedNode.isObject()) {
+                    if (containsRailField(nestedNode)) {
+                        items.add(toRailItem(nestedNode, stationReference, sourceType));
+                        return items;
+                    }
+
+                    List<PublicDataApiItemDto> nestedItems = mapRailItems(nestedNode, stationReference, sourceType);
+                    if (!nestedItems.isEmpty()) {
+                        items.addAll(nestedItems);
+                        return items;
+                    }
                 }
             }
         }
@@ -568,7 +808,8 @@ public class PublicDataApiClient {
 
     private PublicDataApiItemDto toRailItem(
             JsonNode rawItemNode,
-            KricStationCodeLoader.StationReference stationReference
+            KricStationCodeLoader.StationReference stationReference,
+            PublicDataSourceType sourceType
     ) {
         ObjectNode normalizedItem;
         if (rawItemNode.isObject()) {
@@ -588,7 +829,7 @@ public class PublicDataApiClient {
         try {
             String payloadJson = objectMapper.writeValueAsString(normalizedItem);
             String payloadHash = sha256(payloadJson);
-            String externalId = buildRailExternalId(normalizedItem);
+            String externalId = buildRailExternalId(normalizedItem, payloadHash, sourceType);
             return new PublicDataApiItemDto(externalId, payloadJson, payloadHash);
         } catch (JsonProcessingException exception) {
             throw new PayloadParseException("역사별 휠체어리프트 응답 직렬화 실패", exception);
@@ -611,8 +852,13 @@ public class PublicDataApiClient {
                 || node.has("dtlLoc");
     }
 
-    private String buildRailExternalId(ObjectNode normalizedItem) {
+    private String buildRailExternalId(
+            ObjectNode normalizedItem,
+            String payloadHash,
+            PublicDataSourceType sourceType
+    ) {
         String identity = String.join("|",
+                sourceType.name(),
                 normalizedItem.path("railOprIsttCd").asText("").trim(),
                 normalizedItem.path("lnCd").asText("").trim(),
                 normalizedItem.path("stinCd").asText("").trim(),
@@ -621,9 +867,10 @@ public class PublicDataApiClient {
                 normalizedItem.path("runStinFlorTo").asText("").trim(),
                 normalizedItem.path("dtlLoc").asText("").trim(),
                 normalizedItem.path("grndDvNmFr").asText("").trim(),
-                normalizedItem.path("grndDvNmTo").asText("").trim()
+                normalizedItem.path("grndDvNmTo").asText("").trim(),
+                payloadHash
         );
-        return "rail-" + sha256(identity);
+        return sourceType.name().toLowerCase(Locale.ROOT) + "-" + sha256(identity);
     }
 
     private List<PublicDataApiItemDto> mapItems(JsonNode itemsNode, BridgeWorkSyncProperties.SourceConfig sourceConfig) {
@@ -709,7 +956,8 @@ public class PublicDataApiClient {
     }
 
     private boolean isNoDataResultCode(PublicDataSourceType sourceType, String resultCode) {
-        if (sourceType != PublicDataSourceType.RAIL_WHEELCHAIR_LIFT) {
+        if (sourceType != PublicDataSourceType.RAIL_WHEELCHAIR_LIFT
+                && sourceType != PublicDataSourceType.RAIL_WHEELCHAIR_LIFT_MOVEMENT) {
             return false;
         }
         return "03".equals(resultCode.trim());
@@ -734,6 +982,12 @@ public class PublicDataApiClient {
         }
 
         return itemSize >= pageSize;
+    }
+
+    private record FileDataPageResultDto(
+            List<PublicDataApiItemDto> items,
+            int totalCount
+    ) {
     }
 
     private String sha256(String value) {

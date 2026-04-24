@@ -17,3 +17,4 @@ bridgework:
     kric-station-code-file-path: ${KRIC_STATION_CODE_XLSX_PATH}
     work24-vocational-training-auth-key: ${WORK24_VOCATIONAL_TRAINING_AUTH_KEY}
     work24-competency-auth-key: ${WORK24_COMPETENCY_AUTH_KEY}
+    seoul-open-api-key: ${SEOUL_OPEN_API_KEY}

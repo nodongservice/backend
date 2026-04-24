@@ -28,6 +28,7 @@ REQUIRED_ENV_KEYS = (
     "KRIC_SERVICE_KEY",
     "WORK24_VOCATIONAL_TRAINING_AUTH_KEY",
     "WORK24_COMPETENCY_AUTH_KEY",
+    "SEOUL_OPEN_API_KEY",
     "KRIC_STATION_CODE_XLSX_PATH",
 )
 
@@ -136,6 +137,7 @@ def source_specs(api_keys: dict[str, str]) -> list[SourceSpec]:
     kric_service_key = api_keys["KRIC_SERVICE_KEY"]
     work24_vocational_auth_key = api_keys["WORK24_VOCATIONAL_TRAINING_AUTH_KEY"]
     work24_competency_auth_key = api_keys["WORK24_COMPETENCY_AUTH_KEY"]
+    seoul_open_api_key = api_keys["SEOUL_OPEN_API_KEY"]
 
     return [
         SourceSpec(
@@ -171,6 +173,34 @@ def source_specs(api_keys: dict[str, str]) -> list[SourceSpec]:
             params={"item_id_field": "insttCode", "max_page_size": 1000, "max_page_count": 1000},
         ),
         SourceSpec(
+            name="한국철도공사_편의시설정보",
+            slug="korail_week_person_facilities",
+            kind="data_go_json",
+            endpoint="https://apis.data.go.kr/B551457/convenience/weekPersonFacilities",
+            key=data_go_kr_service_key,
+            params={
+                "item_id_field": "stn_cd",
+                "response_type_param": "returnType",
+                "response_type_value": "JSON",
+                "max_page_size": 1000,
+                "max_page_count": 1000,
+            },
+        ),
+        SourceSpec(
+            name="서울교통공사_교통약자이용정보",
+            slug="seoul_transport_weak_wheelchair_lift",
+            kind="data_go_json",
+            endpoint="https://apis.data.go.kr/B553766/wksn/getWksnWhcllift",
+            key=data_go_kr_service_key,
+            params={
+                "item_id_field": "elvtrSn",
+                "response_type_param": "dataType",
+                "response_type_value": "JSON",
+                "max_page_size": 1000,
+                "max_page_count": 1000,
+            },
+        ),
+        SourceSpec(
             name="전국교통약자이동지원센터정보표준데이터",
             slug="transport_support_center",
             kind="data_go_json",
@@ -179,6 +209,7 @@ def source_specs(api_keys: dict[str, str]) -> list[SourceSpec]:
             params={
                 "item_id_field": "id",
                 "response_type_param": "type",
+                "response_type_value": "json",
                 "max_page_size": 1000,
                 "max_page_count": 1000,
             },
@@ -198,12 +229,92 @@ def source_specs(api_keys: dict[str, str]) -> list[SourceSpec]:
             },
         ),
         SourceSpec(
+            name="역사별 휠체어리프트 이동동선",
+            slug="rail_wheelchair_lift_movement",
+            kind="kric_json",
+            endpoint="https://openapi.kric.go.kr/openapi/vulnerableUserInfo/stationWheelchairLiftMovement",
+            key=kric_service_key,
+            params={
+                "format": "json",
+                "service": "vulnerableUserInfo",
+                "operation": "stationWheelchairLiftMovement",
+                "item_id_field": "stinCd",
+                "min_sleep_ms": 300,
+            },
+        ),
+        SourceSpec(
             name="서울교통공사_휠체어리프트 설치현황",
             slug="seoul_wheelchair_lift",
             kind="seoul_filedata",
             endpoint="https://www.data.go.kr/data/15044262/fileData.do",
             key=data_go_kr_service_key,
-            params={"item_id_field": "승강기 일련번호", "max_page_size": 10000, "max_page_count": 1000},
+            params={
+                "item_id_field": "승강기 일련번호",
+                "max_page_size": 10000,
+                "max_page_count": 1000,
+                "iterate_station_names": True,
+                "station_filter_column": "역명",
+            },
+        ),
+        SourceSpec(
+            name="서울시 지하철 출입구 리프트 위치정보",
+            slug="seoul_subway_entrance_lift",
+            kind="seoul_open_api",
+            endpoint="http://openapi.seoul.go.kr:8088",
+            key=seoul_open_api_key,
+            params={
+                "service_name": "tbTraficEntrcLft",
+                "max_page_size": 1000,
+                "max_page_count": 1000,
+            },
+        ),
+        SourceSpec(
+            name="서울특별시_자치구별 도보 네트워크 공간정보",
+            slug="seoul_walking_network",
+            kind="seoul_open_api",
+            endpoint="http://openapi.seoul.go.kr:8088",
+            key=seoul_open_api_key,
+            params={
+                "service_name": "TbTraficWlkNet",
+                "max_page_size": 1000,
+                "max_page_count": 1000,
+            },
+        ),
+        SourceSpec(
+            name="국토교통부_전국 버스정류장 위치정보",
+            slug="nationwide_bus_stop",
+            kind="data_go_filedata",
+            endpoint="https://www.data.go.kr/data/15067528/fileData.do",
+            key=data_go_kr_service_key,
+            params={"max_page_size": 10000, "max_page_count": 1000},
+        ),
+        SourceSpec(
+            name="전국신호등표준데이터",
+            slug="nationwide_traffic_light",
+            kind="data_go_xml",
+            endpoint="https://api.data.go.kr/openapi/tn_pubr_public_traffic_light_api",
+            key=data_go_kr_service_key,
+            params={
+                "item_id_field": "tfclghtManageNo",
+                "response_type_param": "type",
+                "response_type_value": "xml",
+                "max_page_size": 1000,
+                "max_page_count": 1000,
+            },
+        ),
+        SourceSpec(
+            name="전국횡단보도표준데이터",
+            slug="nationwide_crosswalk",
+            kind="data_go_json",
+            endpoint="https://api.data.go.kr/openapi/tn_pubr_public_crosswalk_api",
+            key=data_go_kr_service_key,
+            params={
+                "item_id_field": "crswlkManageNo",
+                "response_type_param": "type",
+                "response_type_value": "json",
+                "max_page_size": 1000,
+                "max_page_count": 1000,
+            },
         ),
         SourceSpec(
             name="한국고용정보원_직업훈련_국민내일배움카드 훈련과정",
@@ -317,7 +428,7 @@ def validate_data_go_result(payload: dict[str, Any] | list[Any]) -> None:
     header = payload.get("response", {}).get("header", {})
     result_code = str(header.get("resultCode", "")).strip()
     result_msg = str(header.get("resultMsg", "")).strip()
-    if result_code and result_code not in {"00", "0000", "0"}:
+    if result_code and result_code not in {"00", "0000", "0", "03"}:
         raise RuntimeError(f"공공데이터 API 오류(resultCode={result_code}): {result_msg or '알 수 없는 오류'}")
 
 
@@ -332,12 +443,20 @@ def fetch_data_go_json(
     records: list[dict[str, Any]] = []
     for page_no in range(1, max_pages + 1):
         response_type_param = str(spec.params.get("response_type_param", "_type")).strip() or "_type"
+        response_type_value = str(spec.params.get("response_type_value", "json")).strip() or "json"
         params = {
             "serviceKey": spec.key,
             "pageNo": page_no,
             "numOfRows": page_size,
-            response_type_param: "json",
+            response_type_param: response_type_value,
         }
+
+        extra_query_params = spec.params.get("query_params", {})
+        if isinstance(extra_query_params, dict):
+            for key, value in extra_query_params.items():
+                if key and value not in (None, ""):
+                    params[key] = value
+
         payload = request_json(session, spec.endpoint, params, timeout)
         validate_data_go_result(payload)
         if not isinstance(payload, dict):
@@ -355,17 +474,98 @@ def fetch_data_go_json(
     return records
 
 
-def find_seoul_detail_identifiers(file_data_html: str) -> tuple[str, str]:
+def parse_data_go_xml_payload(xml_text: str) -> tuple[list[dict[str, Any]], int | None, str, str]:
+    root = ET.fromstring(xml_text)
+
+    response_node = root
+    if root.tag != "response":
+        nested_response = root.find("response")
+        if nested_response is not None:
+            response_node = nested_response
+
+    header_node = response_node.find("header")
+    body_node = response_node.find("body")
+
+    result_code = ""
+    result_msg = ""
+    if header_node is not None:
+        result_code = (header_node.findtext("resultCode") or "").strip()
+        result_msg = (header_node.findtext("resultMsg") or "").strip()
+
+    items: list[dict[str, Any]] = []
+    total_count: int | None = None
+    if body_node is not None:
+        items_parent = body_node.find("items")
+        item_nodes = [] if items_parent is None else items_parent.findall("item")
+        items = [xml_to_dict(item_node) for item_node in item_nodes]
+
+        total_count_text = body_node.findtext("totalCount")
+        try:
+            total_count = int(total_count_text) if total_count_text else None
+        except ValueError:
+            total_count = None
+
+    return items, total_count, result_code, result_msg
+
+
+def fetch_data_go_xml(
+    session: requests.Session,
+    spec: SourceSpec,
+    page_size: int,
+    max_pages: int,
+    timeout: int,
+    sleep_ms: int,
+) -> list[dict[str, Any]]:
+    records: list[dict[str, Any]] = []
+
+    for page_no in range(1, max_pages + 1):
+        response_type_param = str(spec.params.get("response_type_param", "type")).strip() or "type"
+        response_type_value = str(spec.params.get("response_type_value", "xml")).strip() or "xml"
+        params = {
+            "serviceKey": spec.key,
+            "pageNo": page_no,
+            "numOfRows": page_size,
+            response_type_param: response_type_value,
+        }
+
+        extra_query_params = spec.params.get("query_params", {})
+        if isinstance(extra_query_params, dict):
+            for key, value in extra_query_params.items():
+                if key and value not in (None, ""):
+                    params[key] = value
+
+        xml_text = request_text(session, spec.endpoint, params, timeout)
+        items, total_count, result_code, result_msg = parse_data_go_xml_payload(xml_text)
+
+        if result_code and result_code not in {"00", "0000", "0", "03"}:
+            raise RuntimeError(f"공공데이터 API 오류(resultCode={result_code}): {result_msg or '알 수 없는 오류'}")
+
+        log_detected_count(spec.slug, f"page={page_no}", len(items))
+        if not items:
+            break
+
+        records.extend(items)
+
+        if total_count is not None and page_no * page_size >= total_count:
+            break
+        if len(items) < page_size:
+            break
+        time.sleep(sleep_ms / 1000)
+
+    return records
+
+
+def find_filedata_detail_identifiers(file_data_html: str) -> tuple[str, str]:
     public_data_pk_match = PUBLIC_DATA_PK_PATTERN.search(file_data_html)
     public_data_detail_pk_match = PUBLIC_DATA_DETAIL_PK_PATTERN.search(file_data_html)
 
     if not public_data_pk_match or not public_data_detail_pk_match:
-        raise RuntimeError("서울 fileData 페이지에서 publicDataPk/publicDataDetailPk를 찾지 못했습니다.")
+        raise RuntimeError("fileData 페이지에서 publicDataPk/publicDataDetailPk를 찾지 못했습니다.")
 
     return public_data_pk_match.group(1), public_data_detail_pk_match.group(1)
 
 
-def fetch_seoul_filedata(
+def fetch_data_go_filedata(
     session: requests.Session,
     spec: SourceSpec,
     page_size: int,
@@ -375,28 +575,30 @@ def fetch_seoul_filedata(
     station_codes: list[dict[str, str]],
 ) -> list[dict[str, Any]]:
     html_body = request_text(session, spec.endpoint, {}, timeout)
-    public_data_pk, public_data_detail_pk = find_seoul_detail_identifiers(html_body)
+    public_data_pk, public_data_detail_pk = find_filedata_detail_identifiers(html_body)
 
     endpoint = f"https://api.odcloud.kr/api/{public_data_pk}/v1/{public_data_detail_pk}"
     records: list[dict[str, Any]] = []
     deduped_keys: set[str] = set()
 
-    station_names = extract_seoul_station_names(station_codes)
+    iterate_station_names = bool(spec.params.get("iterate_station_names", False))
+    station_filter_column = str(spec.params.get("station_filter_column", "역명")).strip() or "역명"
+    station_names = extract_seoul_station_names(station_codes) if iterate_station_names else []
+
     if station_names:
         for index, station_name in enumerate(station_names, start=1):
-            params = {
-                "serviceKey": spec.key,
-                "page": 1,
-                "perPage": page_size,
-                "returnType": "JSON",
-                "역명": station_name,
-            }
-            payload = request_json(session, endpoint, params, timeout)
-            if not isinstance(payload, dict):
-                continue
-
-            station_items = normalize_items(payload.get("data"))
-            log_detected_count(spec.slug, f"station={station_name}", len(station_items))
+            station_items = fetch_data_go_filedata_pages(
+                session=session,
+                spec=spec,
+                endpoint=endpoint,
+                page_size=page_size,
+                max_pages=max_pages,
+                timeout=timeout,
+                sleep_ms=sleep_ms,
+                context=f"station={station_name}",
+                filter_field=station_filter_column,
+                filter_value=station_name,
+            )
             for item in station_items:
                 dedupe_key = build_record_dedupe_key(item, spec.params.get("item_id_field", ""))
                 if dedupe_key in deduped_keys:
@@ -410,6 +612,38 @@ def fetch_seoul_filedata(
         if records:
             return records
 
+    records.extend(
+        fetch_data_go_filedata_pages(
+            session=session,
+            spec=spec,
+            endpoint=endpoint,
+            page_size=page_size,
+            max_pages=max_pages,
+            timeout=timeout,
+            sleep_ms=sleep_ms,
+            context="all",
+            filter_field="",
+            filter_value="",
+        )
+    )
+
+    return records
+
+
+def fetch_data_go_filedata_pages(
+    session: requests.Session,
+    spec: SourceSpec,
+    endpoint: str,
+    page_size: int,
+    max_pages: int,
+    timeout: int,
+    sleep_ms: int,
+    context: str,
+    filter_field: str,
+    filter_value: str,
+) -> list[dict[str, Any]]:
+    records: list[dict[str, Any]] = []
+
     for page in range(1, max_pages + 1):
         params = {
             "serviceKey": spec.key,
@@ -417,12 +651,15 @@ def fetch_seoul_filedata(
             "perPage": page_size,
             "returnType": "JSON",
         }
+        if filter_field and filter_value:
+            params[filter_field] = filter_value
+
         payload = request_json(session, endpoint, params, timeout)
         if not isinstance(payload, dict):
             break
 
         items = normalize_items(payload.get("data"))
-        log_detected_count(spec.slug, f"page={page}", len(items))
+        log_detected_count(spec.slug, f"{context},page={page}", len(items))
         total_count = payload.get("totalCount")
 
         if not items:
@@ -438,6 +675,89 @@ def fetch_seoul_filedata(
         if total_count_value is not None and page * page_size >= total_count_value:
             break
         if len(items) < page_size:
+            break
+        time.sleep(sleep_ms / 1000)
+
+    return records
+
+
+def resolve_seoul_open_api_service_node(payload: dict[str, Any], service_name: str) -> dict[str, Any]:
+    service_node = payload.get(service_name)
+    if isinstance(service_node, dict):
+        return service_node
+
+    for value in payload.values():
+        if not isinstance(value, dict):
+            continue
+        if "row" in value or "list_total_count" in value or "RESULT" in value:
+            return value
+    return {}
+
+
+def validate_seoul_open_api_result(service_node: dict[str, Any]) -> None:
+    result_node = service_node.get("RESULT", {})
+    if not isinstance(result_node, dict):
+        return
+
+    result_code = str(result_node.get("CODE", "")).strip()
+    if not result_code or result_code in {"INFO-000", "INFO-200"}:
+        return
+
+    result_message = str(result_node.get("MESSAGE", "")).strip() or "알 수 없는 오류"
+    raise RuntimeError(f"서울 열린데이터 API 오류(CODE={result_code}): {result_message}")
+
+
+def fetch_seoul_open_api(
+    session: requests.Session,
+    spec: SourceSpec,
+    page_size: int,
+    max_pages: int,
+    timeout: int,
+    sleep_ms: int,
+) -> list[dict[str, Any]]:
+    service_name = str(spec.params.get("service_name", "")).strip()
+    if not service_name:
+        raise RuntimeError(f"서울 열린데이터 service_name이 없습니다: {spec.slug}")
+
+    records: list[dict[str, Any]] = []
+    endpoint = spec.endpoint.rstrip("/")
+
+    for page in range(1, max_pages + 1):
+        start_index = (page - 1) * page_size + 1
+        end_index = page * page_size
+        request_url = f"{endpoint}/{spec.key}/json/{service_name}/{start_index}/{end_index}"
+
+        extra_query_params = spec.params.get("query_params", {})
+        params: dict[str, Any] = {}
+        if isinstance(extra_query_params, dict):
+            for key, value in extra_query_params.items():
+                if key and value not in (None, ""):
+                    params[key] = value
+
+        payload = request_json(session, request_url, params, timeout)
+        if not isinstance(payload, dict):
+            break
+
+        service_node = resolve_seoul_open_api_service_node(payload, service_name)
+        validate_seoul_open_api_result(service_node)
+
+        rows = normalize_items(service_node.get("row"))
+        log_detected_count(spec.slug, f"page={page}", len(rows))
+
+        if not rows:
+            break
+
+        records.extend(rows)
+
+        total_count = service_node.get("list_total_count")
+        try:
+            total_count_value = int(total_count) if total_count is not None else None
+        except (TypeError, ValueError):
+            total_count_value = None
+
+        if total_count_value is not None and page * page_size >= total_count_value:
+            break
+        if len(rows) < page_size:
             break
         time.sleep(sleep_ms / 1000)
 
@@ -860,10 +1180,16 @@ def run_one_source(
 
     if spec.kind == "data_go_json":
         return fetch_data_go_json(session, spec, page_size, max_pages, timeout, sleep_ms)
+    if spec.kind == "data_go_xml":
+        return fetch_data_go_xml(session, spec, page_size, max_pages, timeout, sleep_ms)
+    if spec.kind == "data_go_filedata":
+        return fetch_data_go_filedata(session, spec, page_size, max_pages, timeout, sleep_ms, kric_station_codes)
     if spec.kind == "seoul_filedata":
-        return fetch_seoul_filedata(session, spec, page_size, max_pages, timeout, sleep_ms, kric_station_codes)
+        return fetch_data_go_filedata(session, spec, page_size, max_pages, timeout, sleep_ms, kric_station_codes)
     if spec.kind == "kric_json":
         return fetch_kric_lift(session, spec, kric_station_codes, timeout, sleep_ms)
+    if spec.kind == "seoul_open_api":
+        return fetch_seoul_open_api(session, spec, page_size, max_pages, timeout, sleep_ms)
     if spec.kind == "work24_vocational":
         return fetch_work24_vocational(session, spec, page_size, max_pages, timeout, sleep_ms)
     if spec.kind == "work24_competency":

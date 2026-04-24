@@ -58,6 +58,24 @@ bridgework:
         page-size: ${SYNC_KEPAD_SUPPORT_AGENCY_PAGE_SIZE:1000}
         max-pages: ${SYNC_KEPAD_SUPPORT_AGENCY_MAX_PAGES:1000}
         item-id-field: insttCode
+      - source-type: KORAIL_WEEK_PERSON_FACILITIES
+        enabled: ${SYNC_KORAIL_WEEK_PERSON_FACILITIES_ENABLED:false}
+        base-url: ${SYNC_KORAIL_WEEK_PERSON_FACILITIES_URL:https://apis.data.go.kr/B551457/convenience/weekPersonFacilities}
+        service-key: ${bridgework.sync.data-go-kr-service-key:}
+        page-size: ${SYNC_KORAIL_WEEK_PERSON_FACILITIES_PAGE_SIZE:1000}
+        max-pages: ${SYNC_KORAIL_WEEK_PERSON_FACILITIES_MAX_PAGES:1000}
+        item-id-field: stn_cd
+        query-params:
+          returnType: JSON
+      - source-type: SEOUL_TRANSPORT_WEAK_WHEELCHAIR_LIFT
+        enabled: ${SYNC_SEOUL_TRANSPORT_WEAK_WHEELCHAIR_LIFT_ENABLED:false}
+        base-url: ${SYNC_SEOUL_TRANSPORT_WEAK_WHEELCHAIR_LIFT_URL:https://apis.data.go.kr/B553766/wksn/getWksnWhcllift}
+        service-key: ${bridgework.sync.data-go-kr-service-key:}
+        page-size: ${SYNC_SEOUL_TRANSPORT_WEAK_WHEELCHAIR_LIFT_PAGE_SIZE:1000}
+        max-pages: ${SYNC_SEOUL_TRANSPORT_WEAK_WHEELCHAIR_LIFT_MAX_PAGES:1000}
+        item-id-field: elvtrSn
+        query-params:
+          dataType: JSON
       - source-type: TRANSPORT_SUPPORT_CENTER
         enabled: ${SYNC_TRANSPORT_SUPPORT_CENTER_ENABLED:false}
         base-url: ${SYNC_TRANSPORT_SUPPORT_CENTER_URL:https://api.data.go.kr/openapi/tn_pubr_public_tfcwker_mvmn_cnter_api}
@@ -78,6 +96,17 @@ bridgework:
           service: vulnerableUserInfo
           operation: stationWheelchairLiftLocation
           format: json
+      - source-type: RAIL_WHEELCHAIR_LIFT_MOVEMENT
+        enabled: ${SYNC_RAIL_WHEELCHAIR_LIFT_MOVEMENT_ENABLED:false}
+        base-url: ${SYNC_RAIL_WHEELCHAIR_LIFT_MOVEMENT_URL:https://openapi.kric.go.kr/openapi/vulnerableUserInfo/stationWheelchairLiftMovement}
+        service-key: ${bridgework.sync.kric-service-key:}
+        page-size: 1
+        max-pages: 1
+        item-id-field: stinCd
+        query-params:
+          service: vulnerableUserInfo
+          operation: stationWheelchairLiftMovement
+          format: json
       - source-type: SEOUL_WHEELCHAIR_LIFT
         enabled: ${SYNC_SEOUL_WHEELCHAIR_LIFT_ENABLED:false}
         base-url: ${SYNC_SEOUL_WHEELCHAIR_LIFT_URL:https://www.data.go.kr/data/15044262/fileData.do}
@@ -85,6 +114,46 @@ bridgework:
         page-size: ${SYNC_SEOUL_WHEELCHAIR_LIFT_PAGE_SIZE:10000}
         max-pages: ${SYNC_SEOUL_WHEELCHAIR_LIFT_MAX_PAGES:1000}
         item-id-field: 승강기 일련번호
+      - source-type: SEOUL_SUBWAY_ENTRANCE_LIFT
+        enabled: ${SYNC_SEOUL_SUBWAY_ENTRANCE_LIFT_ENABLED:false}
+        base-url: ${SYNC_SEOUL_SUBWAY_ENTRANCE_LIFT_URL:http://openapi.seoul.go.kr:8088}
+        service-key: ${bridgework.sync.seoul-open-api-key:}
+        page-size: ${SYNC_SEOUL_SUBWAY_ENTRANCE_LIFT_PAGE_SIZE:1000}
+        max-pages: ${SYNC_SEOUL_SUBWAY_ENTRANCE_LIFT_MAX_PAGES:1000}
+        query-params:
+          serviceName: tbTraficEntrcLft
+      - source-type: SEOUL_WALKING_NETWORK
+        enabled: ${SYNC_SEOUL_WALKING_NETWORK_ENABLED:false}
+        base-url: ${SYNC_SEOUL_WALKING_NETWORK_URL:http://openapi.seoul.go.kr:8088}
+        service-key: ${bridgework.sync.seoul-open-api-key:}
+        page-size: ${SYNC_SEOUL_WALKING_NETWORK_PAGE_SIZE:1000}
+        max-pages: ${SYNC_SEOUL_WALKING_NETWORK_MAX_PAGES:1000}
+        query-params:
+          serviceName: TbTraficWlkNet
+      - source-type: NATIONWIDE_BUS_STOP
+        enabled: ${SYNC_NATIONWIDE_BUS_STOP_ENABLED:false}
+        base-url: ${SYNC_NATIONWIDE_BUS_STOP_URL:https://www.data.go.kr/data/15067528/fileData.do}
+        service-key: ${bridgework.sync.data-go-kr-service-key:}
+        page-size: ${SYNC_NATIONWIDE_BUS_STOP_PAGE_SIZE:10000}
+        max-pages: ${SYNC_NATIONWIDE_BUS_STOP_MAX_PAGES:1000}
+      - source-type: NATIONWIDE_TRAFFIC_LIGHT
+        enabled: ${SYNC_NATIONWIDE_TRAFFIC_LIGHT_ENABLED:false}
+        base-url: ${SYNC_NATIONWIDE_TRAFFIC_LIGHT_URL:https://api.data.go.kr/openapi/tn_pubr_public_traffic_light_api}
+        service-key: ${bridgework.sync.data-go-kr-service-key:}
+        page-size: ${SYNC_NATIONWIDE_TRAFFIC_LIGHT_PAGE_SIZE:1000}
+        max-pages: ${SYNC_NATIONWIDE_TRAFFIC_LIGHT_MAX_PAGES:1000}
+        item-id-field: tfclghtManageNo
+        query-params:
+          type: xml
+      - source-type: NATIONWIDE_CROSSWALK
+        enabled: ${SYNC_NATIONWIDE_CROSSWALK_ENABLED:false}
+        base-url: ${SYNC_NATIONWIDE_CROSSWALK_URL:https://api.data.go.kr/openapi/tn_pubr_public_crosswalk_api}
+        service-key: ${bridgework.sync.data-go-kr-service-key:}
+        page-size: ${SYNC_NATIONWIDE_CROSSWALK_PAGE_SIZE:1000}
+        max-pages: ${SYNC_NATIONWIDE_CROSSWALK_MAX_PAGES:1000}
+        item-id-field: crswlkManageNo
+        query-params:
+          type: json
       - source-type: VOCATIONAL_TRAINING
         enabled: ${SYNC_VOCATIONAL_TRAINING_ENABLED:false}
         base-url: ${SYNC_VOCATIONAL_TRAINING_URL:https://www.work24.go.kr/cm/openApi/call/hr/callOpenApiSvcInfo310L01.do}

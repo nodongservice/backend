@@ -66,11 +66,13 @@ public class PublicDataSyncService {
 
             if (sourceConfig.isEnabled()
                     && (sourceConfig.getSourceType() == PublicDataSourceType.RAIL_WHEELCHAIR_LIFT
+                    || sourceConfig.getSourceType() == PublicDataSourceType.RAIL_WHEELCHAIR_LIFT_MOVEMENT
                     || sourceConfig.getSourceType() == PublicDataSourceType.SEOUL_WHEELCHAIR_LIFT)
                     && (syncProperties.getKricStationCodeFilePath() == null
                     || syncProperties.getKricStationCodeFilePath().isBlank())) {
                 throw new IllegalStateException(
-                        "RAIL_WHEELCHAIR_LIFT/SEOUL_WHEELCHAIR_LIFT 활성화 시 kricStationCodeFilePath가 필요합니다."
+                        "RAIL_WHEELCHAIR_LIFT/RAIL_WHEELCHAIR_LIFT_MOVEMENT/SEOUL_WHEELCHAIR_LIFT 활성화 시 "
+                                + "kricStationCodeFilePath가 필요합니다."
                 );
             }
         }
