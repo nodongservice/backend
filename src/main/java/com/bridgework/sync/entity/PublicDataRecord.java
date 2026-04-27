@@ -7,12 +7,13 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
-import jakarta.persistence.Lob;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
+import java.sql.Types;
 import java.time.OffsetDateTime;
+import org.hibernate.annotations.JdbcTypeCode;
 
 @Entity
 @Table(
@@ -32,11 +33,11 @@ public class PublicDataRecord {
     @Column(name = "external_id", nullable = false, length = 128)
     private String externalId;
 
-    @Lob
-    @Column(name = "payload_json", nullable = false, columnDefinition = "TEXT")
+    @Column(name = "payload_json", nullable = false)
     private String payloadJson;
 
-    @Column(name = "payload_hash", nullable = false, length = 64)
+    @JdbcTypeCode(Types.CHAR)
+    @Column(name = "payload_hash", nullable = false, columnDefinition = "CHAR(64)")
     private String payloadHash;
 
     @Column(name = "raw_fetched_at", nullable = false)

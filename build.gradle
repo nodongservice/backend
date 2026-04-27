@@ -21,20 +21,33 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-web'
     implementation 'org.springframework.boot:spring-boot-starter-webflux'
     implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+    implementation 'org.springframework.boot:spring-boot-starter-data-redis'
+    implementation 'org.springframework.boot:spring-boot-starter-security'
     implementation 'org.springframework.boot:spring-boot-starter-validation'
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
+    implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.6.0'
+    implementation 'io.jsonwebtoken:jjwt-api:0.12.6'
     implementation 'com.fasterxml.jackson.dataformat:jackson-dataformat-xml'
     implementation 'org.apache.poi:poi-ooxml:5.2.5'
     implementation 'org.flywaydb:flyway-core'
+    runtimeOnly 'org.flywaydb:flyway-database-postgresql'
     implementation 'net.javacrumbs.shedlock:shedlock-spring:5.16.0'
     implementation 'net.javacrumbs.shedlock:shedlock-provider-jdbc-template:5.16.0'
 
+    // macOS에서 Netty DNS 네이티브 로더 경고를 방지한다.
+    runtimeOnly 'io.netty:netty-resolver-dns-classes-macos'
+    runtimeOnly(group: 'io.netty', name: 'netty-resolver-dns-native-macos', classifier: 'osx-aarch_64')
+    runtimeOnly(group: 'io.netty', name: 'netty-resolver-dns-native-macos', classifier: 'osx-x86_64')
+
+    runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.12.6'
+    runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.12.6'
+
     runtimeOnly 'org.postgresql:postgresql'
-    runtimeOnly 'com.h2database:h2'
 
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
     testImplementation 'io.projectreactor:reactor-test'
     testImplementation 'com.squareup.okhttp3:mockwebserver:4.12.0'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
 tasks.named('test') {
