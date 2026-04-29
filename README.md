@@ -6,7 +6,7 @@
 - Java 17
 - Spring Boot 3.3
 - Spring Data JPA + Flyway
-- PostgreSQL(H2 로컬 대체)
+- PostgreSQL
 - ShedLock(분산 스케줄 중복 방지)
 
 ## 도메인 구조
@@ -57,6 +57,8 @@
 | `SEOUL_SUBWAY_ENTRANCE_LIFT` | 서울시 지하철 출입구 리프트 위치정보 | [OA-21211](https://data.seoul.go.kr/dataList/OA-21211/S/1/datasetView.do) | `http://openapi.seoul.go.kr:8088/{API_KEY}/json/tbTraficEntrcLft/{start}/{end}` | data.seoul.go.kr 키 | `start/end(페이지 범위)`, `max rows=1000` |
 | `SEOUL_WALKING_NETWORK` | 서울특별시_자치구별 도보 네트워크 공간정보 | [OA-21208](https://data.seoul.go.kr/dataList/OA-21208/S/1/datasetView.do) | `http://openapi.seoul.go.kr:8088/{API_KEY}/json/TbTraficWlkNet/{start}/{end}` | data.seoul.go.kr 키 | `start/end(페이지 범위)`, `max rows=1000` |
 | `NATIONWIDE_BUS_STOP` | 국토교통부_전국 버스정류장 위치정보 | [15067528](https://www.data.go.kr/data/15067528/fileData.do#tab-layer-openapi) | `https://api.odcloud.kr/api/{publicDataPk}/v1/{publicDataDetailPk}` (fileData 페이지에서 식별자 추출 후 호출) | data.go.kr 서비스키 | `serviceKey`, `page`, `perPage(max=10000)`, `returnType=JSON` |
+| `SEOUL_WHEELCHAIR_RAMP_STATUS` | 서울교통공사_휠체어경사로 설치 현황 | [OA-13116](https://data.seoul.go.kr/dataList/OA-13116/S/1/datasetView.do) | `https://datafile.seoul.go.kr/bigfile/iot/inf/nio_download.do` (datasetView의 파일목록에서 최신 `수정일` 1건 선택 후 다운로드) | 없음 | `infId`, `infSeq`, `seq`, `seqNo`, `useCache=false` |
+| `SEOUL_LOW_FLOOR_BUS_ROUTE_RETENTION` | 서울시 저상버스 도입 노선 및 노선별 보유율 | [OA-22229](https://data.seoul.go.kr/dataList/OA-22229/F/1/datasetView.do) | `https://datafile.seoul.go.kr/bigfile/iot/inf/nio_download.do` (datasetView의 파일목록에서 최신 `수정일` 1건 선택 후 다운로드) | 없음 | `infId`, `infSeq`, `seq`, `seqNo`, `useCache=false` |
 | `NATIONWIDE_TRAFFIC_LIGHT` | 전국신호등표준데이터 | [15028198](https://www.data.go.kr/data/15028198/standard.do#) | `https://api.data.go.kr/openapi/tn_pubr_public_traffic_light_api` | data.go.kr 서비스키 | `serviceKey`, `pageNo`, `numOfRows(max=1000)`, `type=xml` |
 | `NATIONWIDE_CROSSWALK` | 전국횡단보도표준데이터 | [15028201](https://www.data.go.kr/data/15028201/standard.do) | `https://api.data.go.kr/openapi/tn_pubr_public_crosswalk_api` | data.go.kr 서비스키 | `serviceKey`, `pageNo`, `numOfRows(max=1000)`, `type=json` |
 | `VOCATIONAL_TRAINING` | 한국고용정보원_직업훈련_국민내일배움카드 훈련과정 | [work24 000004](https://www.work24.go.kr/cm/e/a/0110/selectOpenApiSvcInfo.do?apiSvcId=&upprApiSvcId=&fullApiSvcId=000000000000000000000000000004) | `https://www.work24.go.kr/cm/openApi/call/hr/callOpenApiSvcInfo310L01.do` | Work24 인증키 | `authKey`, `returnType=XML`, `pageNum`, `pageSize(max=100)` |
@@ -375,6 +377,30 @@
 | `CITY_NAME` | 도시명 (항목명: 도시명) |
 | `ADMIN_NM` | 관리도시명 (항목명: 관리도시명) |
 
+### `SEOUL_WHEELCHAIR_RAMP_STATUS` 서울교통공사_휠체어경사로 설치 현황
+- 링크: https://data.seoul.go.kr/dataList/OA-13116/S/1/datasetView.do
+- 컬럼 수: 4
+- 기준: 파일 목록의 최신 수정일 파일(현재 `서울교통공사 휠체어경사로 설치 현황_20240331.csv`) 헤더
+
+| 컬럼명 | 설명 |
+|---|---|
+| `호선` |  |
+| `역명` |  |
+| `구분` |  |
+| `위치` |  |
+
+### `SEOUL_LOW_FLOOR_BUS_ROUTE_RETENTION` 서울시 저상버스 도입 노선 및 노선별 보유율
+- 링크: https://data.seoul.go.kr/dataList/OA-22229/F/1/datasetView.do
+- 컬럼 수: 4
+- 기준: 파일 목록의 최신 수정일 파일(현재 `서울시 저상버스 도입 노선 및 노선별 보유율(25.4.25).xlsx`) 헤더
+
+| 컬럼명 | 설명 |
+|---|---|
+| `노선\n번호` |  |
+| `인가\n대수` |  |
+| `저상버스 대수` |  |
+| `저상보유율` |  |
+
 ### `NATIONWIDE_TRAFFIC_LIGHT` 전국신호등표준데이터
 - 링크: https://www.data.go.kr/data/15028198/standard.do#
 - 컬럼 수: 33
@@ -525,6 +551,7 @@
 - 기본값: `0 0/30 * * * *`
 - ShedLock 적용으로 다중 인스턴스 중복 실행 방지
 - 페이징은 API별 최대 페이지 크기로 조회하고 마지막 페이지까지 순회
+- `SEOUL_WHEELCHAIR_RAMP_STATUS`, `SEOUL_LOW_FLOOR_BUS_ROUTE_RETENTION`는 최신 파일 revision 동일 시 스킵(`public_data_source_snapshot` 기준)
 
 ## 수동 실행/조회 API
 - 전체 동기화: `POST /api/v1/sync/public-data/run`
@@ -543,6 +570,9 @@
 - 실행 예시: `python3 scripts/export_public_data_to_csv.py --output-dir exports --page-size 0 --max-pages 0`
 - 무데이터/오류 메시지는 CSV 행으로 기록하지 않음
 - 실행 로그에 요청 URL(파라미터 포함), 재시도, 감지 건수(`detected`)를 출력
+- `SEOUL_WHEELCHAIR_RAMP_STATUS`, `SEOUL_LOW_FLOOR_BUS_ROUTE_RETENTION`는 datasetView의 파일목록에서 `수정일` 최신 파일 1건만 다운로드
+- 위 2개 소스는 이전 실행과 최신 파일 revision(`수정일+seq+파일명`)이 같으면 스킵
+- revision 상태 파일: `exports/.source_revisions.json`
 - 특정 데이터명만 실행(한글명/영문 slug(csv 파일명) 둘 다 지원): `python3 scripts/export_public_data_to_csv.py --only-data-name "국가철도공단_역사별 휠체어리프트 위치"`
 - 특정 데이터명 여러개 실행: `python3 scripts/export_public_data_to_csv.py --only-data-name "한국장애인고용공단_장애인 구인 실시간 현황" --only-data-name "seoul_wheelchair_lift"`
 - 필요 라이브러리: `pip install requests pandas`

@@ -3,6 +3,7 @@ package com.bridgework.sync.service;
 import com.bridgework.sync.config.BridgeWorkSyncProperties;
 import com.bridgework.sync.dto.PublicDataApiItemDto;
 import com.bridgework.sync.dto.PublicDataApiPageResponseDto;
+import com.bridgework.sync.dto.SourceLatestRevisionDto;
 import com.bridgework.sync.entity.PublicDataSourceType;
 import com.bridgework.sync.exception.ExternalApiException;
 import com.bridgework.sync.exception.PayloadParseException;
@@ -11,6 +12,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.dataformat.xml.XmlMapper;
+import java.io.ByteArrayInputStream;
+import java.io.StringReader;
 import java.time.Duration;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -19,6 +22,7 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.HexFormat;
 import java.util.Iterator;
 import java.util.LinkedHashSet;
@@ -29,10 +33,26 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import org.apache.commons.csv.CSVFormat;
+import org.apache.commons.csv.CSVParser;
+import org.apache.commons.csv.CSVRecord;
+import org.apache.poi.ss.usermodel.Cell;
+import org.apache.poi.ss.usermodel.DataFormatter;
+import org.apache.poi.ss.usermodel.Row;
+import org.apache.poi.ss.usermodel.Sheet;
+import org.apache.poi.ss.usermodel.Workbook;
+import org.apache.poi.ss.usermodel.WorkbookFactory;
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
+import org.jsoup.select.Elements;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatusCode;
+import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
+import org.springframework.util.LinkedMultiValueMap;
+import org.springframework.util.MultiValueMap;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.util.UriComponentsBuilder;
 import reactor.util.retry.Retry;
@@ -50,12 +70,15 @@ public class PublicDataApiClient {
     private static final Pattern PUBLIC_DATA_PK_PATTERN = Pattern.compile("id=\"publicDataPk\"[^>]*value=\"([^\"]+)\"");
     private static final Pattern PUBLIC_DATA_DETAIL_PK_PATTERN =
             Pattern.compile("id=\"publicDataDetailPk\"[^>]*value=\"([^\"]+)\"");
+    private static final DateTimeFormatter SEOUL_FILE_MODIFIED_DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy.MM.dd");
+    private static final String SEOUL_FILE_DOWNLOAD_URL = "https://datafile.seoul.go.kr/bigfile/iot/inf/nio_download.do?useCache=false";
 
     private final WebClient webClient;
     private final ObjectMapper objectMapper;
     private final XmlMapper xmlMapper;
     private final BridgeWorkSyncProperties syncProperties;
     private final KricStationCodeLoader kricStationCodeLoader;
+    private final DataFormatter excelDataFormatter = new DataFormatter(Locale.KOREA);
 
     public PublicDataApiClient(WebClient webClient,
                                ObjectMapper objectMapper,
@@ -74,8 +97,12 @@ public class PublicDataApiClient {
         if (sourceType == PublicDataSourceType.SEOUL_WHEELCHAIR_LIFT) {
             return fetchSeoulWheelchairLiftPage(sourceConfig, pageNo);
         }
-        if (sourceType == PublicDataSourceType.NATIONWIDE_BUS_STOP) {
+        if (sourceType == PublicDataSourceType.NATIONWIDE_BUS_STOP
+        ) {
             return fetchDataGoFileDataPage(sourceConfig, pageNo);
+        }
+        if (isSeoulDatasetFileSource(sourceType)) {
+            return fetchSeoulDatasetFilePage(sourceConfig, pageNo);
         }
         if (sourceType == PublicDataSourceType.RAIL_WHEELCHAIR_LIFT
                 || sourceType == PublicDataSourceType.RAIL_WHEELCHAIR_LIFT_MOVEMENT) {
@@ -119,6 +146,19 @@ public class PublicDataApiClient {
                     exception
             );
         }
+    }
+
+    public Optional<SourceLatestRevisionDto> fetchLatestRevision(BridgeWorkSyncProperties.SourceConfig sourceConfig) {
+        if (!isSeoulDatasetFileSource(sourceConfig.getSourceType())) {
+            return Optional.empty();
+        }
+
+        SeoulDatasetLatestFile latestFile = resolveSeoulDatasetLatestFile(sourceConfig);
+        return Optional.of(new SourceLatestRevisionDto(
+                latestFile.revisionKey(),
+                latestFile.fileName(),
+                latestFile.modifiedDateText()
+        ));
     }
 
     private PublicDataApiPageResponseDto fetchSeoulWheelchairLiftPage(
@@ -191,6 +231,309 @@ public class PublicDataApiClient {
                 "all"
         );
         return new PublicDataApiPageResponseDto(items, false);
+    }
+
+    private PublicDataApiPageResponseDto fetchSeoulDatasetFilePage(
+            BridgeWorkSyncProperties.SourceConfig sourceConfig,
+            int pageNo
+    ) {
+        if (pageNo > 1) {
+            return new PublicDataApiPageResponseDto(List.of(), false);
+        }
+
+        SeoulDatasetLatestFile latestFile = resolveSeoulDatasetLatestFile(sourceConfig);
+        byte[] fileBytes = downloadSeoulDatasetFile(sourceConfig.getSourceType(), latestFile);
+        List<Map<String, String>> rows = parseSeoulDatasetRows(sourceConfig.getSourceType(), latestFile.fileName(), fileBytes);
+        List<PublicDataApiItemDto> items = toItemDtos(rows, sourceConfig);
+
+        log.info("[COUNT] source={} fileName={} modifiedDate={} detected={}",
+                sourceConfig.getSourceType(),
+                latestFile.fileName(),
+                latestFile.modifiedDateText(),
+                items.size());
+        return new PublicDataApiPageResponseDto(items, false);
+    }
+
+    private boolean isSeoulDatasetFileSource(PublicDataSourceType sourceType) {
+        return sourceType == PublicDataSourceType.SEOUL_WHEELCHAIR_RAMP_STATUS
+                || sourceType == PublicDataSourceType.SEOUL_LOW_FLOOR_BUS_ROUTE_RETENTION;
+    }
+
+    private SeoulDatasetLatestFile resolveSeoulDatasetLatestFile(BridgeWorkSyncProperties.SourceConfig sourceConfig) {
+        String htmlBody = fetchBody(sourceConfig.getBaseUrl(), sourceConfig.getSourceType());
+
+        Document document = Jsoup.parse(htmlBody);
+        Element frmFile = document.selectFirst("form[name=frmFile]");
+        if (frmFile == null) {
+            throw new ExternalApiException("서울 파일데이터 페이지에서 frmFile 폼을 찾을 수 없습니다: " + sourceConfig.getSourceType());
+        }
+
+        String infId = resolveFormInputValue(frmFile, "infId");
+        String infSeq = resolveFormInputValue(frmFile, "infSeq");
+
+        Elements rows = document.select("tr[id^=fileTr_]");
+        if (rows.isEmpty()) {
+            throw new ExternalApiException("서울 파일데이터 페이지에 파일 목록이 없습니다: " + sourceConfig.getSourceType());
+        }
+
+        List<SeoulDatasetLatestFile> candidates = new ArrayList<>();
+        for (Element rowElement : rows) {
+            Element clickableSpan = rowElement.selectFirst("span[onclick*=downloadFile]");
+            if (clickableSpan == null) {
+                continue;
+            }
+
+            String onclick = clickableSpan.attr("onclick");
+            Matcher seqMatcher = Pattern.compile("downloadFile\\('([0-9]+)'\\)").matcher(onclick);
+            if (!seqMatcher.find()) {
+                continue;
+            }
+
+            String seq = seqMatcher.group(1).trim();
+            String fileName = clickableSpan.attr("title").trim();
+            if (fileName.isBlank()) {
+                fileName = clickableSpan.text().trim();
+            }
+
+            Elements columns = rowElement.select("td");
+            if (columns.size() < 5) {
+                continue;
+            }
+
+            String modifiedDateText = columns.get(4).text().trim();
+            LocalDate modifiedDate = parseSeoulModifiedDate(modifiedDateText);
+            String revisionKey = modifiedDate + "|" + seq + "|" + fileName;
+
+            candidates.add(new SeoulDatasetLatestFile(
+                    infId,
+                    infSeq,
+                    seq,
+                    fileName,
+                    modifiedDateText,
+                    modifiedDate,
+                    revisionKey
+            ));
+        }
+
+        return candidates.stream()
+                .max((left, right) -> {
+                    int dateCompare = left.modifiedDate().compareTo(right.modifiedDate());
+                    if (dateCompare != 0) {
+                        return dateCompare;
+                    }
+                    return Integer.compare(parseIntSafe(left.seq()), parseIntSafe(right.seq()));
+                })
+                .orElseThrow(() -> new ExternalApiException("서울 파일데이터 최신 파일을 찾을 수 없습니다: " + sourceConfig.getSourceType()));
+    }
+
+    private String resolveFormInputValue(Element formElement, String inputName) {
+        Element inputElement = formElement.selectFirst("input[name=" + inputName + "]");
+        if (inputElement == null) {
+            throw new ExternalApiException("서울 파일데이터 폼 파라미터 누락: " + inputName);
+        }
+        String value = inputElement.attr("value").trim();
+        if (value.isBlank()) {
+            throw new ExternalApiException("서울 파일데이터 폼 파라미터가 비어 있습니다: " + inputName);
+        }
+        return value;
+    }
+
+    private int parseIntSafe(String value) {
+        try {
+            return Integer.parseInt(value);
+        } catch (NumberFormatException exception) {
+            return -1;
+        }
+    }
+
+    private LocalDate parseSeoulModifiedDate(String modifiedDateText) {
+        String normalized = modifiedDateText.replaceAll("\\s+", "").replaceAll("\\.$", "");
+        if (!normalized.matches("\\d{4}\\.\\d{2}\\.\\d{2}")) {
+            throw new ExternalApiException("서울 파일데이터 수정일 형식이 올바르지 않습니다: " + modifiedDateText);
+        }
+
+        return LocalDate.parse(normalized, SEOUL_FILE_MODIFIED_DATE_FORMATTER);
+    }
+
+    private byte[] downloadSeoulDatasetFile(PublicDataSourceType sourceType, SeoulDatasetLatestFile latestFile) {
+        MultiValueMap<String, String> formData = new LinkedMultiValueMap<>();
+        formData.add("infId", latestFile.infId());
+        formData.add("seqNo", latestFile.seq());
+        formData.add("seq", latestFile.seq());
+        formData.add("infSeq", latestFile.infSeq());
+
+        log.info("[HTTP] source={} uri={} params=infId={},infSeq={},seq={}",
+                sourceType,
+                SEOUL_FILE_DOWNLOAD_URL,
+                latestFile.infId(),
+                latestFile.infSeq(),
+                latestFile.seq());
+
+        return webClient
+                .post()
+                .uri(SEOUL_FILE_DOWNLOAD_URL)
+                .contentType(MediaType.APPLICATION_FORM_URLENCODED)
+                .bodyValue(formData)
+                .retrieve()
+                .onStatus(HttpStatusCode::isError, clientResponse ->
+                        clientResponse.bodyToMono(String.class)
+                                .defaultIfEmpty("")
+                                .map(body -> new ExternalApiException(
+                                        "서울 파일데이터 다운로드 실패(" + sourceType + "): "
+                                                + clientResponse.statusCode().value()
+                                ))
+                )
+                .bodyToMono(byte[].class)
+                .timeout(syncProperties.getRequestTimeout())
+                .retryWhen(
+                        Retry.backoff(API_RETRY_COUNT, API_RETRY_BACKOFF)
+                                .filter(this::isRetryableApiException)
+                )
+                .blockOptional()
+                .orElseThrow(() -> new ExternalApiException("서울 파일데이터 다운로드 응답이 비어 있습니다: " + sourceType));
+    }
+
+    private List<Map<String, String>> parseSeoulDatasetRows(
+            PublicDataSourceType sourceType,
+            String fileName,
+            byte[] fileBytes
+    ) {
+        String lowerFileName = fileName.toLowerCase(Locale.ROOT);
+        if (lowerFileName.endsWith(".xlsx")) {
+            return parseXlsxRows(sourceType, fileBytes);
+        }
+        if (lowerFileName.endsWith(".csv")) {
+            return parseCsvRows(sourceType, fileBytes);
+        }
+        throw new PayloadParseException(
+                "서울 파일데이터 확장자를 지원하지 않습니다: " + fileName,
+                new IllegalArgumentException(fileName)
+        );
+    }
+
+    private List<Map<String, String>> parseXlsxRows(PublicDataSourceType sourceType, byte[] fileBytes) {
+        try (Workbook workbook = WorkbookFactory.create(new ByteArrayInputStream(fileBytes))) {
+            Sheet sheet = workbook.getSheetAt(0);
+            Row headerRow = sheet.getRow(sheet.getFirstRowNum());
+            if (headerRow == null) {
+                return List.of();
+            }
+
+            List<String> headers = extractHeaders(headerRow);
+            List<Map<String, String>> rows = new ArrayList<>();
+            for (int rowIndex = headerRow.getRowNum() + 1; rowIndex <= sheet.getLastRowNum(); rowIndex++) {
+                Row row = sheet.getRow(rowIndex);
+                if (row == null) {
+                    continue;
+                }
+
+                Map<String, String> rowMap = new LinkedHashMap<>();
+                boolean hasValue = false;
+                for (int columnIndex = 0; columnIndex < headers.size(); columnIndex++) {
+                    Cell cell = row.getCell(columnIndex, Row.MissingCellPolicy.RETURN_BLANK_AS_NULL);
+                    String value = cell == null ? "" : excelDataFormatter.formatCellValue(cell).trim();
+                    if (!value.isBlank()) {
+                        hasValue = true;
+                    }
+                    rowMap.put(headers.get(columnIndex), value);
+                }
+                if (hasValue) {
+                    rows.add(rowMap);
+                }
+            }
+            return rows;
+        } catch (Exception exception) {
+            throw new PayloadParseException("서울 파일데이터 xlsx 파싱 실패: " + sourceType, exception);
+        }
+    }
+
+    private List<String> extractHeaders(Row headerRow) {
+        short lastCellNum = headerRow.getLastCellNum();
+        if (lastCellNum <= 0) {
+            return List.of();
+        }
+
+        List<String> headers = new ArrayList<>();
+        for (int columnIndex = 0; columnIndex < lastCellNum; columnIndex++) {
+            Cell cell = headerRow.getCell(columnIndex, Row.MissingCellPolicy.RETURN_BLANK_AS_NULL);
+            String header = cell == null ? "" : excelDataFormatter.formatCellValue(cell).trim();
+            if (header.isBlank()) {
+                header = "COLUMN_" + (columnIndex + 1);
+            }
+            headers.add(header);
+        }
+        return headers;
+    }
+
+    private List<Map<String, String>> parseCsvRows(PublicDataSourceType sourceType, byte[] fileBytes) {
+        String csvText = decodeCsvBytes(fileBytes);
+        try (CSVParser parser = CSVParser.parse(
+                new StringReader(csvText),
+                CSVFormat.DEFAULT.builder().setHeader().setSkipHeaderRecord(true).build()
+        )) {
+            Map<String, Integer> headerMap = parser.getHeaderMap();
+            if (headerMap == null || headerMap.isEmpty()) {
+                return List.of();
+            }
+
+            List<String> headers = headerMap.keySet().stream().toList();
+            List<Map<String, String>> rows = new ArrayList<>();
+            for (CSVRecord record : parser) {
+                Map<String, String> rowMap = new LinkedHashMap<>();
+                boolean hasValue = false;
+                for (String header : headers) {
+                    String value = record.isMapped(header) ? record.get(header).trim() : "";
+                    if (!value.isBlank()) {
+                        hasValue = true;
+                    }
+                    rowMap.put(header, value);
+                }
+                if (hasValue) {
+                    rows.add(rowMap);
+                }
+            }
+            return rows;
+        } catch (Exception exception) {
+            throw new PayloadParseException("서울 파일데이터 csv 파싱 실패: " + sourceType, exception);
+        }
+    }
+
+    private String decodeCsvBytes(byte[] fileBytes) {
+        String utf8Text = new String(fileBytes, StandardCharsets.UTF_8);
+        if (looksLikeBrokenUtf8(utf8Text)) {
+            String cp949Text = new String(fileBytes, java.nio.charset.Charset.forName("MS949"));
+            if (!looksLikeBrokenUtf8(cp949Text)) {
+                return cp949Text;
+            }
+        }
+        return removeUtf8Bom(utf8Text);
+    }
+
+    private boolean looksLikeBrokenUtf8(String text) {
+        return text.contains("�");
+    }
+
+    private String removeUtf8Bom(String text) {
+        if (!text.isEmpty() && text.charAt(0) == '\uFEFF') {
+            return text.substring(1);
+        }
+        return text;
+    }
+
+    private List<PublicDataApiItemDto> toItemDtos(
+            List<Map<String, String>> rows,
+            BridgeWorkSyncProperties.SourceConfig sourceConfig
+    ) {
+        List<PublicDataApiItemDto> items = new ArrayList<>();
+        for (Map<String, String> row : rows) {
+            try {
+                JsonNode node = objectMapper.valueToTree(row);
+                items.add(toItem(node, sourceConfig));
+            } catch (Exception exception) {
+                throw new PayloadParseException("서울 파일데이터 행 변환 실패: " + sourceConfig.getSourceType(), exception);
+            }
+        }
+        return items;
     }
 
     private List<PublicDataApiItemDto> fetchAllDataGoFileDataItems(
@@ -987,6 +1330,17 @@ public class PublicDataApiClient {
     private record FileDataPageResultDto(
             List<PublicDataApiItemDto> items,
             int totalCount
+    ) {
+    }
+
+    private record SeoulDatasetLatestFile(
+            String infId,
+            String infSeq,
+            String seq,
+            String fileName,
+            String modifiedDateText,
+            LocalDate modifiedDate,
+            String revisionKey
     ) {
     }
 

@@ -1,0 +1,12 @@
+{
+  "seoul_low_floor_bus_route_retention": {
+    "file_name": "서울시 저상버스 도입 노선 및 노선별 보유율(25.4.25).xlsx",
+    "modified_date": "2025.05.01.",
+    "revision_key": "2025-05-01|2|서울시 저상버스 도입 노선 및 노선별 보유율(25.4.25).xlsx"
+  },
+  "seoul_wheelchair_ramp_status": {
+    "file_name": "서울교통공사 휠체어경사로 설치 현황_20240331.csv",
+    "modified_date": "2024.04.25.",
+    "revision_key": "2024-04-25|5|서울교통공사 휠체어경사로 설치 현황_20240331.csv"
+  }
+}

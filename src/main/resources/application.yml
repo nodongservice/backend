@@ -150,6 +150,16 @@ bridgework:
         service-key: ${bridgework.sync.data-go-kr-service-key}
         page-size: 10000
         max-pages: 1000
+      - source-type: SEOUL_WHEELCHAIR_RAMP_STATUS
+        enabled: false
+        base-url: https://data.seoul.go.kr/dataList/OA-13116/S/1/datasetView.do
+        page-size: 1000
+        max-pages: 1
+      - source-type: SEOUL_LOW_FLOOR_BUS_ROUTE_RETENTION
+        enabled: false
+        base-url: https://data.seoul.go.kr/dataList/OA-22229/F/1/datasetView.do
+        page-size: 1000
+        max-pages: 1
       - source-type: NATIONWIDE_TRAFFIC_LIGHT
         enabled: false
         base-url: https://api.data.go.kr/openapi/tn_pubr_public_traffic_light_api

@@ -3,11 +3,13 @@ package com.bridgework.sync.service;
 import com.bridgework.sync.config.BridgeWorkSyncProperties;
 import com.bridgework.sync.dto.PublicDataApiItemDto;
 import com.bridgework.sync.dto.PublicDataApiPageResponseDto;
+import com.bridgework.sync.dto.SourceLatestRevisionDto;
 import com.bridgework.sync.dto.SourceConfigResponseDto;
 import com.bridgework.sync.dto.SourceSyncResultDto;
 import com.bridgework.sync.dto.SyncLogResponseDto;
 import com.bridgework.sync.dto.SyncRunResponseDto;
 import com.bridgework.sync.entity.PublicDataRecord;
+import com.bridgework.sync.entity.PublicDataSourceSnapshot;
 import com.bridgework.sync.entity.PublicDataSourceType;
 import com.bridgework.sync.entity.PublicDataSyncLog;
 import com.bridgework.sync.entity.SyncRequestSource;
@@ -15,6 +17,7 @@ import com.bridgework.sync.entity.SyncStatus;
 import com.bridgework.sync.exception.SyncSourceDisabledException;
 import com.bridgework.sync.exception.SyncSourceNotFoundException;
 import com.bridgework.sync.repository.PublicDataRecordRepository;
+import com.bridgework.sync.repository.PublicDataSourceSnapshotRepository;
 import com.bridgework.sync.repository.PublicDataSyncLogRepository;
 import jakarta.annotation.PostConstruct;
 import java.time.OffsetDateTime;
@@ -38,17 +41,20 @@ public class PublicDataSyncService {
     private final PublicDataRecordRepository publicDataRecordRepository;
     private final PublicDataRecordFieldService publicDataRecordFieldService;
     private final PublicDataSyncLogRepository publicDataSyncLogRepository;
+    private final PublicDataSourceSnapshotRepository publicDataSourceSnapshotRepository;
 
     public PublicDataSyncService(BridgeWorkSyncProperties syncProperties,
                                  PublicDataApiClient publicDataApiClient,
                                  PublicDataRecordRepository publicDataRecordRepository,
                                  PublicDataRecordFieldService publicDataRecordFieldService,
-                                 PublicDataSyncLogRepository publicDataSyncLogRepository) {
+                                 PublicDataSyncLogRepository publicDataSyncLogRepository,
+                                 PublicDataSourceSnapshotRepository publicDataSourceSnapshotRepository) {
         this.syncProperties = syncProperties;
         this.publicDataApiClient = publicDataApiClient;
         this.publicDataRecordRepository = publicDataRecordRepository;
         this.publicDataRecordFieldService = publicDataRecordFieldService;
         this.publicDataSyncLogRepository = publicDataSyncLogRepository;
+        this.publicDataSourceSnapshotRepository = publicDataSourceSnapshotRepository;
     }
 
     @PostConstruct
@@ -60,7 +66,9 @@ public class PublicDataSyncService {
                 throw new IllegalStateException("중복 동기화 소스 설정: " + sourceConfig.getSourceType());
             }
 
-            if (sourceConfig.isEnabled() && (sourceConfig.getServiceKey() == null || sourceConfig.getServiceKey().isBlank())) {
+            if (sourceConfig.isEnabled()
+                    && isServiceKeyRequired(sourceConfig.getSourceType())
+                    && (sourceConfig.getServiceKey() == null || sourceConfig.getServiceKey().isBlank())) {
                 throw new IllegalStateException("활성화된 소스의 serviceKey가 비어 있습니다: " + sourceConfig.getSourceType());
             }
 
@@ -150,8 +158,16 @@ public class PublicDataSyncService {
         SyncStatus syncStatus = SyncStatus.SUCCESS;
         String message = "동기화 완료";
         Set<String> fetchedExternalIds = new HashSet<>();
+        SourceLatestRevisionDto latestRevisionDto = null;
 
         try {
+            latestRevisionDto = publicDataApiClient.fetchLatestRevision(sourceConfig).orElse(null);
+            if (latestRevisionDto != null && isUnchangedLatestRevision(sourceType, latestRevisionDto.revisionKey())) {
+                message = "최신 파일 수정일 동일로 동기화 스킵";
+                finishSyncLog(syncLog, syncStatus, 0, 0, 0, 0, message);
+                return new SourceSyncResultDto(sourceType, syncStatus, 0, 0, 0, 0, message);
+            }
+
             for (int pageNo = 1; pageNo <= sourceConfig.getMaxPages(); pageNo++) {
                 PublicDataApiPageResponseDto pageResponse = publicDataApiClient.fetchPage(sourceConfig, pageNo);
 
@@ -201,6 +217,8 @@ public class PublicDataSyncService {
 
             if (failedCount > 0 && deletedCount == 0) {
                 log.warn("부분 실패로 삭제 동기화를 건너뜀 source={} failedCount={}", sourceType, failedCount);
+            } else if (failedCount == 0 && latestRevisionDto != null) {
+                upsertSourceSnapshot(sourceType, latestRevisionDto);
             }
         } catch (Exception exception) {
             failedCount++;
@@ -211,6 +229,26 @@ public class PublicDataSyncService {
 
         finishSyncLog(syncLog, syncStatus, processedCount, newCount, updatedCount, failedCount, message);
         return new SourceSyncResultDto(sourceType, syncStatus, processedCount, newCount, updatedCount, failedCount, message);
+    }
+
+    private boolean isUnchangedLatestRevision(PublicDataSourceType sourceType, String revisionKey) {
+        return publicDataSourceSnapshotRepository.findById(sourceType)
+                .map(snapshot -> snapshot.getLatestRevision().equals(revisionKey))
+                .orElse(false);
+    }
+
+    private void upsertSourceSnapshot(PublicDataSourceType sourceType, SourceLatestRevisionDto latestRevisionDto) {
+        PublicDataSourceSnapshot snapshot = publicDataSourceSnapshotRepository.findById(sourceType)
+                .orElseGet(() -> {
+                    PublicDataSourceSnapshot newSnapshot = new PublicDataSourceSnapshot();
+                    newSnapshot.setSourceType(sourceType);
+                    return newSnapshot;
+                });
+
+        snapshot.setLatestRevision(latestRevisionDto.revisionKey());
+        snapshot.setLatestFileName(latestRevisionDto.fileName());
+        snapshot.setLatestModifiedDate(latestRevisionDto.modifiedDate());
+        publicDataSourceSnapshotRepository.save(snapshot);
     }
 
     private int removeDeletedRecords(PublicDataSourceType sourceType, Set<String> fetchedExternalIds) {
@@ -307,6 +345,11 @@ public class PublicDataSyncService {
                 .filter(source -> source.getSourceType() == sourceType)
                 .findFirst()
                 .orElseThrow(() -> new SyncSourceNotFoundException(sourceType));
+    }
+
+    private boolean isServiceKeyRequired(PublicDataSourceType sourceType) {
+        return sourceType != PublicDataSourceType.SEOUL_WHEELCHAIR_RAMP_STATUS
+                && sourceType != PublicDataSourceType.SEOUL_LOW_FLOOR_BUS_ROUTE_RETENTION;
     }
 
     private SyncRunResponseDto buildSummary(OffsetDateTime startedAt, List<SourceSyncResultDto> results) {

@@ -5,8 +5,10 @@ from __future__ import annotations
 
 import argparse
 from calendar import monthrange
+import csv
 from datetime import date, datetime, timedelta
 import html
+import io
 import json
 import os
 import re
@@ -34,6 +36,13 @@ REQUIRED_ENV_KEYS = (
 
 PUBLIC_DATA_PK_PATTERN = re.compile(r'id="publicDataPk"[^>]*value="([^"]+)"')
 PUBLIC_DATA_DETAIL_PK_PATTERN = re.compile(r'id="publicDataDetailPk"[^>]*value="([^"]+)"')
+SEOUL_FILE_FORM_PATTERN = re.compile(r'<form name="frmFile".*?</form>', re.DOTALL)
+SEOUL_FORM_INPUT_PATTERN = re.compile(r'name="(?P<name>infId|infSeq)"\s+value="(?P<value>[^"]*)"')
+SEOUL_FILE_ROW_PATTERN = re.compile(r'<tr id="fileTr_\d+".*?</tr>', re.DOTALL)
+SEOUL_FILE_SEQ_PATTERN = re.compile(r"downloadFile\('(?P<seq>\d+)'\)")
+SEOUL_FILE_NAME_PATTERN = re.compile(r'title="(?P<name>[^"]+)"\s+onclick="javascript:downloadFile')
+SEOUL_FILE_MODIFIED_PATTERN = re.compile(r"<td>\s*(?P<date>\d{4}\.\d{2}\.\d{2}\.)\s*</td>")
+SEOUL_FILE_DOWNLOAD_ENDPOINT = "https://datafile.seoul.go.kr/bigfile/iot/inf/nio_download.do"
 
 OOXML_SPREADSHEET_NS = {"m": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
 OOXML_REL_NS = {"r": "http://schemas.openxmlformats.org/officeDocument/2006/relationships"}
@@ -51,6 +60,17 @@ class SourceSpec:
     endpoint: str
     key: str | None = None
     params: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class SeoulLatestFileInfo:
+    inf_id: str
+    inf_seq: str
+    seq: str
+    file_name: str
+    modified_date_text: str
+    modified_date: date
+    revision_key: str
 
 
 def log_http_request(response: requests.Response) -> None:
@@ -287,6 +307,20 @@ def source_specs(api_keys: dict[str, str]) -> list[SourceSpec]:
             endpoint="https://www.data.go.kr/data/15067528/fileData.do",
             key=data_go_kr_service_key,
             params={"max_page_size": 10000, "max_page_count": 1000},
+        ),
+        SourceSpec(
+            name="서울교통공사_휠체어경사로 설치 현황",
+            slug="seoul_wheelchair_ramp_status",
+            kind="seoul_dataset_file",
+            endpoint="https://data.seoul.go.kr/dataList/OA-13116/S/1/datasetView.do",
+            params={},
+        ),
+        SourceSpec(
+            name="서울시 저상버스 도입 노선 및 노선별 보유율",
+            slug="seoul_low_floor_bus_route_retention",
+            kind="seoul_dataset_file",
+            endpoint="https://data.seoul.go.kr/dataList/OA-22229/F/1/datasetView.do",
+            params={},
         ),
         SourceSpec(
             name="전국신호등표준데이터",
@@ -628,6 +662,188 @@ def fetch_data_go_filedata(
     )
 
     return records
+
+
+def resolve_seoul_latest_file_info(
+    session: requests.Session,
+    spec: SourceSpec,
+    timeout: int,
+) -> SeoulLatestFileInfo:
+    html_body = request_text(session, spec.endpoint, {}, timeout)
+    form_match = SEOUL_FILE_FORM_PATTERN.search(html_body)
+    if not form_match:
+        raise RuntimeError(f"서울 파일데이터 frmFile 폼을 찾지 못했습니다: {spec.slug}")
+
+    form_html = form_match.group(0)
+    form_values: dict[str, str] = {}
+    for matched in SEOUL_FORM_INPUT_PATTERN.finditer(form_html):
+        form_values[matched.group("name")] = matched.group("value").strip()
+
+    inf_id = form_values.get("infId", "").strip()
+    inf_seq = form_values.get("infSeq", "").strip()
+    if not inf_id or not inf_seq:
+        raise RuntimeError(f"서울 파일데이터 infId/infSeq를 찾지 못했습니다: {spec.slug}")
+
+    candidates: list[SeoulLatestFileInfo] = []
+    for row_match in SEOUL_FILE_ROW_PATTERN.finditer(html_body):
+        row_html = row_match.group(0)
+        seq_match = SEOUL_FILE_SEQ_PATTERN.search(row_html)
+        file_name_match = SEOUL_FILE_NAME_PATTERN.search(row_html)
+        modified_match = SEOUL_FILE_MODIFIED_PATTERN.search(row_html)
+        if not seq_match or not file_name_match or not modified_match:
+            continue
+
+        seq = seq_match.group("seq").strip()
+        file_name = html.unescape(file_name_match.group("name").strip())
+        modified_date_text = modified_match.group("date").strip()
+        modified_date = parse_seoul_modified_date(modified_date_text)
+        revision_key = f"{modified_date.isoformat()}|{seq}|{file_name}"
+
+        candidates.append(
+            SeoulLatestFileInfo(
+                inf_id=inf_id,
+                inf_seq=inf_seq,
+                seq=seq,
+                file_name=file_name,
+                modified_date_text=modified_date_text,
+                modified_date=modified_date,
+                revision_key=revision_key,
+            )
+        )
+
+    if not candidates:
+        raise RuntimeError(f"서울 파일데이터 목록을 파싱하지 못했습니다: {spec.slug}")
+
+    return max(candidates, key=lambda candidate: (candidate.modified_date, int(candidate.seq)))
+
+
+def parse_seoul_modified_date(modified_date_text: str) -> date:
+    normalized = modified_date_text.strip().rstrip(".")
+    return datetime.strptime(normalized, "%Y.%m.%d").date()
+
+
+def download_seoul_dataset_file_bytes(
+    session: requests.Session,
+    latest_info: SeoulLatestFileInfo,
+    timeout: int,
+) -> bytes:
+    form_data = {
+        "infId": latest_info.inf_id,
+        "seqNo": latest_info.seq,
+        "seq": latest_info.seq,
+        "infSeq": latest_info.inf_seq,
+    }
+    response = session.post(
+        SEOUL_FILE_DOWNLOAD_ENDPOINT,
+        params={"useCache": "false"},
+        data=form_data,
+        timeout=timeout,
+    )
+    print(
+        "[HTTP] POST "
+        f"{response.url} status={response.status_code} "
+        f"(infId={latest_info.inf_id}, infSeq={latest_info.inf_seq}, seq={latest_info.seq})"
+    )
+    raise_for_status_with_context(response)
+    return response.content
+
+
+def decode_csv_bytes(raw_bytes: bytes) -> str:
+    for encoding in ("utf-8-sig", "cp949", "euc-kr"):
+        try:
+            return raw_bytes.decode(encoding)
+        except UnicodeDecodeError:
+            continue
+    return raw_bytes.decode("utf-8", errors="replace")
+
+
+def parse_csv_bytes_to_rows(raw_bytes: bytes) -> list[dict[str, str]]:
+    csv_text = decode_csv_bytes(raw_bytes)
+    reader = csv.DictReader(io.StringIO(csv_text))
+    if reader.fieldnames is None:
+        return []
+
+    headers = [header or "" for header in reader.fieldnames]
+    rows: list[dict[str, str]] = []
+    for row in reader:
+        normalized: dict[str, str] = {}
+        has_value = False
+        for header in headers:
+            value = (row.get(header, "") or "").strip()
+            if value:
+                has_value = True
+            normalized[header] = value
+        if has_value:
+            rows.append(normalized)
+    return rows
+
+
+def parse_xlsx_bytes_to_rows(raw_bytes: bytes) -> list[dict[str, str]]:
+    with zipfile.ZipFile(io.BytesIO(raw_bytes)) as archive:
+        shared_strings = parse_xlsx_shared_strings(archive)
+        sheet_path = resolve_first_sheet_xml_path(archive)
+        sheet_root = ET.fromstring(archive.read(sheet_path))
+
+    rows = sheet_root.findall(".//m:sheetData/m:row", OOXML_SPREADSHEET_NS)
+    if not rows:
+        return []
+
+    parsed_rows: list[dict[int, str]] = []
+    for row in rows:
+        row_map: dict[int, str] = {}
+        for cell in row.findall("m:c", OOXML_SPREADSHEET_NS):
+            column_index = column_ref_to_index(cell.attrib.get("r", ""))
+            if column_index < 0:
+                continue
+            row_map[column_index] = extract_cell_text(cell, shared_strings).strip()
+        if row_map:
+            parsed_rows.append(row_map)
+
+    if not parsed_rows:
+        return []
+
+    header_row = parsed_rows[0]
+    max_index = max(header_row.keys())
+    headers: list[str] = []
+    for index in range(max_index + 1):
+        header = (header_row.get(index, "") or "").strip()
+        headers.append(header if header else f"COLUMN_{index + 1}")
+
+    records: list[dict[str, str]] = []
+    for row_map in parsed_rows[1:]:
+        row_data: dict[str, str] = {}
+        has_value = False
+        for index, header in enumerate(headers):
+            value = (row_map.get(index, "") or "").strip()
+            if value:
+                has_value = True
+            row_data[header] = value
+        if has_value:
+            records.append(row_data)
+    return records
+
+
+def fetch_seoul_dataset_file(
+    session: requests.Session,
+    spec: SourceSpec,
+    timeout: int,
+    latest_info: SeoulLatestFileInfo,
+) -> list[dict[str, Any]]:
+    raw_bytes = download_seoul_dataset_file_bytes(session, latest_info, timeout)
+    lower_file_name = latest_info.file_name.lower()
+    if lower_file_name.endswith(".xlsx"):
+        rows = parse_xlsx_bytes_to_rows(raw_bytes)
+    elif lower_file_name.endswith(".csv"):
+        rows = parse_csv_bytes_to_rows(raw_bytes)
+    else:
+        raise RuntimeError(f"지원하지 않는 파일 확장자입니다: {latest_info.file_name}")
+
+    log_detected_count(
+        spec.slug,
+        f"file={latest_info.file_name},modified={latest_info.modified_date_text}",
+        len(rows),
+    )
+    return rows
 
 
 def fetch_data_go_filedata_pages(
@@ -1174,6 +1390,7 @@ def run_one_source(
     timeout: int,
     sleep_ms: int,
     kric_station_codes: list[dict[str, str]],
+    seoul_latest_file_info: SeoulLatestFileInfo | None = None,
 ) -> list[dict[str, Any]]:
     page_size = resolve_page_size(spec, requested_page_size)
     max_pages = resolve_max_pages(spec, requested_max_pages)
@@ -1194,6 +1411,10 @@ def run_one_source(
         return fetch_work24_vocational(session, spec, page_size, max_pages, timeout, sleep_ms)
     if spec.kind == "work24_competency":
         return fetch_work24_competency(session, spec, page_size, max_pages, timeout, sleep_ms)
+    if spec.kind == "seoul_dataset_file":
+        if seoul_latest_file_info is None:
+            raise RuntimeError(f"서울 파일데이터 최신 파일 정보가 없습니다: {spec.slug}")
+        return fetch_seoul_dataset_file(session, spec, timeout, seoul_latest_file_info)
     raise RuntimeError(f"지원하지 않는 source kind: {spec.kind}")
 
 
@@ -1264,10 +1485,48 @@ def filter_source_specs(specs: list[SourceSpec], target_names: list[str]) -> lis
     return filtered_specs
 
 
+def load_source_revisions(state_file_path: Path) -> dict[str, dict[str, str]]:
+    if not state_file_path.exists():
+        return {}
+
+    try:
+        raw = json.loads(state_file_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return {}
+
+    if not isinstance(raw, dict):
+        return {}
+
+    revisions: dict[str, dict[str, str]] = {}
+    for slug, value in raw.items():
+        if not isinstance(slug, str) or not isinstance(value, dict):
+            continue
+        revision_key = str(value.get("revision_key", "")).strip()
+        modified_date = str(value.get("modified_date", "")).strip()
+        file_name = str(value.get("file_name", "")).strip()
+        if not revision_key:
+            continue
+        revisions[slug] = {
+            "revision_key": revision_key,
+            "modified_date": modified_date,
+            "file_name": file_name,
+        }
+    return revisions
+
+
+def save_source_revisions(state_file_path: Path, revisions: dict[str, dict[str, str]]) -> None:
+    state_file_path.parent.mkdir(parents=True, exist_ok=True)
+    state_file_path.write_text(
+        json.dumps(revisions, ensure_ascii=False, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
+
+
 def main() -> int:
     load_scripts_dotenv()
     args = parse_args()
     output_dir = Path(args.output_dir).resolve()
+    revision_state_path = output_dir / ".source_revisions.json"
     api_keys = get_api_keys()
 
     kric_station_xlsx_path = resolve_kric_station_xlsx_path(args.kric_station_xlsx)
@@ -1281,11 +1540,24 @@ def main() -> int:
     all_specs = source_specs(api_keys)
     target_names = parse_target_data_names(args.only_data_name)
     selected_specs = filter_source_specs(all_specs, target_names)
+    source_revisions = load_source_revisions(revision_state_path)
     print("[INFO] selected_sources:", ", ".join(spec.slug for spec in selected_specs))
 
     for spec in selected_specs:
         print(f"[START] {spec.name}")
         try:
+            seoul_latest_file_info: SeoulLatestFileInfo | None = None
+            if spec.kind == "seoul_dataset_file":
+                seoul_latest_file_info = resolve_seoul_latest_file_info(session, spec, args.timeout)
+                previous_revision = source_revisions.get(spec.slug, {}).get("revision_key", "")
+                if previous_revision == seoul_latest_file_info.revision_key:
+                    print(
+                        "[SKIP] "
+                        f"{spec.name} (modified={seoul_latest_file_info.modified_date_text}, "
+                        f"file={seoul_latest_file_info.file_name})"
+                    )
+                    continue
+
             records = run_one_source(
                 session,
                 spec,
@@ -1294,12 +1566,20 @@ def main() -> int:
                 timeout=args.timeout,
                 sleep_ms=args.sleep_ms,
                 kric_station_codes=kric_station_codes,
+                seoul_latest_file_info=seoul_latest_file_info,
             )
             output_path = save_result_file(
                 output_dir=output_dir,
                 base_name=spec.slug,
                 rows=records
             )
+            if seoul_latest_file_info is not None:
+                source_revisions[spec.slug] = {
+                    "revision_key": seoul_latest_file_info.revision_key,
+                    "modified_date": seoul_latest_file_info.modified_date_text,
+                    "file_name": seoul_latest_file_info.file_name,
+                }
+                save_source_revisions(revision_state_path, source_revisions)
             print(f"[DONE] {spec.name} -> {output_path} ({len(records)} rows)")
         except Exception as exc:  # noqa: BLE001
             failed = True
