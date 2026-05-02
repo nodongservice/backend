@@ -13,6 +13,24 @@ require_command() {
   fi
 }
 
+resolve_file_owner_uid_gid() {
+  local file_path="$1"
+
+  # 리눅스(GNU stat)와 macOS(BSD stat) 모두 대응한다.
+  if stat --version >/dev/null 2>&1; then
+    local uid gid
+    uid="$(stat -c '%u' "$file_path")"
+    gid="$(stat -c '%g' "$file_path")"
+    echo "${uid}:${gid}"
+    return
+  fi
+
+  local uid gid
+  uid="$(stat -f '%u' "$file_path")"
+  gid="$(stat -f '%g' "$file_path")"
+  echo "${uid}:${gid}"
+}
+
 APP_NAME="${APP_NAME:-bridgework-backend}"
 APP_ROOT="${APP_ROOT:-$HOME/bridgework}"
 CONFIG_FILE="${CONFIG_FILE:-$APP_ROOT/application-prod.yml}"
@@ -51,6 +69,14 @@ if [[ ! -f "$CONFIG_FILE" ]]; then
   log "외부 설정 파일이 없습니다: $CONFIG_FILE"
   exit 1
 fi
+
+# 설정 파일 소유자와 동일한 uid/gid로 앱을 실행해 600 권한 파일도 읽을 수 있게 한다.
+APP_CONTAINER_USER="${APP_CONTAINER_USER:-$(resolve_file_owner_uid_gid "$CONFIG_FILE")}"
+if [[ -z "$APP_CONTAINER_USER" ]]; then
+  log "설정 파일 소유자(uid:gid) 조회에 실패했습니다: $CONFIG_FILE"
+  exit 1
+fi
+log "애플리케이션 컨테이너 실행 사용자(uid:gid): $APP_CONTAINER_USER"
 
 mkdir -p "$STATE_DIR"
 
@@ -154,6 +180,7 @@ docker run -d \
   --name "$TARGET_CONTAINER" \
   --restart unless-stopped \
   --network "$DOCKER_NETWORK" \
+  --user "$APP_CONTAINER_USER" \
   -v "${CONFIG_FILE}:/app/config/application-prod.yml:ro" \
   -e SPRING_PROFILES_ACTIVE=prod \
   -e SPRING_CONFIG_ADDITIONAL_LOCATION="optional:file:/app/config/" \
