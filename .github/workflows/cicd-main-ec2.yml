@@ -1,0 +1,203 @@
+name: backend-cicd-ec2
+
+on:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: backend-prod-deploy
+  cancel-in-progress: false
+
+jobs:
+  build-push-deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Grant gradlew execute permission
+        run: chmod +x gradlew
+
+      - name: Run test and build jar
+        run: |
+          ./gradlew clean test bootJar
+
+      - name: Resolve image tags
+        run: |
+          OWNER_LOWER="$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')"
+          IMAGE_BASE="ghcr.io/${OWNER_LOWER}/bridgework-backend"
+          echo "IMAGE_SHA_TAG=${IMAGE_BASE}:${GITHUB_SHA}" >> "$GITHUB_ENV"
+          echo "IMAGE_LATEST_TAG=${IMAGE_BASE}:latest" >> "$GITHUB_ENV"
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: |
+            ${{ env.IMAGE_SHA_TAG }}
+            ${{ env.IMAGE_LATEST_TAG }}
+
+      - name: Prepare production config file
+        env:
+          DB_URL: ${{ secrets.DB_URL }}
+          DB_USERNAME: ${{ secrets.DB_USERNAME }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          REDIS_PASSWORD: ${{ secrets.REDIS_PASSWORD }}
+          DATA_GO_KR_SERVICE_KEY: ${{ secrets.DATA_GO_KR_SERVICE_KEY }}
+          KRIC_SERVICE_KEY: ${{ secrets.KRIC_SERVICE_KEY }}
+          WORK24_VOCATIONAL_TRAINING_AUTH_KEY: ${{ secrets.WORK24_VOCATIONAL_TRAINING_AUTH_KEY }}
+          WORK24_COMPETENCY_AUTH_KEY: ${{ secrets.WORK24_COMPETENCY_AUTH_KEY }}
+          SEOUL_OPEN_API_KEY: ${{ secrets.SEOUL_OPEN_API_KEY }}
+          BRIDGEWORK_AUTH_JWT_SECRET: ${{ secrets.BRIDGEWORK_AUTH_JWT_SECRET }}
+          KAKAO_CLIENT_SECRET: ${{ secrets.KAKAO_CLIENT_SECRET }}
+          NAVER_CLIENT_SECRET: ${{ secrets.NAVER_CLIENT_SECRET }}
+        run: |
+          mkdir -p .cicd
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+
+          required_keys = [
+              "DB_URL",
+              "DB_USERNAME",
+              "DB_PASSWORD",
+              "REDIS_PASSWORD",
+              "DATA_GO_KR_SERVICE_KEY",
+              "KRIC_SERVICE_KEY",
+              "WORK24_VOCATIONAL_TRAINING_AUTH_KEY",
+              "WORK24_COMPETENCY_AUTH_KEY",
+              "SEOUL_OPEN_API_KEY",
+              "BRIDGEWORK_AUTH_JWT_SECRET",
+              "KAKAO_CLIENT_SECRET",
+              "NAVER_CLIENT_SECRET",
+          ]
+
+          missing = [key for key in required_keys if not os.environ.get(key, "").strip()]
+          if missing:
+              raise SystemExit(f"필수 GitHub Secrets 누락: {', '.join(missing)}")
+
+          def val(name: str, default: str = "") -> str:
+              return os.environ.get(name, default)
+
+          def q(raw: str) -> str:
+              # YAML 단일 인용 문자열 이스케이프(' -> '')
+              return "'" + raw.replace("'", "''") + "'"
+
+          lines = [
+              "spring:",
+              "  config:",
+              "    activate:",
+              "      on-profile: prod",
+              "  datasource:",
+              f"    url: {q(val('DB_URL'))}",
+              f"    username: {q(val('DB_USERNAME'))}",
+              f"    password: {q(val('DB_PASSWORD'))}",
+              "    driver-class-name: 'org.postgresql.Driver'",
+              "  data:",
+              "    redis:",
+              "      host: 'bridgework-redis'",
+              "      port: '6379'",
+              f"      password: {q(val('REDIS_PASSWORD'))}",
+              "      timeout: '3s'",
+              "",
+              "bridgework:",
+              "  sync:",
+              "    kric-station-code-file-path: '/app/resources/reference/operating_agency_station_codes_2026-02-28.xlsx'",
+              f"    data-go-kr-service-key: {q(val('DATA_GO_KR_SERVICE_KEY'))}",
+              f"    kric-service-key: {q(val('KRIC_SERVICE_KEY'))}",
+              f"    work24-vocational-training-auth-key: {q(val('WORK24_VOCATIONAL_TRAINING_AUTH_KEY'))}",
+              f"    work24-competency-auth-key: {q(val('WORK24_COMPETENCY_AUTH_KEY'))}",
+              f"    seoul-open-api-key: {q(val('SEOUL_OPEN_API_KEY'))}",
+              "  auth:",
+              "    allowed-origins:",
+              "      - 'http://localhost:3000'",
+              "    jwt:",
+              f"      secret: {q(val('BRIDGEWORK_AUTH_JWT_SECRET'))}",
+              "    oauth2:",
+              "      kakao:",
+              "        client-id: '0d5fffe82670b3aba1f9c1c2e551dbee'",
+              f"        client-secret: {q(val('KAKAO_CLIENT_SECRET'))}",
+              "        redirect-uri: 'http://localhost:3000/auth/kakao/callback'",
+              "      naver:",
+              "        client-id: 'sk1Y_ivVnHWKz59glY0x'",
+              f"        client-secret: {q(val('NAVER_CLIENT_SECRET'))}",
+              "        redirect-uri: 'http://localhost:3000/auth/naver/callback'",
+              "",
+          ]
+
+          content = "\n".join(lines)
+
+          Path(".cicd/application-prod.yml").write_text(content, encoding="utf-8")
+          PY
+          chmod 600 .cicd/application-prod.yml
+
+      - name: Upload deploy scripts to EC2
+        uses: appleboy/scp-action@v1
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+          port: ${{ secrets.EC2_PORT }}
+          source: "deploy/*"
+          target: "~/bridgework/deploy"
+          strip_components: 1
+
+      - name: Upload application-prod.yml to EC2
+        uses: appleboy/scp-action@v1
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+          port: ${{ secrets.EC2_PORT }}
+          source: ".cicd/application-prod.yml"
+          target: "~/bridgework"
+          strip_components: 1
+
+      - name: Deploy on EC2 (blue-green)
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+          port: ${{ secrets.EC2_PORT }}
+          script: |
+            set -euo pipefail
+
+            mkdir -p "$HOME/bridgework/deploy" "$HOME/bridgework/state"
+            chmod +x "$HOME/bridgework/deploy"/*.sh
+            chmod 600 "$HOME/bridgework/application-prod.yml"
+
+            # 최초 배포 서버에서도 upstream 파일이 준비되도록 nginx 설정을 보장한다.
+            bash "$HOME/bridgework/deploy/setup_nginx.sh"
+
+            echo '${{ secrets.GHCR_READ_TOKEN }}' | docker login ghcr.io -u '${{ github.repository_owner }}' --password-stdin
+
+            IMAGE_URI='${{ env.IMAGE_SHA_TAG }}' \
+            APP_NAME='bridgework-backend' \
+            APP_ROOT="$HOME/bridgework" \
+            CONFIG_FILE="$HOME/bridgework/application-prod.yml" \
+            REDIS_PASSWORD='${{ secrets.REDIS_PASSWORD }}' \
+            bash "$HOME/bridgework/deploy/blue_green_deploy.sh"

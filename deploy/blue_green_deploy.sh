@@ -1,0 +1,232 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+log() {
+  printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*"
+}
+
+require_command() {
+  local cmd="$1"
+  if ! command -v "$cmd" >/dev/null 2>&1; then
+    log "필수 명령어가 없습니다: $cmd"
+    exit 1
+  fi
+}
+
+APP_NAME="${APP_NAME:-bridgework-backend}"
+APP_ROOT="${APP_ROOT:-$HOME/bridgework}"
+CONFIG_FILE="${CONFIG_FILE:-$APP_ROOT/application-prod.yml}"
+STATE_DIR="${STATE_DIR:-$APP_ROOT/state}"
+ACTIVE_SLOT_FILE="${ACTIVE_SLOT_FILE:-$STATE_DIR/active_slot}"
+DOCKER_NETWORK="${DOCKER_NETWORK:-bridgework-network}"
+NGINX_UPSTREAM_CONF="${NGINX_UPSTREAM_CONF:-/etc/nginx/conf.d/bridgework-upstream.inc}"
+REDIS_CONTAINER_NAME="${REDIS_CONTAINER_NAME:-bridgework-redis}"
+REDIS_IMAGE="${REDIS_IMAGE:-redis:7.2-alpine}"
+REDIS_VOLUME="${REDIS_VOLUME:-bridgework-redis-data}"
+REDIS_PASSWORD="${REDIS_PASSWORD:-}"
+
+BLUE_PORT="${BLUE_PORT:-18080}"
+GREEN_PORT="${GREEN_PORT:-18081}"
+CONTAINER_PORT="${CONTAINER_PORT:-8080}"
+
+HEALTH_ENDPOINT="${HEALTH_ENDPOINT:-/actuator/health}"
+HEALTH_TIMEOUT_SECONDS="${HEALTH_TIMEOUT_SECONDS:-120}"
+HEALTH_INTERVAL_SECONDS="${HEALTH_INTERVAL_SECONDS:-2}"
+
+IMAGE_URI="${IMAGE_URI:-}"
+if [[ -z "$IMAGE_URI" ]]; then
+  log "IMAGE_URI 환경변수는 필수입니다."
+  exit 1
+fi
+if [[ -z "$REDIS_PASSWORD" ]]; then
+  log "REDIS_PASSWORD 환경변수는 필수입니다."
+  exit 1
+fi
+
+require_command docker
+require_command curl
+require_command nginx
+
+if [[ ! -f "$CONFIG_FILE" ]]; then
+  log "외부 설정 파일이 없습니다: $CONFIG_FILE"
+  exit 1
+fi
+
+mkdir -p "$STATE_DIR"
+
+if ! docker network inspect "$DOCKER_NETWORK" >/dev/null 2>&1; then
+  log "도커 네트워크 생성: $DOCKER_NETWORK"
+  docker network create "$DOCKER_NETWORK" >/dev/null
+fi
+
+if ! docker volume inspect "$REDIS_VOLUME" >/dev/null 2>&1; then
+  log "Redis 볼륨 생성: $REDIS_VOLUME"
+  docker volume create "$REDIS_VOLUME" >/dev/null
+fi
+
+# Redis 보안 설정(requirepass) 일관성을 위해 배포 시마다 재생성한다.
+if docker ps -a --format '{{.Names}}' | grep -q "^${REDIS_CONTAINER_NAME}$"; then
+  log "기존 Redis 컨테이너 재생성: $REDIS_CONTAINER_NAME"
+  docker rm -f "$REDIS_CONTAINER_NAME" >/dev/null 2>&1 || true
+fi
+
+log "Redis 컨테이너 실행: $REDIS_CONTAINER_NAME"
+docker run -d \
+  --name "$REDIS_CONTAINER_NAME" \
+  --restart unless-stopped \
+  --network "$DOCKER_NETWORK" \
+  -v "${REDIS_VOLUME}:/data" \
+  "$REDIS_IMAGE" \
+  redis-server \
+  --appendonly yes \
+  --save 60 1000 \
+  --loglevel warning \
+  --requirepass "$REDIS_PASSWORD" >/dev/null
+
+wait_for_redis() {
+  local timeout_seconds="$1"
+  local interval_seconds=1
+  local waited=0
+
+  while (( waited < timeout_seconds )); do
+    if docker exec "$REDIS_CONTAINER_NAME" redis-cli -a "$REDIS_PASSWORD" ping | grep -q "PONG"; then
+      return 0
+    fi
+    sleep "$interval_seconds"
+    waited=$((waited + interval_seconds))
+  done
+
+  return 1
+}
+
+if ! wait_for_redis 30; then
+  log "Redis 헬스체크 실패. 배포를 중단합니다."
+  docker logs --tail 120 "$REDIS_CONTAINER_NAME" || true
+  exit 1
+fi
+
+BLUE_CONTAINER="${APP_NAME}-blue"
+GREEN_CONTAINER="${APP_NAME}-green"
+
+resolve_current_slot() {
+  if [[ -f "$ACTIVE_SLOT_FILE" ]]; then
+    cat "$ACTIVE_SLOT_FILE"
+    return
+  fi
+
+  # 상태 파일이 없으면 현재 실행 중인 컨테이너를 기준으로 슬롯을 판별한다.
+  if docker ps --format '{{.Names}}' | grep -q "^${BLUE_CONTAINER}$"; then
+    echo "blue"
+    return
+  fi
+
+  if docker ps --format '{{.Names}}' | grep -q "^${GREEN_CONTAINER}$"; then
+    echo "green"
+    return
+  fi
+
+  echo "blue"
+}
+
+CURRENT_SLOT="$(resolve_current_slot)"
+if [[ "$CURRENT_SLOT" == "blue" ]]; then
+  TARGET_SLOT="green"
+  TARGET_CONTAINER="$GREEN_CONTAINER"
+  TARGET_PORT="$GREEN_PORT"
+  OLD_CONTAINER="$BLUE_CONTAINER"
+else
+  TARGET_SLOT="blue"
+  TARGET_CONTAINER="$BLUE_CONTAINER"
+  TARGET_PORT="$BLUE_PORT"
+  OLD_CONTAINER="$GREEN_CONTAINER"
+fi
+
+log "현재 슬롯: $CURRENT_SLOT"
+log "대상 슬롯: $TARGET_SLOT (container=$TARGET_CONTAINER, hostPort=$TARGET_PORT)"
+log "이미지 pull: $IMAGE_URI"
+docker pull "$IMAGE_URI" >/dev/null
+
+# 대상 슬롯 컨테이너가 기존에 있으면 제거 후 새 버전을 올린다.
+docker rm -f "$TARGET_CONTAINER" >/dev/null 2>&1 || true
+
+log "새 컨테이너 실행: $TARGET_CONTAINER"
+docker run -d \
+  --name "$TARGET_CONTAINER" \
+  --restart unless-stopped \
+  --network "$DOCKER_NETWORK" \
+  -v "${CONFIG_FILE}:/app/config/application-prod.yml:ro" \
+  -e SPRING_PROFILES_ACTIVE=prod \
+  -e SPRING_CONFIG_ADDITIONAL_LOCATION="optional:file:/app/config/" \
+  -e SERVER_PORT="$CONTAINER_PORT" \
+  -e TZ="${TZ:-Asia/Seoul}" \
+  -p "${TARGET_PORT}:${CONTAINER_PORT}" \
+  "$IMAGE_URI" >/dev/null
+
+wait_for_health() {
+  local url="$1"
+  local timeout="$2"
+  local interval="$3"
+  local waited=0
+
+  while (( waited < timeout )); do
+    if curl -fsS "$url" >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep "$interval"
+    waited=$((waited + interval))
+  done
+
+  return 1
+}
+
+HEALTH_URL="http://127.0.0.1:${TARGET_PORT}${HEALTH_ENDPOINT}"
+log "헬스체크 대기: $HEALTH_URL"
+if ! wait_for_health "$HEALTH_URL" "$HEALTH_TIMEOUT_SECONDS" "$HEALTH_INTERVAL_SECONDS"; then
+  log "헬스체크 실패. 새 컨테이너를 제거하고 배포를 중단합니다."
+  docker logs --tail 120 "$TARGET_CONTAINER" || true
+  docker rm -f "$TARGET_CONTAINER" >/dev/null 2>&1 || true
+  exit 1
+fi
+
+TMP_UPSTREAM_FILE="$(mktemp)"
+cat > "$TMP_UPSTREAM_FILE" <<UPSTREAM
+upstream bridgework_backend {
+    server 127.0.0.1:${TARGET_PORT};
+    keepalive 64;
+}
+UPSTREAM
+
+PREV_UPSTREAM_FILE=""
+if sudo test -f "$NGINX_UPSTREAM_CONF"; then
+  PREV_UPSTREAM_FILE="$(mktemp)"
+  sudo cp "$NGINX_UPSTREAM_CONF" "$PREV_UPSTREAM_FILE"
+fi
+
+log "nginx upstream 전환: $NGINX_UPSTREAM_CONF"
+sudo cp "$TMP_UPSTREAM_FILE" "$NGINX_UPSTREAM_CONF"
+rm -f "$TMP_UPSTREAM_FILE"
+
+if ! sudo nginx -t >/dev/null 2>&1; then
+  log "nginx 설정 검증 실패. 이전 설정으로 롤백합니다."
+  if [[ -n "$PREV_UPSTREAM_FILE" ]]; then
+    sudo cp "$PREV_UPSTREAM_FILE" "$NGINX_UPSTREAM_CONF"
+  fi
+  docker rm -f "$TARGET_CONTAINER" >/dev/null 2>&1 || true
+  exit 1
+fi
+
+sudo systemctl reload nginx
+log "nginx 리로드 완료"
+
+echo "$TARGET_SLOT" > "$ACTIVE_SLOT_FILE"
+
+if docker ps -a --format '{{.Names}}' | grep -q "^${OLD_CONTAINER}$"; then
+  log "이전 슬롯 컨테이너 정리: $OLD_CONTAINER"
+  docker rm -f "$OLD_CONTAINER" >/dev/null 2>&1 || true
+fi
+
+if [[ -n "$PREV_UPSTREAM_FILE" ]]; then
+  rm -f "$PREV_UPSTREAM_FILE"
+fi
+
+log "배포 완료: active_slot=$TARGET_SLOT"

@@ -6,17 +6,17 @@ spring:
     url: ${DB_URL}
     username: ${DB_USERNAME}
     password: ${DB_PASSWORD}
-    driver-class-name: ${DB_DRIVER:org.postgresql.Driver}
+    driver-class-name: org.postgresql.Driver
   data:
     redis:
-      host: ${REDIS_HOST}
-      port: ${REDIS_PORT:6379}
-      password: ${REDIS_PASSWORD:}
-      timeout: ${REDIS_TIMEOUT:3s}
+      host: bridgework-redis
+      port: 6379
+      password: ${REDIS_PASSWORD}
+      timeout: 3s
 
 bridgework:
   sync:
-    kric-station-code-file-path: ${KRIC_STATION_CODE_XLSX_PATH}
+    kric-station-code-file-path: /app/resources/reference/operating_agency_station_codes_2026-02-28.xlsx
     data-go-kr-service-key: ${DATA_GO_KR_SERVICE_KEY}
     kric-service-key: ${KRIC_SERVICE_KEY}
     work24-vocational-training-auth-key: ${WORK24_VOCATIONAL_TRAINING_AUTH_KEY}
@@ -24,15 +24,15 @@ bridgework:
     seoul-open-api-key: ${SEOUL_OPEN_API_KEY}
   auth:
     allowed-origins:
-      - ${BRIDGEWORK_AUTH_ALLOWED_ORIGIN}
+      - http://localhost:3000
     jwt:
       secret: ${BRIDGEWORK_AUTH_JWT_SECRET}
     oauth2:
       kakao:
-        client-id: ${KAKAO_CLIENT_ID}
+        client-id: 0d5fffe82670b3aba1f9c1c2e551dbee
         client-secret: ${KAKAO_CLIENT_SECRET}
-        redirect-uri: ${KAKAO_REDIRECT_URI}
+        redirect-uri: http://localhost:3000/auth/kakao/callback
       naver:
-        client-id: ${NAVER_CLIENT_ID}
+        client-id: sk1Y_ivVnHWKz59glY0x
         client-secret: ${NAVER_CLIENT_SECRET}
-        redirect-uri: ${NAVER_REDIRECT_URI}
+        redirect-uri: http://localhost:3000/auth/naver/callback

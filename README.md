@@ -21,16 +21,21 @@
 ## 프로필/키 관리
 - 공통: `application.yml` (공개 가능한 공통 설정)
 - 로컬: `application-local.yml` (로컬 하드코딩 키)
-- 운영: `application-prod.yml` (`${}` 기반 시크릿 참조)
+- 운영: `application-prod.yml` (민감정보만 `${}` 시크릿 참조, 비민감값은 local과 동일 고정값)
 
 ### 운영 필수 환경변수
+- `DB_URL`
+- `DB_USERNAME`
+- `DB_PASSWORD`
+- `REDIS_PASSWORD`
 - `DATA_GO_KR_SERVICE_KEY`
 - `KRIC_SERVICE_KEY`
 - `SEOUL_OPEN_API_KEY`
-- `KRIC_STATION_CODE_XLSX_PATH`
 - `WORK24_VOCATIONAL_TRAINING_AUTH_KEY`
 - `WORK24_COMPETENCY_AUTH_KEY`
-- `DB_URL`, `DB_USERNAME`, `DB_PASSWORD`, `DB_DRIVER`
+- `BRIDGEWORK_AUTH_JWT_SECRET`
+- `KAKAO_CLIENT_SECRET`
+- `NAVER_CLIENT_SECRET`
 
 ### 역사 코드 파일(프로젝트 포함)
 - 기본 포함 파일: `backend/resources/reference/operating_agency_station_codes_2026-02-28.xlsx`
@@ -39,6 +44,43 @@
 ### 실행 예시
 - 로컬: `SPRING_PROFILES_ACTIVE=local`
 - 운영: `SPRING_PROFILES_ACTIVE=prod`
+
+## CI/CD (main -> EC2 무중단 배포)
+- 워크플로우: `.github/workflows/cicd-main-ec2.yml`
+- 트리거: `main` 브랜치 push
+- 방식: `Blue/Green` 컨테이너(`18080`, `18081`) 전환 + `nginx reload`
+- DB: 컨테이너 DB 미사용, `RDS PostgreSQL` 접속(`application-prod.yml` 외부 파일 마운트)
+- Redis: 배포 스크립트에서 `bridgework-redis` 컨테이너를 자동 생성/기동(동일 Docker network)
+
+### GitHub Secrets
+- `EC2_HOST`
+- `EC2_PORT`
+- `EC2_USER`
+- `EC2_SSH_PRIVATE_KEY`
+- `GHCR_READ_TOKEN` (`read:packages`)
+- `DB_URL`
+- `DB_USERNAME`
+- `DB_PASSWORD`
+- `REDIS_PASSWORD`
+- `DATA_GO_KR_SERVICE_KEY`
+- `KRIC_SERVICE_KEY`
+- `WORK24_VOCATIONAL_TRAINING_AUTH_KEY`
+- `WORK24_COMPETENCY_AUTH_KEY`
+- `SEOUL_OPEN_API_KEY`
+- `BRIDGEWORK_AUTH_JWT_SECRET`
+- `KAKAO_CLIENT_SECRET`
+- `NAVER_CLIENT_SECRET`
+
+### 생성 방식
+- GitHub Actions가 위 개별 Secrets를 읽어 `application-prod.yml`을 런타임에 생성
+- 생성 파일을 EC2 `~/bridgework/application-prod.yml`로 업로드
+- 컨테이너 실행 시 `/app/config/application-prod.yml`로 read-only 마운트
+
+### EC2 선행 작업
+1. Docker, Nginx, curl 설치
+2. 배포 계정에 Docker 실행 권한 부여 (`docker` 그룹)
+3. 배포 계정에 `sudo nginx -t`, `sudo systemctl reload nginx`, `sudo cp` 권한 부여
+4. 최초 1회: `deploy/setup_nginx.sh` 실행
 
 ## 동기화 대상 데이터
 
