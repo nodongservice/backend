@@ -50,6 +50,8 @@
 - 트리거: `main` 브랜치 push
 - 방식: `Blue/Green` 컨테이너(`18080`, `18081`) 전환 + `nginx reload`
 - DB: 컨테이너 DB 미사용, `RDS PostgreSQL` 접속(`application-prod.yml` 외부 파일 마운트)
+- Nginx 라우팅/Swagger 분기 기준: `deploy/NGINX.md`
+- FastAPI 별도 배포 시 upstream 전환 스크립트: `deploy/fastapi_blue_green_switch.sh`
 - Redis: 배포 스크립트에서 `bridgework-redis` 컨테이너를 자동 생성/기동(동일 Docker network)
 
 ### GitHub Secrets
