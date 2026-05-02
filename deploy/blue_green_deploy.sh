@@ -37,7 +37,7 @@ CONFIG_FILE="${CONFIG_FILE:-$APP_ROOT/application-prod.yml}"
 STATE_DIR="${STATE_DIR:-$APP_ROOT/state}"
 ACTIVE_SLOT_FILE="${ACTIVE_SLOT_FILE:-$STATE_DIR/active_slot}"
 DOCKER_NETWORK="${DOCKER_NETWORK:-bridgework-network}"
-NGINX_UPSTREAM_CONF="${NGINX_UPSTREAM_CONF:-/etc/nginx/conf.d/bridgework-upstream.inc}"
+NGINX_UPSTREAM_CONF="${NGINX_UPSTREAM_CONF:-}"
 REDIS_CONTAINER_NAME="${REDIS_CONTAINER_NAME:-bridgework-redis}"
 REDIS_IMAGE="${REDIS_IMAGE:-redis:7.2-alpine}"
 REDIS_VOLUME="${REDIS_VOLUME:-bridgework-redis-data}"
@@ -64,6 +64,27 @@ fi
 require_command docker
 require_command curl
 require_command nginx
+
+resolve_upstream_conf_path() {
+  if [[ -n "$NGINX_UPSTREAM_CONF" ]]; then
+    echo "$NGINX_UPSTREAM_CONF"
+    return
+  fi
+
+  if [[ -f "/etc/nginx/conf.d/bridgework-upstream.inc" || -d "/etc/nginx/conf.d" ]]; then
+    echo "/etc/nginx/conf.d/bridgework-upstream.inc"
+    return
+  fi
+
+  if [[ -f "/etc/nginx/sites-enabled/bridgework-upstream.inc" || -d "/etc/nginx/sites-enabled" ]]; then
+    echo "/etc/nginx/sites-enabled/bridgework-upstream.inc"
+    return
+  fi
+
+  echo "/etc/nginx/conf.d/bridgework-upstream.inc"
+}
+
+NGINX_UPSTREAM_CONF="$(resolve_upstream_conf_path)"
 
 if [[ ! -f "$CONFIG_FILE" ]]; then
   log "외부 설정 파일이 없습니다: $CONFIG_FILE"
