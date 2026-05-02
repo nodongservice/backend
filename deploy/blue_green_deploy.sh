@@ -31,6 +31,11 @@ resolve_file_owner_uid_gid() {
   echo "${uid}:${gid}"
 }
 
+is_container_running() {
+  local container_name="$1"
+  docker ps --format '{{.Names}}' | grep -q "^${container_name}$"
+}
+
 APP_NAME="${APP_NAME:-bridgework-backend}"
 APP_ROOT="${APP_ROOT:-$HOME/bridgework}"
 CONFIG_FILE="${CONFIG_FILE:-$APP_ROOT/application-prod.yml}"
@@ -50,6 +55,8 @@ CONTAINER_PORT="${CONTAINER_PORT:-8080}"
 HEALTH_ENDPOINT="${HEALTH_ENDPOINT:-/actuator/health}"
 HEALTH_TIMEOUT_SECONDS="${HEALTH_TIMEOUT_SECONDS:-120}"
 HEALTH_INTERVAL_SECONDS="${HEALTH_INTERVAL_SECONDS:-2}"
+HEALTH_CONNECT_TIMEOUT_SECONDS="${HEALTH_CONNECT_TIMEOUT_SECONDS:-2}"
+HEALTH_REQUEST_TIMEOUT_SECONDS="${HEALTH_REQUEST_TIMEOUT_SECONDS:-3}"
 
 IMAGE_URI="${IMAGE_URI:-}"
 if [[ -z "$IMAGE_URI" ]]; then
@@ -157,17 +164,34 @@ GREEN_CONTAINER="${APP_NAME}-green"
 
 resolve_current_slot() {
   if [[ -f "$ACTIVE_SLOT_FILE" ]]; then
-    cat "$ACTIVE_SLOT_FILE"
-    return
+    local slot
+    slot="$(tr -d '[:space:]' < "$ACTIVE_SLOT_FILE")"
+    if [[ "$slot" == "blue" || "$slot" == "green" ]]; then
+      echo "$slot"
+      return
+    fi
+  fi
+
+  # 상태 파일이 없어도 nginx upstream이 가리키는 포트로 활성 슬롯을 복원한다.
+  if [[ -f "$NGINX_UPSTREAM_CONF" ]]; then
+    if grep -Eq "server[[:space:]]+127\\.0\\.0\\.1:${BLUE_PORT};" "$NGINX_UPSTREAM_CONF"; then
+      echo "blue"
+      return
+    fi
+
+    if grep -Eq "server[[:space:]]+127\\.0\\.0\\.1:${GREEN_PORT};" "$NGINX_UPSTREAM_CONF"; then
+      echo "green"
+      return
+    fi
   fi
 
   # 상태 파일이 없으면 현재 실행 중인 컨테이너를 기준으로 슬롯을 판별한다.
-  if docker ps --format '{{.Names}}' | grep -q "^${BLUE_CONTAINER}$"; then
+  if is_container_running "$BLUE_CONTAINER"; then
     echo "blue"
     return
   fi
 
-  if docker ps --format '{{.Names}}' | grep -q "^${GREEN_CONTAINER}$"; then
+  if is_container_running "$GREEN_CONTAINER"; then
     echo "green"
     return
   fi
@@ -188,6 +212,17 @@ else
   OLD_CONTAINER="$GREEN_CONTAINER"
 fi
 
+# 비정상 종료 등으로 두 슬롯이 동시에 떠있으면 현재 활성 슬롯 기준으로 비활성 슬롯을 정리한다.
+if is_container_running "$BLUE_CONTAINER" && is_container_running "$GREEN_CONTAINER"; then
+  if [[ "$CURRENT_SLOT" == "blue" ]]; then
+    log "이중 실행 감지. 비활성 슬롯 정리: $GREEN_CONTAINER"
+    docker rm -f "$GREEN_CONTAINER" >/dev/null 2>&1 || true
+  else
+    log "이중 실행 감지. 비활성 슬롯 정리: $BLUE_CONTAINER"
+    docker rm -f "$BLUE_CONTAINER" >/dev/null 2>&1 || true
+  fi
+fi
+
 log "현재 슬롯: $CURRENT_SLOT"
 log "대상 슬롯: $TARGET_SLOT (container=$TARGET_CONTAINER, hostPort=$TARGET_PORT)"
 log "이미지 pull: $IMAGE_URI"
@@ -199,7 +234,7 @@ docker rm -f "$TARGET_CONTAINER" >/dev/null 2>&1 || true
 log "새 컨테이너 실행: $TARGET_CONTAINER"
 docker run -d \
   --name "$TARGET_CONTAINER" \
-  --restart unless-stopped \
+  --restart no \
   --network "$DOCKER_NETWORK" \
   --user "$APP_CONTAINER_USER" \
   -v "${CONFIG_FILE}:/app/config/application-prod.yml:ro" \
@@ -214,10 +249,20 @@ wait_for_health() {
   local url="$1"
   local timeout="$2"
   local interval="$3"
+  local container_name="$4"
   local waited=0
 
   while (( waited < timeout )); do
-    if curl -fsS "$url" >/dev/null 2>&1; then
+    # 대상 컨테이너가 먼저 죽었는지 확인해 불필요한 대기를 막는다.
+    if ! docker ps --format '{{.Names}}' | grep -q "^${container_name}$"; then
+      return 2
+    fi
+
+    # curl 기본 타임아웃은 무한대라서 각 요청에 상한을 둔다.
+    if curl \
+      --connect-timeout "$HEALTH_CONNECT_TIMEOUT_SECONDS" \
+      --max-time "$HEALTH_REQUEST_TIMEOUT_SECONDS" \
+      -fsS "$url" >/dev/null 2>&1; then
       return 0
     fi
     sleep "$interval"
@@ -229,8 +274,9 @@ wait_for_health() {
 
 HEALTH_URL="http://127.0.0.1:${TARGET_PORT}${HEALTH_ENDPOINT}"
 log "헬스체크 대기: $HEALTH_URL"
-if ! wait_for_health "$HEALTH_URL" "$HEALTH_TIMEOUT_SECONDS" "$HEALTH_INTERVAL_SECONDS"; then
+if ! wait_for_health "$HEALTH_URL" "$HEALTH_TIMEOUT_SECONDS" "$HEALTH_INTERVAL_SECONDS" "$TARGET_CONTAINER"; then
   log "헬스체크 실패. 새 컨테이너를 제거하고 배포를 중단합니다."
+  docker ps -a --filter "name=${TARGET_CONTAINER}" --format 'table {{.Names}}\t{{.Status}}' || true
   docker logs --tail 120 "$TARGET_CONTAINER" || true
   docker rm -f "$TARGET_CONTAINER" >/dev/null 2>&1 || true
   exit 1
@@ -267,6 +313,9 @@ sudo systemctl reload nginx
 log "nginx 리로드 완료"
 
 echo "$TARGET_SLOT" > "$ACTIVE_SLOT_FILE"
+
+# 트래픽 전환 이후에만 자동 재시작을 활성화한다.
+docker update --restart unless-stopped "$TARGET_CONTAINER" >/dev/null
 
 if docker ps -a --format '{{.Names}}' | grep -q "^${OLD_CONTAINER}$"; then
   log "이전 슬롯 컨테이너 정리: $OLD_CONTAINER"
