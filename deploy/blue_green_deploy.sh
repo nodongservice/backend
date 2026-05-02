@@ -59,6 +59,7 @@ HEALTH_CONNECT_TIMEOUT_SECONDS="${HEALTH_CONNECT_TIMEOUT_SECONDS:-2}"
 HEALTH_REQUEST_TIMEOUT_SECONDS="${HEALTH_REQUEST_TIMEOUT_SECONDS:-3}"
 
 IMAGE_URI="${IMAGE_URI:-}"
+IMAGE_RETENTION_COUNT="${IMAGE_RETENTION_COUNT:-5}"
 if [[ -z "$IMAGE_URI" ]]; then
   log "IMAGE_URI 환경변수는 필수입니다."
   exit 1
@@ -151,6 +152,47 @@ wait_for_redis() {
   done
 
   return 1
+}
+
+cleanup_old_app_images() {
+  local image_ref="$1"
+  local keep_count="$2"
+  local repository running_image_ids candidate_ids deleted=0
+  repository="${image_ref%%:*}"
+
+  if [[ -z "$repository" || "$repository" == "$image_ref" ]]; then
+    log "이미지 정리를 건너뜁니다. 저장소 파싱 실패: $image_ref"
+    return 0
+  fi
+
+  if ! [[ "$keep_count" =~ ^[0-9]+$ ]] || (( keep_count < 1 )); then
+    keep_count=5
+  fi
+
+  # 실행 중 컨테이너가 참조한 이미지는 삭제 대상에서 제외한다.
+  running_image_ids="$(docker ps --format '{{.Image}}' | xargs -r docker image inspect --format '{{.Id}}' 2>/dev/null | sort -u || true)"
+  candidate_ids="$(
+    docker image ls "$repository" --format '{{.ID}}' | awk '!seen[$0]++' | tail -n +"$((keep_count + 1))"
+  )"
+
+  if [[ -z "$candidate_ids" ]]; then
+    log "이미지 정리 대상이 없습니다. repository=$repository keep=$keep_count"
+    return 0
+  fi
+
+  while IFS= read -r image_id; do
+    [[ -z "$image_id" ]] && continue
+    if grep -q "$image_id" <<<"$running_image_ids"; then
+      continue
+    fi
+    if docker image rm "$image_id" >/dev/null 2>&1; then
+      deleted=$((deleted + 1))
+    fi
+  done <<<"$candidate_ids"
+
+  # dangling 레이어는 별도로 정리해 overlay 공간을 회수한다.
+  docker image prune -f >/dev/null 2>&1 || true
+  log "이미지 정리 완료: repository=$repository deleted=$deleted keep=$keep_count"
 }
 
 if ! wait_for_redis 30; then
@@ -327,3 +369,4 @@ if [[ -n "$PREV_UPSTREAM_FILE" ]]; then
 fi
 
 log "배포 완료: active_slot=$TARGET_SLOT"
+cleanup_old_app_images "$IMAGE_URI" "$IMAGE_RETENTION_COUNT"
