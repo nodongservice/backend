@@ -42,38 +42,38 @@ bridgework:
   sync:
     cron: "0 0/30 * * * *"
     request-timeout: 20s
-    kric-station-code-file-path: ""
+    kric-station-code-file-path: resources/reference/operating_agency_station_codes_2026-02-28.xlsx
     sources:
       - source-type: KEPAD_RECRUITMENT
-        enabled: false
+        enabled: true
         base-url: http://apis.data.go.kr/B552583/job/job_list_env
         service-key: ${bridgework.sync.data-go-kr-service-key}
         page-size: 1000
         max-pages: 1000
         item-id-field: joReqstNo
       - source-type: KEPAD_JOB_CATEGORY
-        enabled: false
+        enabled: true
         base-url: http://apis.data.go.kr/B552583/jobcode/job_code
         service-key: ${bridgework.sync.data-go-kr-service-key}
         page-size: 1000
         max-pages: 1000
         item-id-field: clCode
       - source-type: KEPAD_STANDARD_WORKPLACE
-        enabled: false
+        enabled: true
         base-url: http://apis.data.go.kr/B552583/comp/comp_auth
         service-key: ${bridgework.sync.data-go-kr-service-key}
         page-size: 1000
         max-pages: 1000
         item-id-field: bsnmNo
       - source-type: KEPAD_SUPPORT_AGENCY
-        enabled: false
+        enabled: true
         base-url: http://apis.data.go.kr/B552583/instn/instn_list
         service-key: ${bridgework.sync.data-go-kr-service-key}
         page-size: 1000
         max-pages: 1000
         item-id-field: insttCode
       - source-type: KORAIL_WEEK_PERSON_FACILITIES
-        enabled: false
+        enabled: true
         base-url: https://apis.data.go.kr/B551457/convenience/weekPersonFacilities
         service-key: ${bridgework.sync.data-go-kr-service-key}
         page-size: 1000
@@ -82,7 +82,7 @@ bridgework:
         query-params:
           returnType: JSON
       - source-type: SEOUL_TRANSPORT_WEAK_WHEELCHAIR_LIFT
-        enabled: false
+        enabled: true
         base-url: https://apis.data.go.kr/B553766/wksn/getWksnWhcllift
         service-key: ${bridgework.sync.data-go-kr-service-key}
         page-size: 1000
@@ -91,7 +91,7 @@ bridgework:
         query-params:
           dataType: JSON
       - source-type: TRANSPORT_SUPPORT_CENTER
-        enabled: false
+        enabled: true
         base-url: https://api.data.go.kr/openapi/tn_pubr_public_tfcwker_mvmn_cnter_api
         service-key: ${bridgework.sync.data-go-kr-service-key}
         page-size: 1000
@@ -100,7 +100,7 @@ bridgework:
         query-params:
           type: json
       - source-type: RAIL_WHEELCHAIR_LIFT
-        enabled: false
+        enabled: true
         base-url: https://openapi.kric.go.kr/openapi/vulnerableUserInfo/stationWheelchairLiftLocation
         service-key: ${bridgework.sync.kric-service-key}
         page-size: 1
@@ -111,7 +111,7 @@ bridgework:
           operation: stationWheelchairLiftLocation
           format: json
       - source-type: RAIL_WHEELCHAIR_LIFT_MOVEMENT
-        enabled: false
+        enabled: true
         base-url: https://openapi.kric.go.kr/openapi/vulnerableUserInfo/stationWheelchairLiftMovement
         service-key: ${bridgework.sync.kric-service-key}
         page-size: 1
@@ -122,14 +122,14 @@ bridgework:
           operation: stationWheelchairLiftMovement
           format: json
       - source-type: SEOUL_WHEELCHAIR_LIFT
-        enabled: false
+        enabled: true
         base-url: https://www.data.go.kr/data/15044262/fileData.do
         service-key: ${bridgework.sync.data-go-kr-service-key}
         page-size: 10000
         max-pages: 1000
         item-id-field: 승강기 일련번호
       - source-type: SEOUL_SUBWAY_ENTRANCE_LIFT
-        enabled: false
+        enabled: true
         base-url: http://openapi.seoul.go.kr:8088
         service-key: ${bridgework.sync.seoul-open-api-key}
         page-size: 1000
@@ -137,7 +137,7 @@ bridgework:
         query-params:
           serviceName: tbTraficEntrcLft
       - source-type: SEOUL_WALKING_NETWORK
-        enabled: false
+        enabled: true
         base-url: http://openapi.seoul.go.kr:8088
         service-key: ${bridgework.sync.seoul-open-api-key}
         page-size: 1000
@@ -145,23 +145,23 @@ bridgework:
         query-params:
           serviceName: TbTraficWlkNet
       - source-type: NATIONWIDE_BUS_STOP
-        enabled: false
+        enabled: true
         base-url: https://www.data.go.kr/data/15067528/fileData.do
         service-key: ${bridgework.sync.data-go-kr-service-key}
         page-size: 10000
         max-pages: 1000
       - source-type: SEOUL_WHEELCHAIR_RAMP_STATUS
-        enabled: false
+        enabled: true
         base-url: https://data.seoul.go.kr/dataList/OA-13116/S/1/datasetView.do
         page-size: 1000
         max-pages: 1
       - source-type: SEOUL_LOW_FLOOR_BUS_ROUTE_RETENTION
-        enabled: false
+        enabled: true
         base-url: https://data.seoul.go.kr/dataList/OA-22229/F/1/datasetView.do
         page-size: 1000
         max-pages: 1
       - source-type: NATIONWIDE_TRAFFIC_LIGHT
-        enabled: false
+        enabled: true
         base-url: https://api.data.go.kr/openapi/tn_pubr_public_traffic_light_api
         service-key: ${bridgework.sync.data-go-kr-service-key}
         page-size: 1000
@@ -170,7 +170,7 @@ bridgework:
         query-params:
           type: xml
       - source-type: NATIONWIDE_CROSSWALK
-        enabled: false
+        enabled: true
         base-url: https://api.data.go.kr/openapi/tn_pubr_public_crosswalk_api
         service-key: ${bridgework.sync.data-go-kr-service-key}
         page-size: 1000
@@ -179,7 +179,7 @@ bridgework:
         query-params:
           type: json
       - source-type: VOCATIONAL_TRAINING
-        enabled: false
+        enabled: true
         base-url: https://www.work24.go.kr/cm/openApi/call/hr/callOpenApiSvcInfo310L01.do
         service-key: ${bridgework.sync.work24-vocational-training-auth-key}
         page-size: 100
@@ -188,7 +188,7 @@ bridgework:
         items-json-pointer: /HRDNet/srchList/scn_list
         total-count-json-pointer: /HRDNet/scn_cnt
       - source-type: JOBSEEKER_COMPETENCY_PROGRAM
-        enabled: false
+        enabled: true
         base-url: https://www.work24.go.kr/cm/openApi/call/wk/callOpenApiSvcInfo217L01.do
         service-key: ${bridgework.sync.work24-competency-auth-key}
         page-size: 100
