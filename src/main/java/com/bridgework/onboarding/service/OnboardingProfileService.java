@@ -4,14 +4,15 @@ import com.bridgework.auth.entity.AppUser;
 import com.bridgework.auth.repository.AppUserRepository;
 import com.bridgework.onboarding.dto.OnboardingProfileResponseDto;
 import com.bridgework.onboarding.dto.OnboardingProfileUpsertRequestDto;
-import com.bridgework.onboarding.entity.OnboardingProfile;
+import com.bridgework.onboarding.entity.UserProfile;
 import com.bridgework.onboarding.exception.OnboardingDomainException;
 import com.bridgework.onboarding.exception.OnboardingProfileNotFoundException;
-import com.bridgework.onboarding.repository.OnboardingProfileRepository;
+import com.bridgework.onboarding.repository.UserProfileRepository;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.transaction.Transactional;
+import java.time.LocalDate;
 import java.util.List;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -22,29 +23,126 @@ public class OnboardingProfileService {
 
     private static final TypeReference<List<String>> STRING_LIST_TYPE_REFERENCE = new TypeReference<>() {
     };
+    private static final int MAX_PROFILE_COUNT = 3;
 
-    private final OnboardingProfileRepository onboardingProfileRepository;
+    private final UserProfileRepository userProfileRepository;
     private final AppUserRepository appUserRepository;
     private final OnboardingAiTagService onboardingAiTagService;
     private final ObjectMapper objectMapper;
 
-    public OnboardingProfileService(OnboardingProfileRepository onboardingProfileRepository,
+    public OnboardingProfileService(UserProfileRepository userProfileRepository,
                                     AppUserRepository appUserRepository,
                                     OnboardingAiTagService onboardingAiTagService,
                                     ObjectMapper objectMapper) {
-        this.onboardingProfileRepository = onboardingProfileRepository;
+        this.userProfileRepository = userProfileRepository;
         this.appUserRepository = appUserRepository;
         this.onboardingAiTagService = onboardingAiTagService;
         this.objectMapper = objectMapper;
     }
 
     @Transactional
-    public OnboardingProfileResponseDto upsert(Long userId, OnboardingProfileUpsertRequestDto request) {
+    public OnboardingProfileResponseDto create(Long userId, OnboardingProfileUpsertRequestDto request) {
         validateBirthDateOrAgeGroup(request);
+        AppUser user = loadUser(userId);
 
-        AppUser user = appUserRepository.findById(userId)
+        long profileCount = userProfileRepository.countByUser_Id(userId);
+        if (profileCount >= MAX_PROFILE_COUNT) {
+            throw new OnboardingDomainException(
+                    "PROFILE_LIMIT_EXCEEDED",
+                    HttpStatus.BAD_REQUEST,
+                    "프로필은 최대 3개까지 생성할 수 있습니다."
+            );
+        }
+
+        UserProfile profile = new UserProfile();
+        profile.setUser(user);
+        profile.setDefault(profileCount == 0);
+        applyRequestToProfile(profile, request);
+
+        UserProfile savedProfile = userProfileRepository.save(profile);
+        return toResponse(savedProfile);
+    }
+
+    @Transactional
+    public OnboardingProfileResponseDto update(Long userId, Long profileId, OnboardingProfileUpsertRequestDto request) {
+        validateBirthDateOrAgeGroup(request);
+        UserProfile profile = userProfileRepository.findByIdAndUser_Id(profileId, userId)
+                .orElseThrow(() -> new OnboardingProfileNotFoundException(profileId));
+
+        applyRequestToProfile(profile, request);
+        UserProfile savedProfile = userProfileRepository.save(profile);
+        return toResponse(savedProfile);
+    }
+
+    @Transactional
+    public void delete(Long userId, Long profileId) {
+        UserProfile profile = userProfileRepository.findByIdAndUser_Id(profileId, userId)
+                .orElseThrow(() -> new OnboardingProfileNotFoundException(profileId));
+
+        long profileCount = userProfileRepository.countByUser_Id(userId);
+        if (profileCount <= 1) {
+            throw new OnboardingDomainException(
+                    "LAST_PROFILE_DELETE_NOT_ALLOWED",
+                    HttpStatus.BAD_REQUEST,
+                    "기본 프로필 1개는 필수입니다."
+            );
+        }
+
+        if (profile.isDefault()) {
+            throw new OnboardingDomainException(
+                    "DEFAULT_PROFILE_DELETE_NOT_ALLOWED",
+                    HttpStatus.BAD_REQUEST,
+                    "기본 프로필은 삭제할 수 없습니다. 다른 프로필을 기본으로 변경한 뒤 삭제하세요."
+            );
+        }
+
+        userProfileRepository.delete(profile);
+    }
+
+    @Transactional
+    public OnboardingProfileResponseDto setDefault(Long userId, Long profileId) {
+        List<UserProfile> profiles = userProfileRepository.findByUser_IdOrderByIsDefaultDescUpdatedAtDesc(userId);
+        if (profiles.isEmpty()) {
+            throw new OnboardingProfileNotFoundException(profileId);
+        }
+
+        UserProfile targetProfile = profiles.stream()
+                .filter(profile -> profile.getId().equals(profileId))
+                .findFirst()
+                .orElseThrow(() -> new OnboardingProfileNotFoundException(profileId));
+
+        if (targetProfile.isDefault()) {
+            return toResponse(targetProfile);
+        }
+
+        // 기본 프로필은 사용자당 1개만 유지한다.
+        for (UserProfile profile : profiles) {
+            profile.setDefault(profile.getId().equals(profileId));
+        }
+
+        userProfileRepository.saveAll(profiles);
+        return toResponse(targetProfile);
+    }
+
+    public List<OnboardingProfileResponseDto> getProfiles(Long userId) {
+        return userProfileRepository.findByUser_IdOrderByIsDefaultDescUpdatedAtDesc(userId)
+                .stream()
+                .map(this::toResponse)
+                .toList();
+    }
+
+    public OnboardingProfileResponseDto getProfile(Long userId, Long profileId) {
+        UserProfile profile = userProfileRepository.findByIdAndUser_Id(profileId, userId)
+                .orElseThrow(() -> new OnboardingProfileNotFoundException(profileId));
+        return toResponse(profile);
+    }
+
+    private AppUser loadUser(Long userId) {
+        return appUserRepository.findById(userId)
                 .orElseThrow(() -> new OnboardingDomainException("USER_NOT_FOUND", HttpStatus.NOT_FOUND, "사용자를 찾을 수 없습니다."));
+    }
 
+    private void applyRequestToProfile(UserProfile profile, OnboardingProfileUpsertRequestDto request) {
         OnboardingAiTags onboardingAiTags = onboardingAiTagService.buildTags(request);
 
         String preferredWorkEnvironmentsJson = toJson(request.preferredWorkEnvironments());
@@ -58,11 +156,7 @@ public class OnboardingProfileService {
         String aiEnvironmentTagsJson = toJson(onboardingAiTags.environmentTags());
         String aiSupportTagsJson = toJson(onboardingAiTags.supportTags());
 
-        OnboardingProfile onboardingProfile = onboardingProfileRepository.findByUser_Id(userId)
-                .orElseGet(OnboardingProfile::new);
-
-        onboardingProfile.setUser(user);
-        onboardingProfile.updateFromRequest(
+        profile.updateFromRequest(
                 request,
                 preferredWorkEnvironmentsJson,
                 avoidedWorkEnvironmentsJson,
@@ -74,31 +168,23 @@ public class OnboardingProfileService {
                 aiEnvironmentTagsJson,
                 aiSupportTagsJson
         );
-
-        OnboardingProfile savedProfile = onboardingProfileRepository.save(onboardingProfile);
-        return toResponse(savedProfile);
-    }
-
-    public OnboardingProfileResponseDto getByUserId(Long userId) {
-        OnboardingProfile onboardingProfile = onboardingProfileRepository.findByUser_Id(userId)
-                .orElseThrow(OnboardingProfileNotFoundException::new);
-
-        return toResponse(onboardingProfile);
     }
 
     private void validateBirthDateOrAgeGroup(OnboardingProfileUpsertRequestDto request) {
-        if (request.birthDate() == null && !StringUtils.hasText(request.ageGroup())) {
+        if (request.birthDate() == null) {
             throw new OnboardingDomainException(
-                    "BIRTH_DATE_OR_AGE_GROUP_REQUIRED",
+                    "BIRTH_DATE_REQUIRED",
                     HttpStatus.BAD_REQUEST,
-                    "생년월일 또는 연령대 중 하나는 필수입니다."
+                    "생년월일은 필수입니다."
             );
         }
     }
 
-    private OnboardingProfileResponseDto toResponse(OnboardingProfile profile) {
+    private OnboardingProfileResponseDto toResponse(UserProfile profile) {
         return new OnboardingProfileResponseDto(
+                profile.getId(),
                 profile.getUser().getId(),
+                profile.isDefault(),
                 profile.getDesiredJob(),
                 profile.getCommuteRange(),
                 toStringList(profile.getPreferredWorkEnvironmentsJson()),

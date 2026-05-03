@@ -18,8 +18,7 @@ import java.time.OffsetDateTime;
         name = "app_user",
         uniqueConstraints = {
                 @UniqueConstraint(name = "uk_app_user_provider", columnNames = {"provider", "provider_user_id"}),
-                @UniqueConstraint(name = "uk_app_user_email", columnNames = "email"),
-                @UniqueConstraint(name = "uk_app_user_phone_number", columnNames = "phone_number")
+                @UniqueConstraint(name = "uk_app_user_email", columnNames = "email")
         }
 )
 public class AppUser {
@@ -37,22 +36,6 @@ public class AppUser {
 
     @Column(name = "email", length = 255)
     private String email;
-
-    @Column(name = "name", nullable = false, length = 100)
-    private String name;
-
-    @Column(name = "age", nullable = false)
-    private Integer age;
-
-    @Enumerated(EnumType.STRING)
-    @Column(name = "gender", nullable = false, length = 20)
-    private GenderType gender;
-
-    @Column(name = "location", nullable = false, length = 200)
-    private String location;
-
-    @Column(name = "phone_number", nullable = false, length = 32)
-    private String phoneNumber;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "role", nullable = false, length = 20)
@@ -105,46 +88,6 @@ public class AppUser {
 
     public void setEmail(String email) {
         this.email = email;
-    }
-
-    public String getName() {
-        return name;
-    }
-
-    public void setName(String name) {
-        this.name = name;
-    }
-
-    public Integer getAge() {
-        return age;
-    }
-
-    public void setAge(Integer age) {
-        this.age = age;
-    }
-
-    public GenderType getGender() {
-        return gender;
-    }
-
-    public void setGender(GenderType gender) {
-        this.gender = gender;
-    }
-
-    public String getLocation() {
-        return location;
-    }
-
-    public void setLocation(String location) {
-        this.location = location;
-    }
-
-    public String getPhoneNumber() {
-        return phoneNumber;
-    }
-
-    public void setPhoneNumber(String phoneNumber) {
-        this.phoneNumber = phoneNumber;
     }
 
     public UserRole getRole() {

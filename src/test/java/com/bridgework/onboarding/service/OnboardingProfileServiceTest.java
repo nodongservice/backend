@@ -2,6 +2,7 @@ package com.bridgework.onboarding.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -10,9 +11,9 @@ import com.bridgework.auth.repository.AppUserRepository;
 import com.bridgework.common.exception.BridgeWorkDomainException;
 import com.bridgework.onboarding.dto.OnboardingProfileResponseDto;
 import com.bridgework.onboarding.dto.OnboardingProfileUpsertRequestDto;
-import com.bridgework.onboarding.entity.OnboardingProfile;
+import com.bridgework.onboarding.entity.UserProfile;
 import com.bridgework.onboarding.exception.OnboardingProfileNotFoundException;
-import com.bridgework.onboarding.repository.OnboardingProfileRepository;
+import com.bridgework.onboarding.repository.UserProfileRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.LocalDate;
 import java.util.List;
@@ -28,7 +29,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 class OnboardingProfileServiceTest {
 
     @Mock
-    private OnboardingProfileRepository onboardingProfileRepository;
+    private UserProfileRepository userProfileRepository;
     @Mock
     private AppUserRepository appUserRepository;
     @Mock
@@ -39,7 +40,7 @@ class OnboardingProfileServiceTest {
     @BeforeEach
     void setUp() {
         onboardingProfileService = new OnboardingProfileService(
-                onboardingProfileRepository,
+                userProfileRepository,
                 appUserRepository,
                 onboardingAiTagService,
                 new ObjectMapper()
@@ -47,19 +48,31 @@ class OnboardingProfileServiceTest {
     }
 
     @Test
-    void upsert_whenBirthDateAndAgeGroupAreMissing_thenThrows() {
+    void create_whenBirthDateAndAgeGroupAreMissing_thenThrows() {
         OnboardingProfileUpsertRequestDto request = baseRequest(null, null);
 
-        assertThatThrownBy(() -> onboardingProfileService.upsert(1L, request))
+        assertThatThrownBy(() -> onboardingProfileService.create(1L, request))
                 .isInstanceOf(BridgeWorkDomainException.class)
-                .hasMessage("생년월일 또는 연령대 중 하나는 필수입니다.");
+                .hasMessage("생년월일은 필수입니다.");
     }
 
     @Test
-    void upsert_whenValid_thenReturnsMappedProfile() {
+    void create_whenProfileCountReachedLimit_thenThrows() {
         OnboardingProfileUpsertRequestDto request = baseRequest(LocalDate.of(1995, 5, 10), null);
-        AppUser user = new AppUser();
-        ReflectionTestUtils.setField(user, "id", 1L);
+        AppUser user = user(1L);
+
+        when(appUserRepository.findById(1L)).thenReturn(Optional.of(user));
+        when(userProfileRepository.countByUser_Id(1L)).thenReturn(3L);
+
+        assertThatThrownBy(() -> onboardingProfileService.create(1L, request))
+                .isInstanceOf(BridgeWorkDomainException.class)
+                .hasMessage("프로필은 최대 3개까지 생성할 수 있습니다.");
+    }
+
+    @Test
+    void create_firstProfile_shouldBeDefault() {
+        OnboardingProfileUpsertRequestDto request = baseRequest(LocalDate.of(1995, 5, 10), null);
+        AppUser user = user(1L);
         OnboardingAiTags tags = new OnboardingAiTags(
                 List.of("사무보조", "엑셀"),
                 List.of("주간", "실내"),
@@ -67,28 +80,84 @@ class OnboardingProfileServiceTest {
         );
 
         when(appUserRepository.findById(1L)).thenReturn(Optional.of(user));
+        when(userProfileRepository.countByUser_Id(1L)).thenReturn(0L);
         when(onboardingAiTagService.buildTags(request)).thenReturn(tags);
-        when(onboardingProfileRepository.findByUser_Id(1L)).thenReturn(Optional.empty());
-        when(onboardingProfileRepository.save(org.mockito.ArgumentMatchers.any(OnboardingProfile.class)))
-                .thenAnswer(invocation -> invocation.getArgument(0, OnboardingProfile.class));
+        when(userProfileRepository.save(any(UserProfile.class))).thenAnswer(invocation -> {
+            UserProfile profile = invocation.getArgument(0, UserProfile.class);
+            ReflectionTestUtils.setField(profile, "id", 10L);
+            return profile;
+        });
 
-        OnboardingProfileResponseDto response = onboardingProfileService.upsert(1L, request);
+        OnboardingProfileResponseDto response = onboardingProfileService.create(1L, request);
 
+        assertThat(response.profileId()).isEqualTo(10L);
         assertThat(response.userId()).isEqualTo(1L);
-        assertThat(response.desiredJob()).isEqualTo("사무보조");
-        assertThat(response.skills()).containsExactly("엑셀", "문서작성");
-        assertThat(response.aiJobTags()).containsExactly("사무보조", "엑셀");
-        assertThat(response.aiEnvironmentTags()).containsExactly("주간", "실내");
-        assertThat(response.aiSupportTags()).containsExactly("휠체어 접근");
-        verify(onboardingProfileRepository).save(org.mockito.ArgumentMatchers.any(OnboardingProfile.class));
+        assertThat(response.isDefault()).isTrue();
+        verify(userProfileRepository).save(any(UserProfile.class));
     }
 
     @Test
-    void getByUserId_whenProfileMissing_thenThrows() {
-        when(onboardingProfileRepository.findByUser_Id(1L)).thenReturn(Optional.empty());
+    void setDefault_shouldSwitchDefaultProfile() {
+        AppUser user = user(1L);
+        UserProfile defaultProfile = profile(11L, user, true);
+        UserProfile secondProfile = profile(12L, user, false);
 
-        assertThatThrownBy(() -> onboardingProfileService.getByUserId(1L))
+        when(userProfileRepository.findByUser_IdOrderByIsDefaultDescUpdatedAtDesc(1L))
+                .thenReturn(List.of(defaultProfile, secondProfile));
+
+        OnboardingProfileResponseDto response = onboardingProfileService.setDefault(1L, 12L);
+
+        assertThat(response.profileId()).isEqualTo(12L);
+        assertThat(defaultProfile.isDefault()).isFalse();
+        assertThat(secondProfile.isDefault()).isTrue();
+        verify(userProfileRepository).saveAll(any());
+    }
+
+    @Test
+    void delete_whenDefaultProfile_thenThrows() {
+        AppUser user = user(1L);
+        UserProfile defaultProfile = profile(11L, user, true);
+
+        when(userProfileRepository.findByIdAndUser_Id(11L, 1L)).thenReturn(Optional.of(defaultProfile));
+        when(userProfileRepository.countByUser_Id(1L)).thenReturn(2L);
+
+        assertThatThrownBy(() -> onboardingProfileService.delete(1L, 11L))
+                .isInstanceOf(BridgeWorkDomainException.class)
+                .hasMessageContaining("기본 프로필은 삭제할 수 없습니다");
+    }
+
+    @Test
+    void getProfile_whenMissing_thenThrows() {
+        when(userProfileRepository.findByIdAndUser_Id(99L, 1L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> onboardingProfileService.getProfile(1L, 99L))
                 .isInstanceOf(OnboardingProfileNotFoundException.class);
+    }
+
+    private AppUser user(Long id) {
+        AppUser user = new AppUser();
+        ReflectionTestUtils.setField(user, "id", id);
+        return user;
+    }
+
+    private UserProfile profile(Long profileId, AppUser user, boolean isDefault) {
+        UserProfile profile = new UserProfile();
+        ReflectionTestUtils.setField(profile, "id", profileId);
+        profile.setUser(user);
+        profile.setDefault(isDefault);
+        profile.updateFromRequest(
+                baseRequest(LocalDate.of(1995, 5, 10), null),
+                "[]",
+                "[]",
+                "[]",
+                "[]",
+                "[]",
+                "[]",
+                "[]",
+                "[]",
+                "[]"
+        );
+        return profile;
     }
 
     private OnboardingProfileUpsertRequestDto baseRequest(LocalDate birthDate, String ageGroup) {

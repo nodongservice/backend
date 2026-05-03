@@ -9,13 +9,13 @@ import com.bridgework.auth.dto.TokenPairResponseDto;
 import com.bridgework.auth.entity.AppUser;
 import com.bridgework.auth.entity.UserRole;
 import com.bridgework.auth.exception.DuplicateEmailException;
-import com.bridgework.auth.exception.DuplicatePhoneNumberException;
-import com.bridgework.auth.exception.InvalidAuthRequestException;
 import com.bridgework.auth.exception.InvalidRefreshTokenException;
 import com.bridgework.auth.exception.UserNotFoundException;
 import com.bridgework.auth.repository.AppUserRepository;
 import com.bridgework.auth.security.JwtTokenProvider;
 import com.bridgework.auth.security.ParsedJwtToken;
+import com.bridgework.onboarding.repository.UserProfileRepository;
+import com.bridgework.onboarding.service.OnboardingProfileService;
 import jakarta.transaction.Transactional;
 import java.time.ZoneOffset;
 import java.util.Locale;
@@ -31,19 +31,25 @@ public class AuthService {
     private final RefreshTokenStoreService refreshTokenStoreService;
     private final JwtTokenProvider jwtTokenProvider;
     private final BridgeWorkAuthProperties authProperties;
+    private final OnboardingProfileService onboardingProfileService;
+    private final UserProfileRepository userProfileRepository;
 
     public AuthService(AppUserRepository appUserRepository,
                        SocialOAuthService socialOAuthService,
                        SignupSessionStoreService signupSessionStoreService,
                        RefreshTokenStoreService refreshTokenStoreService,
                        JwtTokenProvider jwtTokenProvider,
-                       BridgeWorkAuthProperties authProperties) {
+                       BridgeWorkAuthProperties authProperties,
+                       OnboardingProfileService onboardingProfileService,
+                       UserProfileRepository userProfileRepository) {
         this.appUserRepository = appUserRepository;
         this.socialOAuthService = socialOAuthService;
         this.signupSessionStoreService = signupSessionStoreService;
         this.refreshTokenStoreService = refreshTokenStoreService;
         this.jwtTokenProvider = jwtTokenProvider;
         this.authProperties = authProperties;
+        this.onboardingProfileService = onboardingProfileService;
+        this.userProfileRepository = userProfileRepository;
     }
 
     @Transactional
@@ -83,7 +89,7 @@ public class AuthService {
                 null,
                 user.getProvider(),
                 user.getEmail(),
-                user.getName(),
+                resolveDefaultProfileName(user.getId()),
                 tokenPairResponse
         );
     }
@@ -92,10 +98,9 @@ public class AuthService {
     public TokenPairResponseDto completeSignup(SignupCompleteRequestDto request) {
         SocialSignupSessionData signupSessionData = signupSessionStoreService.getRequiredSession(request.signupToken());
 
-        String normalizedPhoneNumber = normalizePhoneNumber(request.phoneNumber());
         String normalizedEmail = normalizeEmail(resolveEmail(signupSessionData.email(), request.email()));
 
-        validateDuplicateIdentity(normalizedPhoneNumber, normalizedEmail, signupSessionData);
+        validateDuplicateIdentity(normalizedEmail, signupSessionData);
 
         AppUser user = appUserRepository
                 .findByProviderAndProviderUserId(signupSessionData.provider(), signupSessionData.providerUserId())
@@ -106,15 +111,12 @@ public class AuthService {
         if (normalizedEmail != null) {
             user.setEmail(normalizedEmail);
         }
-        user.setName(request.name().trim());
-        user.setAge(request.age());
-        user.setGender(request.gender());
-        user.setLocation(request.location().trim());
-        user.setPhoneNumber(normalizedPhoneNumber);
         user.setRole(UserRole.USER);
         user.setSignupCompleted(true);
 
         AppUser savedUser = appUserRepository.save(user);
+        // 가입 완료 시 기본 프로필을 생성해 사용자 상태를 일관되게 만든다.
+        onboardingProfileService.create(savedUser.getId(), request.profile());
 
         // 회원가입이 완료되면 세션 토큰은 즉시 제거해 재사용을 차단한다.
         signupSessionStoreService.deleteSession(request.signupToken());
@@ -172,11 +174,6 @@ public class AuthService {
                 user.getId(),
                 user.getProvider(),
                 user.getEmail(),
-                user.getName(),
-                user.getAge(),
-                user.getGender(),
-                user.getLocation(),
-                user.getPhoneNumber(),
                 user.getRole(),
                 user.isSignupCompleted()
         );
@@ -201,49 +198,25 @@ public class AuthService {
         );
     }
 
-    private void validateDuplicateIdentity(String normalizedPhoneNumber,
-                                           String normalizedEmail,
+    private void validateDuplicateIdentity(String normalizedEmail,
                                            SocialSignupSessionData signupSessionData) {
         AppUser existingBySocial = appUserRepository
                 .findByProviderAndProviderUserId(signupSessionData.provider(), signupSessionData.providerUserId())
                 .orElse(null);
 
         if (existingBySocial == null) {
-            if (appUserRepository.existsByPhoneNumber(normalizedPhoneNumber)) {
-                throw new DuplicatePhoneNumberException();
-            }
             if (normalizedEmail != null && appUserRepository.existsByEmail(normalizedEmail)) {
                 throw new DuplicateEmailException();
             }
             return;
         }
 
-        String existingPhoneNumber = existingBySocial.getPhoneNumber();
-        if ((existingPhoneNumber == null || !existingPhoneNumber.equals(normalizedPhoneNumber))
-                && appUserRepository.existsByPhoneNumber(normalizedPhoneNumber)) {
-            throw new DuplicatePhoneNumberException();
-        }
-
-        String existingEmail = existingBySocial.getEmail();
+        String existingEmail = normalizeEmail(existingBySocial.getEmail());
         if (normalizedEmail != null
-                && existingEmail != null
-                && !existingEmail.equals(normalizedEmail)
+                && !normalizedEmail.equals(existingEmail)
                 && appUserRepository.existsByEmail(normalizedEmail)) {
             throw new DuplicateEmailException();
         }
-    }
-
-    private String normalizePhoneNumber(String phoneNumber) {
-        if (!StringUtils.hasText(phoneNumber)) {
-            throw new InvalidAuthRequestException("전화번호는 필수입니다.");
-        }
-
-        String normalized = phoneNumber.replaceAll("[^0-9+]", "");
-        if (normalized.length() < 8 || normalized.length() > 20) {
-            throw new InvalidAuthRequestException("전화번호 형식이 올바르지 않습니다.");
-        }
-
-        return normalized;
     }
 
     private String normalizeEmail(String email) {
@@ -258,5 +231,11 @@ public class AuthService {
             return requestEmail;
         }
         return socialEmail;
+    }
+
+    private String resolveDefaultProfileName(Long userId) {
+        return userProfileRepository.findByUser_IdAndIsDefaultTrue(userId)
+                .map(profile -> profile.getFullName())
+                .orElse(null);
     }
 }

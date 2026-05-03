@@ -5,7 +5,9 @@ import java.time.OffsetDateTime;
 import java.util.List;
 
 public record OnboardingProfileResponseDto(
+        Long profileId,
         Long userId,
+        boolean isDefault,
         String desiredJob,
         String commuteRange,
         List<String> preferredWorkEnvironments,
