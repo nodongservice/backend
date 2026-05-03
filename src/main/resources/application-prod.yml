@@ -19,6 +19,7 @@ bridgework:
     kric-station-code-file-path: /app/resources/reference/operating_agency_station_codes_2026-02-28.xlsx
     data-go-kr-service-key: ${DATA_GO_KR_SERVICE_KEY}
     kric-service-key: ${KRIC_SERVICE_KEY}
+    kakao-geocode-rest-key: ${KAKAO_GEOCODE_REST_KEY}
     work24-vocational-training-auth-key: ${WORK24_VOCATIONAL_TRAINING_AUTH_KEY}
     work24-competency-auth-key: ${WORK24_COMPETENCY_AUTH_KEY}
     seoul-open-api-key: ${SEOUL_OPEN_API_KEY}

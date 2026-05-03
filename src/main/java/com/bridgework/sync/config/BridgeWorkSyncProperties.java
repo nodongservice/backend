@@ -24,6 +24,7 @@ public class BridgeWorkSyncProperties {
     private Duration requestTimeout = Duration.ofSeconds(20);
 
     private String kricStationCodeFilePath;
+    private String kakaoGeocodeRestKey;
 
     @Valid
     private List<SourceConfig> sources = new ArrayList<>();
@@ -50,6 +51,14 @@ public class BridgeWorkSyncProperties {
 
     public void setKricStationCodeFilePath(String kricStationCodeFilePath) {
         this.kricStationCodeFilePath = kricStationCodeFilePath;
+    }
+
+    public String getKakaoGeocodeRestKey() {
+        return kakaoGeocodeRestKey;
+    }
+
+    public void setKakaoGeocodeRestKey(String kakaoGeocodeRestKey) {
+        this.kakaoGeocodeRestKey = kakaoGeocodeRestKey;
     }
 
     public List<SourceConfig> getSources() {
