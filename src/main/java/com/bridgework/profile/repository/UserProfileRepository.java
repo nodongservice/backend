@@ -1,6 +1,6 @@
-package com.bridgework.onboarding.repository;
+package com.bridgework.profile.repository;
 
-import com.bridgework.onboarding.entity.UserProfile;
+import com.bridgework.profile.entity.UserProfile;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;

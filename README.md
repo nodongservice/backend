@@ -1,15 +1,43 @@
 # BridgeWork Backend
 
-브릿지워크 공공데이터 동기화 백엔드입니다.
+브릿지워크 인증/프로필/공공데이터 동기화 백엔드입니다.
 
 ## 기술 스택
 - Java 17
 - Spring Boot 3.3
 - Spring Data JPA + Flyway
 - PostgreSQL
+- Spring Security + JWT
+- Redis
 - ShedLock(분산 스케줄 중복 방지)
 
 ## 도메인 구조
+`com.bridgework.auth`
+- `controller`
+- `service`
+- `repository`
+- `entity`
+- `dto`
+- `exception`
+
+`com.bridgework.onboarding` (프로필)
+- `controller`
+- `service`
+- `repository`
+- `entity`
+- `dto`
+- `exception`
+
+`com.bridgework.options`
+- `controller`
+- `service`
+- `dto`
+
+`com.bridgework.map`
+- `controller`
+- `service`
+- `dto`
+
 `com.bridgework.sync`
 - `controller`
 - `service`
@@ -17,6 +45,13 @@
 - `entity`
 - `dto`
 - `exception`
+
+## 현재 구현 범위
+- 기능 0: 소셜 로그인/회원가입 완료, JWT 재발급/로그아웃/내 정보 조회
+- 기능 1: 프로필 CRUD(최대 3개), 기본 프로필 지정/변경
+- 기능 1-2(OCR): **2차 개발로 제외**
+- 공공데이터: 스케줄러 동기화 + 수동 실행 + 원본/정규화 저장
+- 화면 옵션/지도 레이어: 직무 트리, 지역/고용형태/급여방식 옵션, 근로지원인 수행기관 마커 조회
 
 ## 프로필/키 관리
 - 공통: `application.yml` (공개 가능한 공통 설정)
@@ -587,6 +622,8 @@
 | `openPlcCont` | 개최장소 |
 
 ## 데이터 저장 방식
+- `app_user`: 계정 정보(소셜 provider/userId, 이메일, 권한, 가입완료)
+- `onboarding_profile`: 사용자 프로필(최대 3개, 기본 프로필 1개 필수)
 - `public_data_record`: 원본 payload(JSON), 해시, 외부ID, 수집시각 저장
 - `public_data_record_field`: payload를 `field_path` 단위로 펼쳐 저장
 - `pd_*` 정규화 테이블: 데이터셋별 컬럼형 저장(스코어링/지도 조회용)
@@ -602,6 +639,26 @@
 - `SEOUL_WHEELCHAIR_RAMP_STATUS`, `SEOUL_LOW_FLOOR_BUS_ROUTE_RETENTION`는 최신 파일 revision 동일 시 스킵(`public_data_source_snapshot` 기준)
 
 ## 수동 실행/조회 API
+- 소셜 로그인: `POST /api/v1/auth/social/login`
+- 회원가입 완료(기본 프로필 생성 포함): `POST /api/v1/auth/social/signup/complete`
+- 토큰 재발급: `POST /api/v1/auth/token/refresh`
+- 로그아웃: `POST /api/v1/auth/logout`
+- 내 정보 조회: `GET /api/v1/auth/me`
+
+- 내 프로필 목록: `GET /api/v1/profiles`
+- 프로필 생성: `POST /api/v1/profiles`
+- 프로필 단건 조회: `GET /api/v1/profiles/{profileId}`
+- 프로필 수정: `PUT /api/v1/profiles/{profileId}`
+- 프로필 삭제: `DELETE /api/v1/profiles/{profileId}`
+- 기본 프로필 지정: `PATCH /api/v1/profiles/{profileId}/set-default`
+
+- 직무 트리 옵션: `GET /api/v1/options/job-categories/tree`
+- 지역 옵션: `GET /api/v1/options/regions`
+- 고용형태 옵션: `GET /api/v1/options/employment-types`
+- 급여 방식 옵션: `GET /api/v1/options/salary-types`
+
+- 근로지원인 수행기관 마커: `GET /api/v1/map/support-agencies`
+
 - 전체 동기화: `POST /api/v1/sync/public-data/run`
 - 단일 동기화: `POST /api/v1/sync/public-data/run?sourceType=KEPAD_RECRUITMENT`
 - 동기화 로그: `GET /api/v1/sync/public-data/logs`

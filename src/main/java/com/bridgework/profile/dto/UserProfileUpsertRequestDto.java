@@ -1,4 +1,4 @@
-package com.bridgework.onboarding.dto;
+package com.bridgework.profile.dto;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
@@ -7,7 +7,7 @@ import jakarta.validation.constraints.Email;
 import java.time.LocalDate;
 import java.util.List;
 
-public record OnboardingProfileUpsertRequestDto(
+public record UserProfileUpsertRequestDto(
         // 기능 2/3 화면 필터에서 주로 사용하는 값으로 선택 입력을 허용한다.
         String desiredJob,
         // 통근 범위는 화면 필터에서 매 요청마다 선택 가능하므로 선택 입력으로 둔다.

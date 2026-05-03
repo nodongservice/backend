@@ -20,9 +20,9 @@ import com.bridgework.auth.exception.InvalidRefreshTokenException;
 import com.bridgework.auth.repository.AppUserRepository;
 import com.bridgework.auth.security.JwtTokenProvider;
 import com.bridgework.auth.security.ParsedJwtToken;
-import com.bridgework.onboarding.dto.OnboardingProfileUpsertRequestDto;
-import com.bridgework.onboarding.repository.UserProfileRepository;
-import com.bridgework.onboarding.service.OnboardingProfileService;
+import com.bridgework.profile.dto.UserProfileUpsertRequestDto;
+import com.bridgework.profile.repository.UserProfileRepository;
+import com.bridgework.profile.service.UserProfileService;
 import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.util.Optional;
@@ -48,7 +48,7 @@ class AuthServiceTest {
     @Mock
     private JwtTokenProvider jwtTokenProvider;
     @Mock
-    private OnboardingProfileService onboardingProfileService;
+    private UserProfileService userProfileService;
     @Mock
     private UserProfileRepository userProfileRepository;
 
@@ -66,7 +66,7 @@ class AuthServiceTest {
                 refreshTokenStoreService,
                 jwtTokenProvider,
                 authProperties,
-                onboardingProfileService,
+                userProfileService,
                 userProfileRepository
         );
     }
@@ -141,7 +141,7 @@ class AuthServiceTest {
         verify(refreshTokenStoreService).save(eq(1L), eq("refresh-id"), eq("refresh-token"), any(Duration.class));
 
         verify(appUserRepository).save(any(AppUser.class));
-        verify(onboardingProfileService).create(eq(1L), any(OnboardingProfileUpsertRequestDto.class));
+        verify(userProfileService).create(eq(1L), any(UserProfileUpsertRequestDto.class));
     }
 
     @Test
@@ -163,8 +163,8 @@ class AuthServiceTest {
         verify(refreshTokenStoreService).delete(1L, "refresh-id");
     }
 
-    private OnboardingProfileUpsertRequestDto onboardingRequest() {
-        return new OnboardingProfileUpsertRequestDto(
+    private UserProfileUpsertRequestDto onboardingRequest() {
+        return new UserProfileUpsertRequestDto(
                 "사무보조",
                 "30분",
                 java.util.List.of("실내"),

@@ -1,6 +1,6 @@
-package com.bridgework.onboarding.service;
+package com.bridgework.profile.service;
 
-import com.bridgework.onboarding.dto.OnboardingProfileUpsertRequestDto;
+import com.bridgework.profile.dto.UserProfileUpsertRequestDto;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -9,9 +9,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 @Service
-public class OnboardingAiTagService {
+public class ProfileAiTagService {
 
-    public OnboardingAiTags buildTags(OnboardingProfileUpsertRequestDto request) {
+    public ProfileAiTags buildTags(UserProfileUpsertRequestDto request) {
         List<String> jobTags = mergeUnique(
                 List.of(request.desiredJob(), request.targetJob(), request.careerSummary(), request.educationSummary()),
                 request.skills(),
@@ -29,7 +29,7 @@ public class OnboardingAiTagService {
                 List.of(request.disabilityType(), request.workSupportRequirements(), request.assistiveDevices())
         );
 
-        return new OnboardingAiTags(jobTags, environmentTags, supportTags);
+        return new ProfileAiTags(jobTags, environmentTags, supportTags);
     }
 
     @SafeVarargs

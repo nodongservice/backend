@@ -14,8 +14,8 @@ import com.bridgework.auth.exception.UserNotFoundException;
 import com.bridgework.auth.repository.AppUserRepository;
 import com.bridgework.auth.security.JwtTokenProvider;
 import com.bridgework.auth.security.ParsedJwtToken;
-import com.bridgework.onboarding.repository.UserProfileRepository;
-import com.bridgework.onboarding.service.OnboardingProfileService;
+import com.bridgework.profile.repository.UserProfileRepository;
+import com.bridgework.profile.service.UserProfileService;
 import jakarta.transaction.Transactional;
 import java.time.ZoneOffset;
 import java.util.Locale;
@@ -31,7 +31,7 @@ public class AuthService {
     private final RefreshTokenStoreService refreshTokenStoreService;
     private final JwtTokenProvider jwtTokenProvider;
     private final BridgeWorkAuthProperties authProperties;
-    private final OnboardingProfileService onboardingProfileService;
+    private final UserProfileService userProfileService;
     private final UserProfileRepository userProfileRepository;
 
     public AuthService(AppUserRepository appUserRepository,
@@ -40,7 +40,7 @@ public class AuthService {
                        RefreshTokenStoreService refreshTokenStoreService,
                        JwtTokenProvider jwtTokenProvider,
                        BridgeWorkAuthProperties authProperties,
-                       OnboardingProfileService onboardingProfileService,
+                       UserProfileService userProfileService,
                        UserProfileRepository userProfileRepository) {
         this.appUserRepository = appUserRepository;
         this.socialOAuthService = socialOAuthService;
@@ -48,7 +48,7 @@ public class AuthService {
         this.refreshTokenStoreService = refreshTokenStoreService;
         this.jwtTokenProvider = jwtTokenProvider;
         this.authProperties = authProperties;
-        this.onboardingProfileService = onboardingProfileService;
+        this.userProfileService = userProfileService;
         this.userProfileRepository = userProfileRepository;
     }
 
@@ -116,7 +116,7 @@ public class AuthService {
 
         AppUser savedUser = appUserRepository.save(user);
         // 가입 완료 시 기본 프로필을 생성해 사용자 상태를 일관되게 만든다.
-        onboardingProfileService.create(savedUser.getId(), request.profile());
+        userProfileService.create(savedUser.getId(), request.profile());
 
         // 회원가입이 완료되면 세션 토큰은 즉시 제거해 재사용을 차단한다.
         signupSessionStoreService.deleteSession(request.signupToken());

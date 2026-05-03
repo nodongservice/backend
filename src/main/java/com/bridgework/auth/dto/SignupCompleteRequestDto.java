@@ -1,6 +1,6 @@
 package com.bridgework.auth.dto;
 
-import com.bridgework.onboarding.dto.OnboardingProfileUpsertRequestDto;
+import com.bridgework.profile.dto.UserProfileUpsertRequestDto;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
@@ -13,6 +13,6 @@ public record SignupCompleteRequestDto(
         String email,
         @Valid
         @NotNull(message = "기본 프로필 입력은 필수입니다.")
-        OnboardingProfileUpsertRequestDto profile
+        UserProfileUpsertRequestDto profile
 ) {
 }

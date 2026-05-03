@@ -1,7 +1,7 @@
-package com.bridgework.onboarding.entity;
+package com.bridgework.profile.entity;
 
 import com.bridgework.auth.entity.AppUser;
-import com.bridgework.onboarding.dto.OnboardingProfileUpsertRequestDto;
+import com.bridgework.profile.dto.UserProfileUpsertRequestDto;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -211,7 +211,7 @@ public class UserProfile {
         updatedAt = OffsetDateTime.now();
     }
 
-    public void updateFromRequest(OnboardingProfileUpsertRequestDto request,
+    public void updateFromRequest(UserProfileUpsertRequestDto request,
                                   String preferredWorkEnvironmentsJson,
                                   String avoidedWorkEnvironmentsJson,
                                   String requiredSupportsJson,
