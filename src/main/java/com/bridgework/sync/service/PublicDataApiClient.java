@@ -158,7 +158,7 @@ public class PublicDataApiClient {
         return Optional.of(new SourceLatestRevisionDto(
                 latestFile.revisionKey(),
                 latestFile.fileName(),
-                latestFile.modifiedDateText()
+                latestFile.modifiedDate().toString()
         ));
     }
 
@@ -265,14 +265,14 @@ public class PublicDataApiClient {
 
         Document document = Jsoup.parse(htmlBody);
         Element frmFile = document.selectFirst("form[name=frmFile]");
-        if (frmFile == null) {
-            throw new ExternalApiException("서울 파일데이터 페이지에서 frmFile 폼을 찾을 수 없습니다: " + sourceConfig.getSourceType());
-        }
 
-        String infId = resolveFormInputValue(frmFile, "infId");
-        String infSeq = resolveFormInputValue(frmFile, "infSeq");
+        String infId = resolveFormInputValue(document, frmFile, "infId", sourceConfig.getSourceType());
+        String infSeq = resolveFormInputValue(document, frmFile, "infSeq", sourceConfig.getSourceType());
 
         Elements rows = document.select("tr[id^=fileTr_]");
+        if (rows.isEmpty()) {
+            rows = document.select("tr:has(span[onclick*=downloadFile])");
+        }
         if (rows.isEmpty()) {
             throw new ExternalApiException("서울 파일데이터 페이지에 파일 목록이 없습니다: " + sourceConfig.getSourceType());
         }
@@ -327,14 +327,24 @@ public class PublicDataApiClient {
                 .orElseThrow(() -> new ExternalApiException("서울 파일데이터 최신 파일을 찾을 수 없습니다: " + sourceConfig.getSourceType()));
     }
 
-    private String resolveFormInputValue(Element formElement, String inputName) {
-        Element inputElement = formElement.selectFirst("input[name=" + inputName + "]");
+    private String resolveFormInputValue(Document document,
+                                         Element formElement,
+                                         String inputName,
+                                         PublicDataSourceType sourceType) {
+        Element inputElement = null;
+        if (formElement != null) {
+            inputElement = formElement.selectFirst("input[name=" + inputName + "]");
+        }
         if (inputElement == null) {
-            throw new ExternalApiException("서울 파일데이터 폼 파라미터 누락: " + inputName);
+            // 일부 서울 파일데이터 페이지는 frmFile name 없이 hidden input만 제공한다.
+            inputElement = document.selectFirst("input[name=" + inputName + "]");
+        }
+        if (inputElement == null) {
+            throw new ExternalApiException("서울 파일데이터 폼 파라미터 누락(" + inputName + "): " + sourceType);
         }
         String value = inputElement.attr("value").trim();
         if (value.isBlank()) {
-            throw new ExternalApiException("서울 파일데이터 폼 파라미터가 비어 있습니다: " + inputName);
+            throw new ExternalApiException("서울 파일데이터 폼 파라미터가 비어 있습니다(" + inputName + "): " + sourceType);
         }
         return value;
     }
@@ -761,9 +771,23 @@ public class PublicDataApiClient {
         String responseBody = fetchBody(requestUri, sourceConfig.getSourceType());
         JsonNode rootNode = parseXml(responseBody, "직업훈련 API 응답 파싱 실패");
 
-        JsonNode itemsNode = resolveItemsNode(rootNode, sourceConfig.getItemsJsonPointer());
+        JsonNode itemsNode = resolveFirstNodeByPointers(
+                rootNode,
+                "/srchList/scn_list",
+                "/HRDNet/srchList/scn_list",
+                "/response/srchList/scn_list",
+                "/response/HRDNet/srchList/scn_list",
+                normalizeJsonPointer(sourceConfig.getItemsJsonPointer())
+        );
         List<PublicDataApiItemDto> items = mapItems(itemsNode, sourceConfig);
-        int totalCount = resolveTotalCount(rootNode, sourceConfig.getTotalCountJsonPointer()).orElse(-1);
+        int totalCount = resolveFirstIntegerByPointers(
+                rootNode,
+                "/scn_cnt",
+                "/HRDNet/scn_cnt",
+                "/response/scn_cnt",
+                "/response/HRDNet/scn_cnt",
+                normalizeJsonPointer(sourceConfig.getTotalCountJsonPointer())
+        ).orElse(-1);
         boolean hasNext = hasNextPage(totalCount, pageNo, sourceConfig.getPageSize(), items.size());
         log.info("[COUNT] source={} page={} detected={} hasNext={}",
                 sourceConfig.getSourceType(),
@@ -797,7 +821,14 @@ public class PublicDataApiClient {
                         "구직자 취업역량 강화프로그램 API 응답 파싱 실패: pgmStdt=" + pgmStdt + ", startPage=" + datePageNo
                 );
 
-                if (rootNode.at("/empPgmSchdInviteList/messageCd").asText("").equals("006")) {
+                String messageCd = extractFirstTextByPointers(
+                        rootNode,
+                        "/messageCd",
+                        "/empPgmSchdInviteList/messageCd",
+                        "/response/messageCd",
+                        "/response/empPgmSchdInviteList/messageCd"
+                ).orElse("");
+                if ("006".equals(messageCd)) {
                     log.info("[COUNT] source={} pgmStdt={} page={} detected=0 (messageCd=006)",
                             sourceConfig.getSourceType(),
                             pgmStdt,
@@ -805,7 +836,14 @@ public class PublicDataApiClient {
                     break;
                 }
 
-                JsonNode itemsNode = resolveItemsNode(rootNode, sourceConfig.getItemsJsonPointer());
+                JsonNode itemsNode = resolveFirstNodeByPointers(
+                        rootNode,
+                        "/empPgmSchdInvite",
+                        "/empPgmSchdInviteList/empPgmSchdInvite",
+                        "/response/empPgmSchdInvite",
+                        "/response/empPgmSchdInviteList/empPgmSchdInvite",
+                        normalizeJsonPointer(sourceConfig.getItemsJsonPointer())
+                );
                 List<PublicDataApiItemDto> datePageItems = mapItems(itemsNode, sourceConfig);
                 log.info("[COUNT] source={} pgmStdt={} page={} detected={}",
                         sourceConfig.getSourceType(),
@@ -822,7 +860,14 @@ public class PublicDataApiClient {
                     }
                 }
 
-                int totalCount = resolveTotalCount(rootNode, sourceConfig.getTotalCountJsonPointer()).orElse(-1);
+                int totalCount = resolveFirstIntegerByPointers(
+                        rootNode,
+                        "/total",
+                        "/empPgmSchdInviteList/total",
+                        "/response/total",
+                        "/response/empPgmSchdInviteList/total",
+                        normalizeJsonPointer(sourceConfig.getTotalCountJsonPointer())
+                ).orElse(-1);
                 if (!hasNextPage(totalCount, datePageNo, sourceConfig.getPageSize(), datePageItems.size())) {
                     break;
                 }
@@ -1095,6 +1140,80 @@ public class PublicDataApiClient {
         } catch (NumberFormatException exception) {
             return Optional.empty();
         }
+    }
+
+    private String normalizeJsonPointer(String pointer) {
+        if (pointer == null) {
+            return "";
+        }
+        return pointer.trim();
+    }
+
+    private JsonNode resolveFirstNodeByPointers(JsonNode rootNode, String... pointers) {
+        if (pointers == null || pointers.length == 0) {
+            return objectMapper.createArrayNode();
+        }
+
+        for (String pointer : pointers) {
+            if (pointer == null || pointer.isBlank()) {
+                continue;
+            }
+
+            JsonNode resolvedNode = rootNode.at(pointer);
+            if (!resolvedNode.isMissingNode() && !resolvedNode.isNull()) {
+                return resolvedNode;
+            }
+        }
+
+        return objectMapper.createArrayNode();
+    }
+
+    private Optional<Integer> resolveFirstIntegerByPointers(JsonNode rootNode, String... pointers) {
+        if (pointers == null || pointers.length == 0) {
+            return Optional.empty();
+        }
+
+        for (String pointer : pointers) {
+            if (pointer == null || pointer.isBlank()) {
+                continue;
+            }
+
+            JsonNode resolvedNode = rootNode.at(pointer);
+            if (resolvedNode.isMissingNode() || resolvedNode.isNull()) {
+                continue;
+            }
+
+            Optional<Integer> parsed = parseInteger(resolvedNode.asText(null));
+            if (parsed.isPresent()) {
+                return parsed;
+            }
+        }
+
+        return Optional.empty();
+    }
+
+    private Optional<String> extractFirstTextByPointers(JsonNode rootNode, String... pointers) {
+        if (pointers == null || pointers.length == 0) {
+            return Optional.empty();
+        }
+
+        for (String pointer : pointers) {
+            if (pointer == null || pointer.isBlank()) {
+                continue;
+            }
+
+            JsonNode resolvedNode = rootNode.at(pointer);
+            if (resolvedNode.isMissingNode() || resolvedNode.isNull()) {
+                continue;
+            }
+
+            String value = resolvedNode.asText("").trim();
+            if (!value.isBlank()) {
+                return Optional.of(value);
+            }
+        }
+
+        return Optional.empty();
     }
 
     private List<PublicDataApiItemDto> mapRailItems(

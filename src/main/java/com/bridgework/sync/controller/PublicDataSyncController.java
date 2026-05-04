@@ -2,6 +2,7 @@ package com.bridgework.sync.controller;
 
 import com.bridgework.sync.dto.SourceConfigResponseDto;
 import com.bridgework.sync.dto.SyncLogResponseDto;
+import com.bridgework.sync.dto.SyncLogResetResponseDto;
 import com.bridgework.sync.dto.SyncRunResponseDto;
 import com.bridgework.sync.entity.PublicDataSourceType;
 import com.bridgework.sync.entity.SyncRequestSource;
@@ -10,6 +11,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import java.util.List;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -45,6 +47,13 @@ public class PublicDataSyncController {
             @RequestParam(name = "sourceType", required = false) PublicDataSourceType sourceType
     ) {
         return ResponseEntity.ok(publicDataSyncService.getRecentLogs(sourceType));
+    }
+
+    @DeleteMapping("/logs")
+    @Operation(summary = "동기화 실행 로그 초기화", description = "저장된 동기화 실행 로그를 모두 삭제한다.")
+    public ResponseEntity<SyncLogResetResponseDto> resetSyncLogs() {
+        long deletedCount = publicDataSyncService.resetSyncLogs();
+        return ResponseEntity.ok(new SyncLogResetResponseDto(deletedCount));
     }
 
     @GetMapping("/sources")

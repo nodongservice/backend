@@ -60,6 +60,7 @@ public class SecurityConfig {
                                 "/api/v1/sync/public-data/sources",
                                 "/api/v1/options/**",
                                 "/api/v1/map/support-agencies").permitAll()
+                        .requestMatchers(HttpMethod.DELETE, "/api/v1/sync/public-data/logs").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/sync/public-data/run").permitAll()
                         .requestMatchers(HttpMethod.POST,
                                 "/api/v1/auth/social/login",

@@ -24,13 +24,16 @@ import jakarta.annotation.PostConstruct;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.EnumSet;
+import java.util.LinkedHashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class PublicDataSyncService {
@@ -161,6 +164,13 @@ public class PublicDataSyncService {
                 .toList();
     }
 
+    @Transactional
+    public long resetSyncLogs() {
+        long deletedCount = publicDataSyncLogRepository.count();
+        publicDataSyncLogRepository.deleteAllInBatch();
+        return deletedCount;
+    }
+
     private SourceSyncResultDto syncSourceInternal(BridgeWorkSyncProperties.SourceConfig sourceConfig,
                                                    SyncRequestSource requestSource) {
         PublicDataSourceType sourceType = sourceConfig.getSourceType();
@@ -174,6 +184,7 @@ public class PublicDataSyncService {
         SyncStatus syncStatus = SyncStatus.SUCCESS;
         String message = "동기화 완료";
         Set<String> fetchedExternalIds = new HashSet<>();
+        Map<String, Integer> failureReasonCounts = new LinkedHashMap<>();
         SourceLatestRevisionDto latestRevisionDto = null;
 
         try {
@@ -214,10 +225,12 @@ public class PublicDataSyncService {
                         }
                     } catch (Exception exception) {
                         failedCount++;
+                        String failureReason = summarizeFailureReason(exception);
+                        failureReasonCounts.merge(failureReason, 1, Integer::sum);
                         log.warn("데이터 저장 실패 source={} externalId={} reason={}",
                                 sourceType,
                                 item.externalId(),
-                                exception.getMessage());
+                                failureReason);
                     }
                 }
 
@@ -236,7 +249,7 @@ public class PublicDataSyncService {
 
             if (failedCount > 0) {
                 syncStatus = SyncStatus.PARTIAL_SUCCESS;
-                message = "일부 데이터 저장 실패";
+                message = buildFailureSummaryMessage("일부 데이터 저장 실패", failureReasonCounts);
             }
 
             if (failedCount > 0 && deletedCount == 0) {
@@ -253,6 +266,46 @@ public class PublicDataSyncService {
 
         finishSyncLog(syncLog, syncStatus, processedCount, newCount, updatedCount, failedCount, message);
         return new SourceSyncResultDto(sourceType, syncStatus, processedCount, newCount, updatedCount, failedCount, message);
+    }
+
+    private String summarizeFailureReason(Exception exception) {
+        Throwable rootCause = exception;
+        while (rootCause.getCause() != null && rootCause.getCause() != rootCause) {
+            rootCause = rootCause.getCause();
+        }
+
+        String reasonText = rootCause.getMessage();
+        if (reasonText == null || reasonText.isBlank()) {
+            reasonText = exception.getMessage();
+        }
+        if (reasonText == null || reasonText.isBlank()) {
+            reasonText = exception.getClass().getSimpleName();
+        }
+
+        String normalized = reasonText.replace('\n', ' ').replace('\r', ' ').trim();
+        if (normalized.length() > 120) {
+            normalized = normalized.substring(0, 120) + "...";
+        }
+        return normalized;
+    }
+
+    private String buildFailureSummaryMessage(String baseMessage, Map<String, Integer> failureReasonCounts) {
+        if (failureReasonCounts == null || failureReasonCounts.isEmpty()) {
+            return baseMessage;
+        }
+
+        List<Map.Entry<String, Integer>> sortedReasons = failureReasonCounts.entrySet().stream()
+                .sorted((left, right) -> Integer.compare(right.getValue(), left.getValue()))
+                .toList();
+
+        List<String> topReasons = new ArrayList<>();
+        int maxReasons = Math.min(3, sortedReasons.size());
+        for (int index = 0; index < maxReasons; index++) {
+            Map.Entry<String, Integer> entry = sortedReasons.get(index);
+            topReasons.add(entry.getValue() + "건: " + entry.getKey());
+        }
+
+        return baseMessage + " | 원인요약 " + String.join(" / ", topReasons);
     }
 
     private boolean isUnchangedLatestRevision(PublicDataSourceType sourceType, String revisionKey) {

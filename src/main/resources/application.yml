@@ -45,7 +45,7 @@ bridgework:
     map-path: /ai/v1/score/map
     request-timeout: 20s
   sync:
-    cron: "0 0/30 * * * *"
+    cron: "0 0 0 * * *"
     request-timeout: 20s
     kric-station-code-file-path: resources/reference/operating_agency_station_codes_2026-02-28.xlsx
     sources:

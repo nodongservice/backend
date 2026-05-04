@@ -18,7 +18,7 @@ import org.springframework.validation.annotation.Validated;
 public class BridgeWorkSyncProperties {
 
     @NotBlank
-    private String cron = "0 0 */1 * * *";
+    private String cron = "0 0 0 * * *";
 
     @NotNull
     private Duration requestTimeout = Duration.ofSeconds(20);
