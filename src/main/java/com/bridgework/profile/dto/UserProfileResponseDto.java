@@ -1,11 +1,13 @@
-package com.bridgework.onboarding.dto;
+package com.bridgework.profile.dto;
 
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.List;
 
-public record OnboardingProfileResponseDto(
+public record UserProfileResponseDto(
+        Long profileId,
         Long userId,
+        boolean isDefault,
         String desiredJob,
         String commuteRange,
         List<String> preferredWorkEnvironments,

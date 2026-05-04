@@ -14,13 +14,15 @@ import com.bridgework.auth.dto.SocialLoginRequestDto;
 import com.bridgework.auth.dto.SocialLoginResponseDto;
 import com.bridgework.auth.dto.TokenPairResponseDto;
 import com.bridgework.auth.entity.AppUser;
-import com.bridgework.auth.entity.GenderType;
 import com.bridgework.auth.entity.SocialProvider;
 import com.bridgework.auth.entity.UserRole;
 import com.bridgework.auth.exception.InvalidRefreshTokenException;
 import com.bridgework.auth.repository.AppUserRepository;
 import com.bridgework.auth.security.JwtTokenProvider;
 import com.bridgework.auth.security.ParsedJwtToken;
+import com.bridgework.profile.dto.UserProfileUpsertRequestDto;
+import com.bridgework.profile.repository.UserProfileRepository;
+import com.bridgework.profile.service.UserProfileService;
 import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.util.Optional;
@@ -45,6 +47,10 @@ class AuthServiceTest {
     private RefreshTokenStoreService refreshTokenStoreService;
     @Mock
     private JwtTokenProvider jwtTokenProvider;
+    @Mock
+    private UserProfileService userProfileService;
+    @Mock
+    private UserProfileRepository userProfileRepository;
 
     private AuthService authService;
 
@@ -59,7 +65,9 @@ class AuthServiceTest {
                 signupSessionStoreService,
                 refreshTokenStoreService,
                 jwtTokenProvider,
-                authProperties
+                authProperties,
+                userProfileService,
+                userProfileRepository
         );
     }
 
@@ -96,12 +104,8 @@ class AuthServiceTest {
     void completeSignup_whenValidRequest_thenSavesUserAndIssuesToken() {
         SignupCompleteRequestDto request = new SignupCompleteRequestDto(
                 "signup-token",
-                "  홍길동  ",
-                30,
-                GenderType.MALE,
-                "  서울  ",
-                "010-1234-5678",
-                null
+                null,
+                onboardingRequest()
         );
         SocialSignupSessionData sessionData = new SocialSignupSessionData(
                 SocialProvider.KAKAO,
@@ -121,7 +125,6 @@ class AuthServiceTest {
         when(signupSessionStoreService.getRequiredSession("signup-token")).thenReturn(sessionData);
         when(appUserRepository.findByProviderAndProviderUserId(SocialProvider.KAKAO, "kakao-user-1"))
                 .thenReturn(Optional.empty());
-        when(appUserRepository.existsByPhoneNumber("01012345678")).thenReturn(false);
         when(appUserRepository.existsByEmail("social@example.com")).thenReturn(false);
         when(appUserRepository.save(any(AppUser.class))).thenAnswer(invocation -> {
             AppUser user = invocation.getArgument(0, AppUser.class);
@@ -138,6 +141,7 @@ class AuthServiceTest {
         verify(refreshTokenStoreService).save(eq(1L), eq("refresh-id"), eq("refresh-token"), any(Duration.class));
 
         verify(appUserRepository).save(any(AppUser.class));
+        verify(userProfileService).create(eq(1L), any(UserProfileUpsertRequestDto.class));
     }
 
     @Test
@@ -157,5 +161,61 @@ class AuthServiceTest {
         authService.logout(1L, "refresh-token");
 
         verify(refreshTokenStoreService).delete(1L, "refresh-id");
+    }
+
+    private UserProfileUpsertRequestDto onboardingRequest() {
+        return new UserProfileUpsertRequestDto(
+                "사무보조",
+                "30분",
+                java.util.List.of("실내"),
+                java.util.List.of("소음"),
+                java.util.List.of("출입구 경사로"),
+                "지체",
+                "사무보조 3년",
+                "대졸",
+                "정규직",
+                "홍길동",
+                "010-1234-5678",
+                "social@example.com",
+                java.time.LocalDate.of(1990, 1, 1),
+                null,
+                "서울",
+                "강남구",
+                null,
+                null,
+                "대졸",
+                "졸업",
+                "A사 사무보조",
+                null,
+                null,
+                null,
+                "사무보조",
+                java.util.List.of("엑셀"),
+                java.util.List.of("컴활"),
+                null,
+                null,
+                null,
+                true,
+                "중증",
+                true,
+                null,
+                null,
+                null,
+                "즉시",
+                java.util.List.of("정규직"),
+                null,
+                null,
+                null,
+                null,
+                "자기소개",
+                "지원동기",
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null
+        );
     }
 }

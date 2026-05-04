@@ -19,6 +19,7 @@ import com.bridgework.sync.exception.SyncSourceNotFoundException;
 import com.bridgework.sync.repository.PublicDataRecordRepository;
 import com.bridgework.sync.repository.PublicDataSourceSnapshotRepository;
 import com.bridgework.sync.repository.PublicDataSyncLogRepository;
+import com.bridgework.sync.normalized.PublicDataNormalizedStoreService;
 import jakarta.annotation.PostConstruct;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
@@ -42,19 +43,22 @@ public class PublicDataSyncService {
     private final PublicDataRecordFieldService publicDataRecordFieldService;
     private final PublicDataSyncLogRepository publicDataSyncLogRepository;
     private final PublicDataSourceSnapshotRepository publicDataSourceSnapshotRepository;
+    private final PublicDataNormalizedStoreService publicDataNormalizedStoreService;
 
     public PublicDataSyncService(BridgeWorkSyncProperties syncProperties,
                                  PublicDataApiClient publicDataApiClient,
                                  PublicDataRecordRepository publicDataRecordRepository,
                                  PublicDataRecordFieldService publicDataRecordFieldService,
                                  PublicDataSyncLogRepository publicDataSyncLogRepository,
-                                 PublicDataSourceSnapshotRepository publicDataSourceSnapshotRepository) {
+                                 PublicDataSourceSnapshotRepository publicDataSourceSnapshotRepository,
+                                 PublicDataNormalizedStoreService publicDataNormalizedStoreService) {
         this.syncProperties = syncProperties;
         this.publicDataApiClient = publicDataApiClient;
         this.publicDataRecordRepository = publicDataRecordRepository;
         this.publicDataRecordFieldService = publicDataRecordFieldService;
         this.publicDataSyncLogRepository = publicDataSyncLogRepository;
         this.publicDataSourceSnapshotRepository = publicDataSourceSnapshotRepository;
+        this.publicDataNormalizedStoreService = publicDataNormalizedStoreService;
     }
 
     @PostConstruct
@@ -81,6 +85,18 @@ public class PublicDataSyncService {
                 throw new IllegalStateException(
                         "RAIL_WHEELCHAIR_LIFT/RAIL_WHEELCHAIR_LIFT_MOVEMENT/SEOUL_WHEELCHAIR_LIFT 활성화 시 "
                                 + "kricStationCodeFilePath가 필요합니다."
+                );
+            }
+
+            if (sourceConfig.isEnabled()
+                    && (sourceConfig.getSourceType() == PublicDataSourceType.KEPAD_RECRUITMENT
+                    || sourceConfig.getSourceType() == PublicDataSourceType.KEPAD_SUPPORT_AGENCY)
+                    && (syncProperties.getNaverGeocodeApiKeyId() == null
+                    || syncProperties.getNaverGeocodeApiKeyId().isBlank()
+                    || syncProperties.getNaverGeocodeApiKey() == null
+                    || syncProperties.getNaverGeocodeApiKey().isBlank())) {
+                throw new IllegalStateException(
+                        "KEPAD_RECRUITMENT/KEPAD_SUPPORT_AGENCY 활성화 시 naverGeocodeApiKeyId/naverGeocodeApiKey가 필요합니다."
                 );
             }
         }
@@ -183,7 +199,14 @@ public class PublicDataSyncService {
 
                     processedCount++;
                     try {
+                        OffsetDateTime fetchedAt = OffsetDateTime.now();
                         UpsertResult upsertResult = upsertRecord(sourceType, item);
+                        // 변경건만 정규화 재계산하고, 미변경건은 수집시각만 갱신한다.
+                        if (upsertResult == UpsertResult.UNCHANGED) {
+                            publicDataNormalizedStoreService.touch(sourceType, item.externalId(), fetchedAt);
+                        } else {
+                            publicDataNormalizedStoreService.upsert(sourceType, item, fetchedAt);
+                        }
                         if (upsertResult == UpsertResult.INSERTED) {
                             newCount++;
                         } else if (upsertResult == UpsertResult.UPDATED) {
@@ -205,6 +228,7 @@ public class PublicDataSyncService {
 
             if (failedCount == 0) {
                 deletedCount = removeDeletedRecords(sourceType, fetchedExternalIds);
+                publicDataNormalizedStoreService.deleteMissing(sourceType, fetchedExternalIds);
                 if (deletedCount > 0) {
                     message = "동기화 완료 (삭제 " + deletedCount + "건)";
                 }

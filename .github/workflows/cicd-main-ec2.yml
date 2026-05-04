@@ -71,6 +71,8 @@ jobs:
           WORK24_VOCATIONAL_TRAINING_AUTH_KEY: ${{ secrets.WORK24_VOCATIONAL_TRAINING_AUTH_KEY }}
           WORK24_COMPETENCY_AUTH_KEY: ${{ secrets.WORK24_COMPETENCY_AUTH_KEY }}
           SEOUL_OPEN_API_KEY: ${{ secrets.SEOUL_OPEN_API_KEY }}
+          NAVER_GEOCODE_API_KEY_ID: ${{ secrets.NAVER_GEOCODE_API_KEY_ID }}
+          NAVER_GEOCODE_API_KEY: ${{ secrets.NAVER_GEOCODE_API_KEY }}
           BRIDGEWORK_AUTH_JWT_SECRET: ${{ secrets.BRIDGEWORK_AUTH_JWT_SECRET }}
           KAKAO_CLIENT_SECRET: ${{ secrets.KAKAO_CLIENT_SECRET }}
           NAVER_CLIENT_SECRET: ${{ secrets.NAVER_CLIENT_SECRET }}
@@ -90,6 +92,8 @@ jobs:
               "WORK24_VOCATIONAL_TRAINING_AUTH_KEY",
               "WORK24_COMPETENCY_AUTH_KEY",
               "SEOUL_OPEN_API_KEY",
+              "NAVER_GEOCODE_API_KEY_ID",
+              "NAVER_GEOCODE_API_KEY",
               "BRIDGEWORK_AUTH_JWT_SECRET",
               "KAKAO_CLIENT_SECRET",
               "NAVER_CLIENT_SECRET",
@@ -131,6 +135,8 @@ jobs:
               f"    work24-vocational-training-auth-key: {q(val('WORK24_VOCATIONAL_TRAINING_AUTH_KEY'))}",
               f"    work24-competency-auth-key: {q(val('WORK24_COMPETENCY_AUTH_KEY'))}",
               f"    seoul-open-api-key: {q(val('SEOUL_OPEN_API_KEY'))}",
+              f"    naver-geocode-api-key-id: {q(val('NAVER_GEOCODE_API_KEY_ID'))}",
+              f"    naver-geocode-api-key: {q(val('NAVER_GEOCODE_API_KEY'))}",
               "  auth:",
               "    allowed-origins:",
               "      - 'http://localhost:3000'",

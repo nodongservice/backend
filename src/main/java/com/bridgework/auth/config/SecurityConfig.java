@@ -57,7 +57,9 @@ public class SecurityConfig {
                                 "/api/v1/public-data/records",
                                 "/api/v1/public-data/records/*",
                                 "/api/v1/sync/public-data/logs",
-                                "/api/v1/sync/public-data/sources").permitAll()
+                                "/api/v1/sync/public-data/sources",
+                                "/api/v1/options/**",
+                                "/api/v1/map/support-agencies").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/sync/public-data/run").permitAll()
                         .requestMatchers(HttpMethod.POST,
                                 "/api/v1/auth/social/login",

@@ -1,15 +1,43 @@
 # BridgeWork Backend
 
-브릿지워크 공공데이터 동기화 백엔드입니다.
+브릿지워크 인증/프로필/공공데이터 동기화 백엔드입니다.
 
 ## 기술 스택
 - Java 17
 - Spring Boot 3.3
 - Spring Data JPA + Flyway
 - PostgreSQL
+- Spring Security + JWT
+- Redis
 - ShedLock(분산 스케줄 중복 방지)
 
 ## 도메인 구조
+`com.bridgework.auth`
+- `controller`
+- `service`
+- `repository`
+- `entity`
+- `dto`
+- `exception`
+
+`com.bridgework.onboarding` (프로필)
+- `controller`
+- `service`
+- `repository`
+- `entity`
+- `dto`
+- `exception`
+
+`com.bridgework.options`
+- `controller`
+- `service`
+- `dto`
+
+`com.bridgework.map`
+- `controller`
+- `service`
+- `dto`
+
 `com.bridgework.sync`
 - `controller`
 - `service`
@@ -17,6 +45,13 @@
 - `entity`
 - `dto`
 - `exception`
+
+## 현재 구현 범위
+- 기능 0: 소셜 로그인/회원가입 완료, JWT 재발급/로그아웃/내 정보 조회
+- 기능 1: 프로필 CRUD(최대 3개), 기본 프로필 지정/변경
+- 기능 1-2(OCR): **2차 개발로 제외**
+- 공공데이터: 스케줄러 동기화 + 수동 실행 + 원본/정규화 저장
+- 화면 옵션/지도 레이어: 직무 트리, 지역/고용형태/급여방식 옵션, 근로지원인 수행기관 마커 조회
 
 ## 프로필/키 관리
 - 공통: `application.yml` (공개 가능한 공통 설정)
@@ -33,6 +68,8 @@
 - `SEOUL_OPEN_API_KEY`
 - `WORK24_VOCATIONAL_TRAINING_AUTH_KEY`
 - `WORK24_COMPETENCY_AUTH_KEY`
+- `NAVER_GEOCODE_API_KEY_ID`
+- `NAVER_GEOCODE_API_KEY`
 - `BRIDGEWORK_AUTH_JWT_SECRET`
 - `KAKAO_CLIENT_SECRET`
 - `NAVER_CLIENT_SECRET`
@@ -69,6 +106,8 @@
 - `WORK24_VOCATIONAL_TRAINING_AUTH_KEY`
 - `WORK24_COMPETENCY_AUTH_KEY`
 - `SEOUL_OPEN_API_KEY`
+- `NAVER_GEOCODE_API_KEY_ID`
+- `NAVER_GEOCODE_API_KEY`
 - `BRIDGEWORK_AUTH_JWT_SECRET`
 - `KAKAO_CLIENT_SECRET`
 - `NAVER_CLIENT_SECRET`
@@ -86,27 +125,27 @@
 
 ## 동기화 대상 데이터
 
-| SourceType | 데이터명 | 안내 링크 | 실제 호출 Endpoint | 인증키 | 주요 파라미터 |
-|---|---|---|---|---|---|
-| `KEPAD_RECRUITMENT` | 한국장애인고용공단_장애인 구인 실시간 현황 | [15117692](https://www.data.go.kr/data/15117692/openapi.do) | `http://apis.data.go.kr/B552583/job/job_list_env` | data.go.kr 서비스키 | `serviceKey`, `pageNo`, `numOfRows(max=1000)`, `_type=json` |
-| `KEPAD_JOB_CATEGORY` | 한국장애인고용공단_장애인 고용직무분류 | [15157071](https://www.data.go.kr/data/15157071/openapi.do) | `http://apis.data.go.kr/B552583/jobcode/job_code` | data.go.kr 서비스키 | `serviceKey`, `pageNo`, `numOfRows(max=1000)`, `_type=json` |
-| `KEPAD_STANDARD_WORKPLACE` | 한국장애인고용공단_장애인 표준사업장 실시간 조회 | [15119304](https://www.data.go.kr/data/15119304/openapi.do) | `http://apis.data.go.kr/B552583/comp/comp_auth` | data.go.kr 서비스키 | `serviceKey`, `pageNo`, `numOfRows(max=1000)`, `_type=json` |
-| `KEPAD_SUPPORT_AGENCY` | 한국장애인고용공단_근로지원인 수행기관 실시간 정보 | [15131282](https://www.data.go.kr/data/15131282/openapi.do) | `http://apis.data.go.kr/B552583/instn/instn_list` | data.go.kr 서비스키 | `serviceKey`, `pageNo`, `numOfRows(max=1000)`, `_type=json` |
-| `KORAIL_WEEK_PERSON_FACILITIES` | 한국철도공사_편의시설정보(교통약자 편의시설) | [15125774](https://www.data.go.kr/data/15125774/openapi.do#/API%20목록/weekPersonFacilities) | `https://apis.data.go.kr/B551457/convenience/weekPersonFacilities` | data.go.kr 서비스키 | `serviceKey`, `pageNo`, `numOfRows(max=1000)`, `returnType=JSON` |
-| `SEOUL_TRANSPORT_WEAK_WHEELCHAIR_LIFT` | 서울교통공사_교통약자이용정보(휠체어리프트) | [15143843](https://www.data.go.kr/data/15143843/openapi.do#/) | `https://apis.data.go.kr/B553766/wksn/getWksnWhcllift` | data.go.kr 서비스키 | `serviceKey`, `pageNo`, `numOfRows(max=1000)`, `dataType=JSON` |
-| `TRANSPORT_SUPPORT_CENTER` | 전국교통약자이동지원센터정보표준데이터 | [15028207](https://www.data.go.kr/tcs/dss/selectStdDataDetailView.do?publicDataPk=15028207) | `https://api.data.go.kr/openapi/tn_pubr_public_tfcwker_mvmn_cnter_api` | data.go.kr 서비스키 | `serviceKey`, `pageNo`, `numOfRows(max=1000)`, `type=json` |
-| `RAIL_WHEELCHAIR_LIFT` | 국가철도공단_역사별 휠체어리프트 위치 | [15041686](https://www.data.go.kr/data/15041686/openapi.do) | `https://openapi.kric.go.kr/openapi/vulnerableUserInfo/stationWheelchairLiftLocation` | `KRIC_SERVICE_KEY` | `service=vulnerableUserInfo`, `operation=stationWheelchairLiftLocation`, `serviceKey`, `railOprIsttCd`, `lnCd`, `stinCd`, `format=json` |
-| `RAIL_WHEELCHAIR_LIFT_MOVEMENT` | 역사별 휠체어리프트 이동동선 | [KRIC 209](https://data.kric.go.kr/rips/M_01_02/detail.do?id=209&service=vulnerableUserInfo&operation=stationWheelchairLiftMovement) | `https://openapi.kric.go.kr/openapi/vulnerableUserInfo/stationWheelchairLiftMovement` | `KRIC_SERVICE_KEY` | `service=vulnerableUserInfo`, `operation=stationWheelchairLiftMovement`, `serviceKey`, `railOprIsttCd`, `lnCd`, `stinCd`, `format=json` |
-| `SEOUL_WHEELCHAIR_LIFT` | 서울교통공사_휠체어리프트 설치현황 | [15044262](https://www.data.go.kr/data/15044262/fileData.do) | `https://api.odcloud.kr/api/{publicDataPk}/v1/{publicDataDetailPk}` (fileData 페이지에서 식별자 추출 후 호출) | data.go.kr 서비스키 | `serviceKey`, `page`, `perPage(max=10000)`, `returnType=JSON`, `역명`(xlsx의 `STIN_NM` 기반 순회) |
-| `SEOUL_SUBWAY_ENTRANCE_LIFT` | 서울시 지하철 출입구 리프트 위치정보 | [OA-21211](https://data.seoul.go.kr/dataList/OA-21211/S/1/datasetView.do) | `http://openapi.seoul.go.kr:8088/{API_KEY}/json/tbTraficEntrcLft/{start}/{end}` | data.seoul.go.kr 키 | `start/end(페이지 범위)`, `max rows=1000` |
-| `SEOUL_WALKING_NETWORK` | 서울특별시_자치구별 도보 네트워크 공간정보 | [OA-21208](https://data.seoul.go.kr/dataList/OA-21208/S/1/datasetView.do) | `http://openapi.seoul.go.kr:8088/{API_KEY}/json/TbTraficWlkNet/{start}/{end}` | data.seoul.go.kr 키 | `start/end(페이지 범위)`, `max rows=1000` |
-| `NATIONWIDE_BUS_STOP` | 국토교통부_전국 버스정류장 위치정보 | [15067528](https://www.data.go.kr/data/15067528/fileData.do#tab-layer-openapi) | `https://api.odcloud.kr/api/{publicDataPk}/v1/{publicDataDetailPk}` (fileData 페이지에서 식별자 추출 후 호출) | data.go.kr 서비스키 | `serviceKey`, `page`, `perPage(max=10000)`, `returnType=JSON` |
-| `SEOUL_WHEELCHAIR_RAMP_STATUS` | 서울교통공사_휠체어경사로 설치 현황 | [OA-13116](https://data.seoul.go.kr/dataList/OA-13116/S/1/datasetView.do) | `https://datafile.seoul.go.kr/bigfile/iot/inf/nio_download.do` (datasetView의 파일목록에서 최신 `수정일` 1건 선택 후 다운로드) | 없음 | `infId`, `infSeq`, `seq`, `seqNo`, `useCache=false` |
-| `SEOUL_LOW_FLOOR_BUS_ROUTE_RETENTION` | 서울시 저상버스 도입 노선 및 노선별 보유율 | [OA-22229](https://data.seoul.go.kr/dataList/OA-22229/F/1/datasetView.do) | `https://datafile.seoul.go.kr/bigfile/iot/inf/nio_download.do` (datasetView의 파일목록에서 최신 `수정일` 1건 선택 후 다운로드) | 없음 | `infId`, `infSeq`, `seq`, `seqNo`, `useCache=false` |
-| `NATIONWIDE_TRAFFIC_LIGHT` | 전국신호등표준데이터 | [15028198](https://www.data.go.kr/data/15028198/standard.do#) | `https://api.data.go.kr/openapi/tn_pubr_public_traffic_light_api` | data.go.kr 서비스키 | `serviceKey`, `pageNo`, `numOfRows(max=1000)`, `type=xml` |
-| `NATIONWIDE_CROSSWALK` | 전국횡단보도표준데이터 | [15028201](https://www.data.go.kr/data/15028201/standard.do) | `https://api.data.go.kr/openapi/tn_pubr_public_crosswalk_api` | data.go.kr 서비스키 | `serviceKey`, `pageNo`, `numOfRows(max=1000)`, `type=json` |
-| `VOCATIONAL_TRAINING` | 한국고용정보원_직업훈련_국민내일배움카드 훈련과정 | [work24 000004](https://www.work24.go.kr/cm/e/a/0110/selectOpenApiSvcInfo.do?apiSvcId=&upprApiSvcId=&fullApiSvcId=000000000000000000000000000004) | `https://www.work24.go.kr/cm/openApi/call/hr/callOpenApiSvcInfo310L01.do` | Work24 인증키 | `authKey`, `returnType=XML`, `pageNum`, `pageSize(max=100)` |
-| `JOBSEEKER_COMPETENCY_PROGRAM` | 한국고용정보원_구직자취업역량 강화프로그램 | [work24 000098](https://www.work24.go.kr/cm/e/a/0110/selectOpenApiSvcInfo.do?apiSvcId=&upprApiSvcId=&fullApiSvcId=000000000000000000000000000098) | `https://www.work24.go.kr/cm/openApi/call/wk/callOpenApiSvcInfo217L01.do` | Work24 인증키 | `authKey`, `returnType=XML`, `startPage`, `display(max=100)`, `pgmStdt(YYYYMMDD, 오늘~1개월 후 반복)` |
+| SourceType(데이터명)                                                  | 안내 링크 | 실제 호출 Endpoint | 인증키 | 주요 파라미터 |
+|-------------------------------------------------------------------|---|---|---|---|
+| `KEPAD_RECRUITMENT` (한국장애인고용공단_장애인 구인 실시간 현황)                     | [15117692](https://www.data.go.kr/data/15117692/openapi.do) | `http://apis.data.go.kr/B552583/job/job_list_env` | data.go.kr 서비스키 | `serviceKey`, `pageNo`, `numOfRows(max=1000)`, `_type=json` |
+| `KEPAD_JOB_CATEGORY` (한국장애인고용공단_장애인 고용직무분류)                       | [15157071](https://www.data.go.kr/data/15157071/openapi.do) | `http://apis.data.go.kr/B552583/jobcode/job_code` | data.go.kr 서비스키 | `serviceKey`, `pageNo`, `numOfRows(max=1000)`, `_type=json` |
+| `KEPAD_STANDARD_WORKPLACE` (한국장애인고용공단_장애인 표준사업장 실시간 조회)           | [15119304](https://www.data.go.kr/data/15119304/openapi.do) | `http://apis.data.go.kr/B552583/comp/comp_auth` | data.go.kr 서비스키 | `serviceKey`, `pageNo`, `numOfRows(max=1000)`, `_type=json` |
+| `KEPAD_SUPPORT_AGENCY` (한국장애인고용공단_근로지원인 수행기관 실시간 정보)              | [15131282](https://www.data.go.kr/data/15131282/openapi.do) | `http://apis.data.go.kr/B552583/instn/instn_list` | data.go.kr 서비스키 | `serviceKey`, `pageNo`, `numOfRows(max=1000)`, `_type=json` |
+| `KORAIL_WEEK_PERSON_FACILITIES` (한국철도공사_편의시설정보(교통약자 편의시설))        | [15125774](https://www.data.go.kr/data/15125774/openapi.do#/API%20목록/weekPersonFacilities) | `https://apis.data.go.kr/B551457/convenience/weekPersonFacilities` | data.go.kr 서비스키 | `serviceKey`, `pageNo`, `numOfRows(max=1000)`, `returnType=JSON` |
+| `SEOUL_TRANSPORT_WEAK_WHEELCHAIR_LIFT` (서울교통공사_교합통약자이용정보(휠체어리프트)) | [15143843](https://www.data.go.kr/data/15143843/openapi.do#/) | `https://apis.data.go.kr/B553766/wksn/getWksnWhcllift` | data.go.kr 서비스키 | `serviceKey`, `pageNo`, `numOfRows(max=1000)`, `dataType=JSON` |
+| `TRANSPORT_SUPPORT_CENTER` (전국교통약자이동지원센터정보표준데이터)                  | [15028207](https://www.data.go.kr/tcs/dss/selectStdDataDetailView.do?publicDataPk=15028207) | `https://api.data.go.kr/openapi/tn_pubr_public_tfcwker_mvmn_cnter_api` | data.go.kr 서비스키 | `serviceKey`, `pageNo`, `numOfRows(max=1000)`, `type=json` |
+| `RAIL_WHEELCHAIR_LIFT` (국가철도공단_역사별 휠체어리프트 위치)                     | [15041686](https://www.data.go.kr/data/15041686/openapi.do) | `https://openapi.kric.go.kr/openapi/vulnerableUserInfo/stationWheelchairLiftLocation` | `KRIC_SERVICE_KEY` | `service=vulnerableUserInfo`, `operation=stationWheelchairLiftLocation`, `serviceKey`, `railOprIsttCd`, `lnCd`, `stinCd`, `format=json` |
+| `RAIL_WHEELCHAIR_LIFT_MOVEMENT` (역사별 휠체어리프트 이동동선)                 | [KRIC 209](https://data.kric.go.kr/rips/M_01_02/detail.do?id=209&service=vulnerableUserInfo&operation=stationWheelchairLiftMovement) | `https://openapi.kric.go.kr/openapi/vulnerableUserInfo/stationWheelchairLiftMovement` | `KRIC_SERVICE_KEY` | `service=vulnerableUserInfo`, `operation=stationWheelchairLiftMovement`, `serviceKey`, `railOprIsttCd`, `lnCd`, `stinCd`, `format=json` |
+| `SEOUL_WHEELCHAIR_LIFT` (서울교통공사_휠체어리프트 설치현황)                      | [15044262](https://www.data.go.kr/data/15044262/fileData.do) | `https://api.odcloud.kr/api/{publicDataPk}/v1/{publicDataDetailPk}` (fileData 페이지에서 식별자 추출 후 호출) | data.go.kr 서비스키 | `serviceKey`, `page`, `perPage(max=10000)`, `returnType=JSON`, `역명`(xlsx의 `STIN_NM` 기반 순회) |
+| `SEOUL_SUBWAY_ENTRANCE_LIFT` (서울시 지하철 출입구 리프트 위치정보)               | [OA-21211](https://data.seoul.go.kr/dataList/OA-21211/S/1/datasetView.do) | `http://openapi.seoul.go.kr:8088/{API_KEY}/json/tbTraficEntrcLft/{start}/{end}` | data.seoul.go.kr 키 | `start/end(페이지 범위)`, `max rows=1000` |
+| `SEOUL_WALKING_NETWORK` (서울특별시_자치구별 도보 네트워크 공간정보)                 | [OA-21208](https://data.seoul.go.kr/dataList/OA-21208/S/1/datasetView.do) | `http://openapi.seoul.go.kr:8088/{API_KEY}/json/TbTraficWlkNet/{start}/{end}` | data.seoul.go.kr 키 | `start/end(페이지 범위)`, `max rows=1000` |
+| `NATIONWIDE_BUS_STOP` (국토교통부_전국 버스정류장 위치정보)                       | [15067528](https://www.data.go.kr/data/15067528/fileData.do#tab-layer-openapi) | `https://api.odcloud.kr/api/{publicDataPk}/v1/{publicDataDetailPk}` (fileData 페이지에서 식별자 추출 후 호출) | data.go.kr 서비스키 | `serviceKey`, `page`, `perPage(max=10000)`, `returnType=JSON` |
+| `SEOUL_WHEELCHAIR_RAMP_STATUS` (서울교통공사_휠체어경사로 설치 현황)              | [OA-13116](https://data.seoul.go.kr/dataList/OA-13116/S/1/datasetView.do) | `https://datafile.seoul.go.kr/bigfile/iot/inf/nio_download.do` (datasetView의 파일목록에서 최신 `수정일` 1건 선택 후 다운로드) | 없음 | `infId`, `infSeq`, `seq`, `seqNo`, `useCache=false` |
+| `SEOUL_LOW_FLOOR_BUS_ROUTE_RETENTION` (서울시 저상버스 도입 노선 및 노선별 보유율)  | [OA-22229](https://data.seoul.go.kr/dataList/OA-22229/F/1/datasetView.do) | `https://datafile.seoul.go.kr/bigfile/iot/inf/nio_download.do` (datasetView의 파일목록에서 최신 `수정일` 1건 선택 후 다운로드) | 없음 | `infId`, `infSeq`, `seq`, `seqNo`, `useCache=false` |
+| `NATIONWIDE_TRAFFIC_LIGHT` (전국신호등표준데이터)                           | [15028198](https://www.data.go.kr/data/15028198/standard.do#) | `https://api.data.go.kr/openapi/tn_pubr_public_traffic_light_api` | data.go.kr 서비스키 | `serviceKey`, `pageNo`, `numOfRows(max=1000)`, `type=xml` |
+| `NATIONWIDE_CROSSWALK` (전국횡단보도표준데이터)                              | [15028201](https://www.data.go.kr/data/15028201/standard.do) | `https://api.data.go.kr/openapi/tn_pubr_public_crosswalk_api` | data.go.kr 서비스키 | `serviceKey`, `pageNo`, `numOfRows(max=1000)`, `type=json` |
+| `VOCATIONAL_TRAINING` (한국고용정보원_직업훈련_국민내일배움카드 훈련과정)                | [work24 000004](https://www.work24.go.kr/cm/e/a/0110/selectOpenApiSvcInfo.do?apiSvcId=&upprApiSvcId=&fullApiSvcId=000000000000000000000000000004) | `https://www.work24.go.kr/cm/openApi/call/hr/callOpenApiSvcInfo310L01.do` | Work24 인증키 | `authKey`, `returnType=XML`, `pageNum`, `pageSize(max=100)` |
+| `JOBSEEKER_COMPETENCY_PROGRAM` (한국고용정보원_구직자취업역량 강화프로그램)           | [work24 000098](https://www.work24.go.kr/cm/e/a/0110/selectOpenApiSvcInfo.do?apiSvcId=&upprApiSvcId=&fullApiSvcId=000000000000000000000000000098) | `https://www.work24.go.kr/cm/openApi/call/wk/callOpenApiSvcInfo217L01.do` | Work24 인증키 | `authKey`, `returnType=XML`, `startPage`, `display(max=100)`, `pgmStdt(YYYYMMDD, 오늘~1개월 후 반복)` |
 
 ## API 응답 컬럼(공식 소개 페이지 기준)
 - 기준: 각 데이터 소개 페이지의 `출력결과(Response Element)`/`출력변수`/`데이터항목(컬럼) 정보`/`swaggerJson`
@@ -585,10 +624,14 @@
 | `openPlcCont` | 개최장소 |
 
 ## 데이터 저장 방식
+- `app_user`: 계정 정보(소셜 provider/userId, 이메일, 권한, 가입완료)
+- `onboarding_profile`: 사용자 프로필(최대 3개, 기본 프로필 1개 필수)
 - `public_data_record`: 원본 payload(JSON), 해시, 외부ID, 수집시각 저장
 - `public_data_record_field`: payload를 `field_path` 단위로 펼쳐 저장
+- `pd_*` 정규화 테이블: 데이터셋별 컬럼형 저장(스코어링/지도 조회용)
 - 변경건만 payload/필드 재저장, 동일건은 수집시각만 갱신
 - 각 소스 전체 페이지 수집이 끝난 뒤 API 결과에 없는 기존 데이터는 DB에서 삭제
+- `KEPAD_RECRUITMENT`, `KEPAD_SUPPORT_AGENCY`는 네이버 지오코딩으로 `geo_latitude`, `geo_longitude`, `geo_matched_address`를 함께 저장
 
 ## 스케줄러
 - Cron: `bridgework.sync.cron`
@@ -598,6 +641,26 @@
 - `SEOUL_WHEELCHAIR_RAMP_STATUS`, `SEOUL_LOW_FLOOR_BUS_ROUTE_RETENTION`는 최신 파일 revision 동일 시 스킵(`public_data_source_snapshot` 기준)
 
 ## 수동 실행/조회 API
+- 소셜 로그인: `POST /api/v1/auth/social/login`
+- 회원가입 완료(기본 프로필 생성 포함): `POST /api/v1/auth/social/signup/complete`
+- 토큰 재발급: `POST /api/v1/auth/token/refresh`
+- 로그아웃: `POST /api/v1/auth/logout`
+- 내 정보 조회: `GET /api/v1/auth/me`
+
+- 내 프로필 목록: `GET /api/v1/profiles`
+- 프로필 생성: `POST /api/v1/profiles`
+- 프로필 단건 조회: `GET /api/v1/profiles/{profileId}`
+- 프로필 수정: `PUT /api/v1/profiles/{profileId}`
+- 프로필 삭제: `DELETE /api/v1/profiles/{profileId}`
+- 기본 프로필 지정: `PATCH /api/v1/profiles/{profileId}/set-default`
+
+- 직무 트리 옵션: `GET /api/v1/options/job-categories/tree`
+- 지역 옵션: `GET /api/v1/options/regions`
+- 고용형태 옵션: `GET /api/v1/options/employment-types`
+- 급여 방식 옵션: `GET /api/v1/options/salary-types`
+
+- 근로지원인 수행기관 마커: `GET /api/v1/map/support-agencies`
+
 - 전체 동기화: `POST /api/v1/sync/public-data/run`
 - 단일 동기화: `POST /api/v1/sync/public-data/run?sourceType=KEPAD_RECRUITMENT`
 - 동기화 로그: `GET /api/v1/sync/public-data/logs`
