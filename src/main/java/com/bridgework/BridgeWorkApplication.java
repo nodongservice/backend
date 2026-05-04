@@ -1,6 +1,7 @@
 package com.bridgework;
 
 import com.bridgework.auth.config.BridgeWorkAuthProperties;
+import com.bridgework.recommend.config.BridgeWorkRecommendProperties;
 import com.bridgework.sync.config.BridgeWorkSyncProperties;
 import net.javacrumbs.shedlock.spring.annotation.EnableSchedulerLock;
 import org.springframework.boot.SpringApplication;
@@ -13,7 +14,8 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 @SpringBootApplication
 @EnableConfigurationProperties({
         BridgeWorkSyncProperties.class,
-        BridgeWorkAuthProperties.class
+        BridgeWorkAuthProperties.class,
+        BridgeWorkRecommendProperties.class
 })
 public class BridgeWorkApplication {
 

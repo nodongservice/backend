@@ -20,12 +20,19 @@
 - `dto`
 - `exception`
 
-`com.bridgework.onboarding` (프로필)
+`com.bridgework.profile`
 - `controller`
 - `service`
 - `repository`
 - `entity`
 - `dto`
+- `exception`
+
+`com.bridgework.recommend`
+- `controller`
+- `service`
+- `dto`
+- `config`
 - `exception`
 
 `com.bridgework.options`
@@ -50,6 +57,8 @@
 - 기능 0: 소셜 로그인/회원가입 완료, JWT 재발급/로그아웃/내 정보 조회
 - 기능 1: 프로필 CRUD(최대 3개), 기본 프로필 지정/변경
 - 기능 1-2(OCR): **2차 개발로 제외**
+- 기능 2: 퀵 맞춤 추천 게이트웨이(`aiEnabled` ON/OFF)
+- 기능 3: 지도 추천 게이트웨이(`aiEnabled` ON/OFF)
 - 공공데이터: 스케줄러 동기화 + 수동 실행 + 원본/정규화 저장
 - 화면 옵션/지도 레이어: 직무 트리, 지역/고용형태/급여방식 옵션, 근로지원인 수행기관 마커 조회
 
@@ -80,6 +89,7 @@
 
 ### 실행 예시
 - 로컬: `SPRING_PROFILES_ACTIVE=local`
+- 로컬 FastAPI 주소 변경(선택): `FASTAPI_BASE_URL=http://localhost:19000`
 - 운영: `SPRING_PROFILES_ACTIVE=prod`
 
 ## CI/CD (main -> EC2 무중단 배포)
@@ -633,6 +643,83 @@
 - 각 소스 전체 페이지 수집이 끝난 뒤 API 결과에 없는 기존 데이터는 DB에서 삭제
 - `KEPAD_RECRUITMENT`, `KEPAD_SUPPORT_AGENCY`는 네이버 지오코딩으로 `geo_latitude`, `geo_longitude`, `geo_matched_address`를 함께 저장
 
+### 공공데이터 DB 스키마(테이블/컬럼)
+
+#### 원본/운영 테이블
+- `public_data_record`
+  - `id`, `source_type`, `external_id`, `payload_json`, `payload_hash`, `raw_fetched_at`, `created_at`, `updated_at`
+- `public_data_record_field`
+  - `id`, `record_id`, `field_path`, `field_value`, `value_type`, `created_at`, `updated_at`
+- `public_data_sync_log`
+  - `id`, `source_type`, `request_source`, `status`, `processed_count`, `new_count`, `updated_count`, `failed_count`, `error_message`, `started_at`, `ended_at`
+- `public_data_source_snapshot`
+  - `source_type`, `latest_revision`, `latest_file_name`, `latest_modified_date`, `created_at`, `updated_at`
+
+#### 정규화 테이블 공통 컬럼
+모든 `pd_*` 테이블은 아래 공통 컬럼을 가진다.
+- `id`, `external_id`, `payload_hash`, `raw_fetched_at`, `created_at`, `updated_at`
+
+#### 정규화 테이블 ↔ 데이터셋 매핑
+- `pd_kepad_recruitment` ↔ `KEPAD_RECRUITMENT` (한국장애인고용공단_장애인 구인 실시간 현황)
+- `pd_kepad_job_category` ↔ `KEPAD_JOB_CATEGORY` (한국장애인고용공단_장애인 고용직무분류)
+- `pd_kepad_standard_workplace` ↔ `KEPAD_STANDARD_WORKPLACE` (한국장애인고용공단_장애인 표준사업장 실시간 조회)
+- `pd_kepad_support_agency` ↔ `KEPAD_SUPPORT_AGENCY` (한국장애인고용공단_근로지원인 수행기관 실시간 정보)
+- `pd_korail_week_person_facilities` ↔ `KORAIL_WEEK_PERSON_FACILITIES` (한국철도공사_편의시설정보)
+- `pd_seoul_transport_weak_wheelchair_lift` ↔ `SEOUL_TRANSPORT_WEAK_WHEELCHAIR_LIFT` (서울교통공사_교통약자이용정보(휠체어리프트))
+- `pd_transport_support_center` ↔ `TRANSPORT_SUPPORT_CENTER` (전국교통약자이동지원센터정보표준데이터)
+- `pd_rail_wheelchair_lift` ↔ `RAIL_WHEELCHAIR_LIFT` (국가철도공단_역사별 휠체어리프트 위치)
+- `pd_rail_wheelchair_lift_movement` ↔ `RAIL_WHEELCHAIR_LIFT_MOVEMENT` (역사별 휠체어리프트 이동동선)
+- `pd_seoul_wheelchair_lift` ↔ `SEOUL_WHEELCHAIR_LIFT` (서울교통공사_휠체어리프트 설치현황)
+- `pd_seoul_subway_entrance_lift` ↔ `SEOUL_SUBWAY_ENTRANCE_LIFT` (서울시 지하철 출입구 리프트 위치정보)
+- `pd_seoul_walking_network` ↔ `SEOUL_WALKING_NETWORK` (서울특별시_자치구별 도보 네트워크 공간정보)
+- `pd_nationwide_bus_stop` ↔ `NATIONWIDE_BUS_STOP` (국토교통부_전국 버스정류장 위치정보)
+- `pd_seoul_wheelchair_ramp_status` ↔ `SEOUL_WHEELCHAIR_RAMP_STATUS` (서울교통공사_휠체어경사로 설치 현황)
+- `pd_seoul_low_floor_bus_route_retention` ↔ `SEOUL_LOW_FLOOR_BUS_ROUTE_RETENTION` (서울시 저상버스 도입 노선 및 노선별 보유율)
+- `pd_nationwide_traffic_light` ↔ `NATIONWIDE_TRAFFIC_LIGHT` (전국신호등표준데이터)
+- `pd_nationwide_crosswalk` ↔ `NATIONWIDE_CROSSWALK` (전국횡단보도표준데이터)
+- `pd_vocational_training` ↔ `VOCATIONAL_TRAINING` (한국고용정보원_직업훈련_국민내일배움카드 훈련과정)
+- `pd_jobseeker_competency_program` ↔ `JOBSEEKER_COMPETENCY_PROGRAM` (한국고용정보원_구직자취업역량 강화프로그램)
+
+#### 정규화 테이블별 데이터 컬럼
+- `pd_kepad_recruitment`
+  - `buspla_name`, `cntct_no`, `comp_addr`, `emp_type`, `enter_type`, `env_both_hands`, `env_eyesight`, `env_lstn_talk`, `job_nm`, `offerreg_dt`, `reg_dt`, `regagn_name`, `req_career`, `req_educ`, `rno`, `rnum`, `salary`, `salary_type`, `term_date`, `env_hand_work`, `env_lift_power`, `env_stnd_walk`, `req_major`, `req_licens`, `geo_original_address`, `geo_matched_address`, `geo_latitude`, `geo_longitude`
+- `pd_kepad_job_category`
+  - `job_cd`, `job_cd_level`, `job_cd_nm`, `rnum`, `job_task`, `notice_cn`, `simlr_job`, `sprd_ockcls_yn`, `jobdevtip_cn`
+- `pd_kepad_standard_workplace`
+  - `address`, `auth_date`, `comp_auth_id`, `comp_biz_no`, `comp_name`, `comp_reg_no`, `comp_tel`, `comp_type_nm`, `president_name`, `product`, `rnum`, `comp_mgr_no`, `cancel_date`, `comp_cert`
+- `pd_kepad_support_agency`
+  - `exc_instn`, `exc_instn_addr`, `exc_instn_fxno`, `exc_instn_nm`, `exc_instn_telno`, `rnum`, `geo_original_address`, `geo_matched_address`, `geo_latitude`, `geo_longitude`
+- `pd_korail_week_person_facilities`
+  - `pwdbs_slwy_estnc`, `pwdbs_tolt_estnc`, `stn_cd`, `stn_nm`, `whlch_liftt_cnt`
+- `pd_seoul_transport_weak_wheelchair_lift`
+  - `fclt_no`, `fclt_nm`, `line_nm`, `stn_cd`, `stn_nm`, `stn_no`, `crtr_ymd`, `elvtr_sn`, `mng_no`, `vcnt_entrc_no`, `bgng_flr_grnd_udgd_se`, `bgng_flr`, `bgng_flr_dtl_pstn`, `end_flr_grnd_udgd_se`, `end_flr`, `end_flr_dtl_pstn`, `elvtr_len`, `elvtr_wdth_bt`, `limit_wht`, `oprtng_situ`
+- `pd_transport_support_center`
+  - `tfcwker_mvmn_cnter_nm`, `rdnmadr`, `lnmadr`, `latitude`, `longitude`, `car_hold_co`, `car_hold_knd`, `slope_vhcle_co`, `lift_vhcle_co`, `rcept_phone_number`, `rcept_itnadr`, `app_svc_nm`, `weekday_rcept_open_hhmm`, `weekday_rcept_colse_hhmm`, `wkend_rcept_open_hhmm`, `wkend_rcept_close_hhmm`, `weekday_oper_open_hhmm`, `weekday_oper_colse_hhmm`, `wkend_oper_open_hhmm`, `wkend_oper_close_hhmm`, `beffat_resve_pd`, `use_lmtt`, `inside_oprat_area`, `outside_oprat_area`, `use_trget`, `use_charge`, `institution_nm`, `phone_number`, `reference_date`, `instt_code`, `instt_nm`
+- `pd_rail_wheelchair_lift`
+  - `rail_opr_istt_cd`, `ln_cd`, `stin_cd`, `exit_no`, `dtl_loc`, `grnd_dv_nm_fr`, `run_stin_flor_fr`, `grnd_dv_nm_to`, `run_stin_flor_to`, `len`, `wd`, `bnd_wgt`, `ln_nm`, `stin_nm`
+- `pd_rail_wheelchair_lift_movement`
+  - `rail_opr_istt_cd`, `ln_cd`, `stin_cd`, `mv_path_mg_no`, `mv_path_dv_cd`, `mv_path_dv_nm`, `mv_tp_ordr`, `mv_dst`, `mv_cont_dtl`, `ln_nm`, `stin_nm`
+- `pd_seoul_wheelchair_lift`
+  - `entrance_no`, `management_no`, `length`, `data_base_date`, `elevator_serial_no`, `start_floor_detail_location`, `start_floor_operation_station_floor`, `start_floor_ground_basement`, `station_name`, `serial_number`, `end_floor_detail_location`, `end_floor_operation_station_floor`, `end_floor_ground_basement`, `width`, `weight_limit`, `line_name`
+- `pd_seoul_subway_entrance_lift`
+  - `node_type`, `node_wkt`, `node_id`, `node_type_cd`, `sgg_cd`, `sgg_nm`, `emd_cd`, `emd_nm`, `sbwy_stn_cd`, `sbwy_stn_nm`
+- `pd_seoul_walking_network`
+  - `node_type`, `node_wkt`, `node_id`, `node_type_cd`, `lnkg_wkt`, `lnkg_id`, `lnkg_type_cd`, `bgng_lnkg_id`, `end_lnkg_id`, `lnkg_len`, `sgg_cd`, `sgg_nm`, `emd_cd`, `emd_nm`, `expn_car_rd`, `sbwy_ntw`, `brg`, `tnl`, `ovrp`, `crswk`, `park`, `bldg`
+- `pd_nationwide_bus_stop`
+  - `longitude`, `admin_city_name`, `city_name`, `city_code`, `mobile_short_no`, `latitude`, `stop_name`, `stop_id`, `collected_at`
+- `pd_seoul_wheelchair_ramp_status`
+  - `line_name`, `station_name`, `division`, `location`
+- `pd_seoul_low_floor_bus_route_retention`
+  - `route_no`, `authorized_count`, `low_floor_bus_count`, `low_floor_retention_rate`
+- `pd_nationwide_traffic_light`
+  - `ctprvn_nm`, `signgu_nm`, `road_knd`, `road_route_no`, `road_route_nm`, `road_route_drc`, `rdnmadr`, `lnmadr`, `latitude`, `longitude`, `sgngnr_instl_mthd`, `road_type`, `prior_road_yn`, `tfclght_manage_no`, `tfclght_se`, `tfclght_color_knd`, `sgnasp_mthd`, `sgnasp_ordr`, `sgnasp_time`, `sot_knd`, `signl_ctrl_mthd`, `signl_time_mthd_type`, `opratn_yn`, `flashing_light_open_hhmm`, `flashing_light_close_hhmm`, `fnctng_sgngnr_yn`, `remndr_idct_yn`, `sond_sgngnr_yn`, `drcbrd_sn`, `institution_nm`, `phone_number`, `reference_date`, `instt_code`, `instt_nm`
+- `pd_nationwide_crosswalk`
+  - `ctprvn_nm`, `signgu_nm`, `road_nm`, `rdnmadr`, `lnmadr`, `crslk_manage_no`, `crslk_knd`, `bcycl_crslk_cmbnat_yn`, `highland_yn`, `latitude`, `longitude`, `cartrk_co`, `bt`, `et`, `tfclght_yn`, `fnctng_sgngnr_yn`, `sond_sgngnr_yn`, `green_sgngnr_time`, `red_sgngnr_time`, `tfcilnd_yn`, `ftpth_lower_yn`, `brll_blck_yn`, `cnctr_lght_fclty_yn`, `institution_nm`, `phone_number`, `reference_date`, `instt_code`, `instt_nm`
+- `pd_vocational_training`
+  - `address`, `certificate`, `contents`, `course_man`, `ei_empl_cnt3`, `ei_empl_cnt3_gt10`, `ei_empl_rate3`, `ei_empl_rate6`, `grade`, `inst_cd`, `ncs_cd`, `real_man`, `reg_course_man`, `stdg_scor`, `sub_title`, `sub_title_link`, `tel_no`, `title`, `title_icon`, `title_link`, `tra_end_date`, `tra_start_date`, `train_target`, `train_target_cd`, `trainst_cst_id`, `trng_area_cd`, `trpr_degr`, `trpr_id`, `wkend_se`, `yard_man`
+- `pd_jobseeker_competency_program`
+  - `org_nm`, `pgm_nm`, `pgm_sub_nm`, `pgm_target`, `pgm_stdt`, `pgm_endt`, `open_time_clcd`, `open_time`, `operation_time`, `open_plc_cont`
+
 ## 스케줄러
 - Cron: `bridgework.sync.cron`
 - 기본값: `0 0/30 * * * *`
@@ -660,6 +747,10 @@
 - 급여 방식 옵션: `GET /api/v1/options/salary-types`
 
 - 근로지원인 수행기관 마커: `GET /api/v1/map/support-agencies`
+
+- 퀵 추천 게이트웨이(기능2): `POST /api/v1/recommend/quick`
+- 지도 추천 게이트웨이(기능3): `POST /api/v1/recommend/map`
+  - 요청 바디: `{"aiEnabled": true|false, "profileId": 1}`
 
 - 전체 동기화: `POST /api/v1/sync/public-data/run`
 - 단일 동기화: `POST /api/v1/sync/public-data/run?sourceType=KEPAD_RECRUITMENT`

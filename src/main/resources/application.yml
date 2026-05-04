@@ -39,6 +39,11 @@ springdoc:
     tags-sorter: alpha
 
 bridgework:
+  recommend:
+    fastapi-base-url: http://localhost:8000
+    quick-path: /ai/v1/score/quick
+    map-path: /ai/v1/score/map
+    request-timeout: 20s
   sync:
     cron: "0 0/30 * * * *"
     request-timeout: 20s

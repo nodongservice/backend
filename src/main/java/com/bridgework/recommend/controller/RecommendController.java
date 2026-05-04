@@ -1,0 +1,63 @@
+package com.bridgework.recommend.controller;
+
+import com.bridgework.auth.exception.UnauthorizedException;
+import com.bridgework.auth.security.UserPrincipal;
+import com.bridgework.recommend.dto.RecommendRequestDto;
+import com.bridgework.recommend.dto.RecommendResponseDto;
+import com.bridgework.recommend.service.RecommendGatewayService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+@RestController
+@RequestMapping("/api/v1/recommend")
+@Tag(name = "Recommend", description = "추천 게이트웨이 API")
+@SecurityRequirement(name = "bearerAuth")
+public class RecommendController {
+
+    private final RecommendGatewayService recommendGatewayService;
+
+    public RecommendController(RecommendGatewayService recommendGatewayService) {
+        this.recommendGatewayService = recommendGatewayService;
+    }
+
+    @PostMapping("/quick")
+    @Operation(
+            summary = "기능2 퀵 맞춤 일자리 추천",
+            description = "aiEnabled=true면 선택 프로필만 FastAPI로 전달하고 응답을 반환한다. aiEnabled=false면 Spring이 DB 공고를 최신순으로 반환한다."
+    )
+    public ResponseEntity<RecommendResponseDto> recommendQuick(
+            Authentication authentication,
+            @RequestBody(required = false) RecommendRequestDto request
+    ) {
+        Long userId = currentUserId(authentication);
+        return ResponseEntity.ok(recommendGatewayService.recommendQuick(userId, request));
+    }
+
+    @PostMapping("/map")
+    @Operation(
+            summary = "기능3 지역 접근성 지도 추천",
+            description = "aiEnabled=true면 선택 프로필만 FastAPI로 전달하고 응답을 반환한다. aiEnabled=false면 Spring이 DB 공고를 반환한다."
+    )
+    public ResponseEntity<RecommendResponseDto> recommendMap(
+            Authentication authentication,
+            @RequestBody(required = false) RecommendRequestDto request
+    ) {
+        Long userId = currentUserId(authentication);
+        return ResponseEntity.ok(recommendGatewayService.recommendMap(userId, request));
+    }
+
+    private Long currentUserId(Authentication authentication) {
+        if (authentication == null || !(authentication.getPrincipal() instanceof UserPrincipal principal)) {
+            throw new UnauthorizedException();
+        }
+        return principal.getUserId();
+    }
+}
+
