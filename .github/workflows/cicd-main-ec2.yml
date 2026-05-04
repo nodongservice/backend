@@ -128,6 +128,8 @@ jobs:
               "      timeout: '3s'",
               "",
               "bridgework:",
+              "  recommend:",
+              "    fastapi-base-url: 'https://api.bridgework.cloud/api/py'",
               "  sync:",
               "    kric-station-code-file-path: '/app/resources/reference/operating_agency_station_codes_2026-02-28.xlsx'",
               f"    data-go-kr-service-key: {q(val('DATA_GO_KR_SERVICE_KEY'))}",
