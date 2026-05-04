@@ -1037,8 +1037,9 @@ public class PublicDataApiClient {
     }
 
     private String buildRequestUri(BridgeWorkSyncProperties.SourceConfig sourceConfig, int pageNo) {
+        String encodedServiceKey = resolveEncodedCredential(sourceConfig.getServiceKey(), "serviceKey", sourceConfig.getSourceType());
         UriComponentsBuilder builder = UriComponentsBuilder.fromHttpUrl(sourceConfig.getBaseUrl())
-                .queryParam("serviceKey", sourceConfig.getServiceKey())
+                .queryParam("serviceKey", encodedServiceKey)
                 .queryParam("pageNo", pageNo)
                 .queryParam("numOfRows", sourceConfig.getPageSize());
 
@@ -1053,9 +1054,10 @@ public class PublicDataApiClient {
                                                  int pageNo,
                                                  String filterField,
                                                  String filterValue) {
+        String encodedServiceKey = resolveEncodedCredential(sourceConfig.getServiceKey(), "serviceKey", sourceConfig.getSourceType());
         UriComponentsBuilder builder = UriComponentsBuilder
                 .fromHttpUrl("https://api.odcloud.kr/api/" + publicDataPk + "/v1/" + publicDataDetailPk)
-                .queryParam("serviceKey", sourceConfig.getServiceKey())
+                .queryParam("serviceKey", encodedServiceKey)
                 .queryParam("page", pageNo)
                 .queryParam("perPage", sourceConfig.getPageSize())
                 .queryParam("returnType", "JSON");
@@ -1101,9 +1103,10 @@ public class PublicDataApiClient {
             BridgeWorkSyncProperties.SourceConfig sourceConfig,
             KricStationCodeLoader.StationReference stationReference
     ) {
+        String encodedServiceKey = resolveEncodedCredential(sourceConfig.getServiceKey(), "serviceKey", sourceConfig.getSourceType());
         UriComponentsBuilder builder = UriComponentsBuilder
                 .fromHttpUrl(sourceConfig.getBaseUrl())
-                .queryParam("serviceKey", sourceConfig.getServiceKey())
+                .queryParam("serviceKey", encodedServiceKey)
                 .queryParam("railOprIsttCd", stationReference.railOprIsttCd())
                 .queryParam("lnCd", stationReference.lnCd())
                 .queryParam("stinCd", stationReference.stinCd());
@@ -1113,9 +1116,10 @@ public class PublicDataApiClient {
     }
 
     private String buildVocationalTrainingRequestUri(BridgeWorkSyncProperties.SourceConfig sourceConfig, int pageNo) {
+        String encodedAuthKey = resolveEncodedCredential(sourceConfig.getServiceKey(), "authKey", sourceConfig.getSourceType());
         UriComponentsBuilder builder = UriComponentsBuilder
                 .fromHttpUrl(sourceConfig.getBaseUrl())
-                .queryParam("authKey", sourceConfig.getServiceKey())
+                .queryParam("authKey", encodedAuthKey)
                 .queryParam("returnType", "XML")
                 .queryParam("pageNum", pageNo)
                 .queryParam("pageSize", sourceConfig.getPageSize());
@@ -1129,9 +1133,10 @@ public class PublicDataApiClient {
             int pageNo,
             String pgmStdt
     ) {
+        String encodedAuthKey = resolveEncodedCredential(sourceConfig.getServiceKey(), "authKey", sourceConfig.getSourceType());
         UriComponentsBuilder builder = UriComponentsBuilder
                 .fromHttpUrl(sourceConfig.getBaseUrl())
-                .queryParam("authKey", sourceConfig.getServiceKey())
+                .queryParam("authKey", encodedAuthKey)
                 .queryParam("returnType", "XML")
                 .queryParam("startPage", pageNo)
                 .queryParam("display", sourceConfig.getPageSize())
@@ -1168,6 +1173,25 @@ public class PublicDataApiClient {
         if (!hasResponseTypeParam) {
             builder.queryParam("_type", "json");
         }
+    }
+
+    private String resolveEncodedCredential(String rawCredential,
+                                            String credentialLabel,
+                                            PublicDataSourceType sourceType) {
+        if (rawCredential == null || rawCredential.isBlank()) {
+            throw new ExternalApiException(credentialLabel + " 값이 비어 있습니다: " + sourceType);
+        }
+
+        String trimmed = rawCredential.trim();
+        String decoded;
+        try {
+            decoded = UriUtils.decode(trimmed, StandardCharsets.UTF_8);
+        } catch (IllegalArgumentException exception) {
+            // 일부 키는 % 인코딩이 아닌 원문으로 저장될 수 있어 원문을 그대로 사용한다.
+            decoded = trimmed;
+        }
+
+        return UriUtils.encodeQueryParam(decoded, StandardCharsets.UTF_8);
     }
 
     private String fetchBody(String requestUri, PublicDataSourceType sourceType) {
