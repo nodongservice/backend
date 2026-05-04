@@ -14,7 +14,6 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.dataformat.xml.XmlMapper;
 import java.io.ByteArrayInputStream;
 import java.io.StringReader;
-import java.net.URLEncoder;
 import java.time.Duration;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -1183,19 +1182,9 @@ public class PublicDataApiClient {
             throw new ExternalApiException(credentialLabel + " 값이 비어 있습니다: " + sourceType);
         }
 
-        String trimmed = rawCredential.trim();
-        String decoded;
-        try {
-            decoded = UriUtils.decode(trimmed, StandardCharsets.UTF_8);
-        } catch (IllegalArgumentException exception) {
-            // 일부 키는 % 인코딩이 아닌 원문으로 저장될 수 있어 원문을 그대로 사용한다.
-            decoded = trimmed;
-        }
-
-        // requests(params=...)와 동일하게 application/x-www-form-urlencoded 규칙으로 인코딩한다.
-        // 특히 '+'는 반드시 %2B로 전달되어야 data.go.kr에서 공백으로 해석되지 않는다.
-        return URLEncoder.encode(decoded, StandardCharsets.UTF_8)
-                .replace("+", "%20");
+        // 운영 환경에서는 data.go.kr 인증키를 Encoding 값으로 주입한다고 가정한다.
+        // build(true)와 함께 사용하므로 이 값은 재인코딩/디코딩하지 않고 그대로 전달한다.
+        return rawCredential.trim();
     }
 
     private String fetchBody(String requestUri, PublicDataSourceType sourceType) {
