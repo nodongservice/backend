@@ -21,6 +21,9 @@ import java.security.NoSuchAlgorithmException;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.net.URI;
+import java.net.URLDecoder;
+import java.net.URLEncoder;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -56,7 +59,6 @@ import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.util.UriComponentsBuilder;
-import org.springframework.web.util.UriUtils;
 import reactor.util.retry.Retry;
 
 @Component
@@ -80,6 +82,8 @@ public class PublicDataApiClient {
             Pattern.compile("api\\.odcloud\\.kr/api/([0-9]{5,})/v1/([0-9]{5,})");
     private static final Pattern DATE_TOKEN_PATTERN =
             Pattern.compile("(20\\d{2})[./-](\\d{1,2})[./-](\\d{1,2})");
+    private static final Pattern CREDENTIAL_QUERY_PARAM_PATTERN =
+            Pattern.compile("([?&](?:serviceKey|authKey)=)([^&]+)");
     private static final LocalDate UNKNOWN_MODIFIED_DATE = LocalDate.of(1970, 1, 1);
     private static final DateTimeFormatter SEOUL_FILE_MODIFIED_DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy.MM.dd");
     private static final String SEOUL_FILE_DOWNLOAD_URL = "https://datafile.seoul.go.kr/bigfile/iot/inf/nio_download.do?useCache=false";
@@ -1039,13 +1043,13 @@ public class PublicDataApiClient {
     private String buildRequestUri(BridgeWorkSyncProperties.SourceConfig sourceConfig, int pageNo) {
         String encodedServiceKey = resolveEncodedCredential(sourceConfig.getServiceKey(), "serviceKey", sourceConfig.getSourceType());
         UriComponentsBuilder builder = UriComponentsBuilder.fromHttpUrl(sourceConfig.getBaseUrl())
-                .queryParam("serviceKey", encodedServiceKey)
                 .queryParam("pageNo", pageNo)
                 .queryParam("numOfRows", sourceConfig.getPageSize());
 
         appendJsonResponseTypeParam(builder, sourceConfig.getQueryParams());
         applyQueryParams(builder, sourceConfig.getQueryParams());
-        return builder.build(true).toUriString();
+        String baseUri = builder.build().encode(StandardCharsets.UTF_8).toUriString();
+        return appendEncodedQueryParam(baseUri, "serviceKey", encodedServiceKey);
     }
 
     private String buildDataGoFileDataRequestUri(BridgeWorkSyncProperties.SourceConfig sourceConfig,
@@ -1057,20 +1061,18 @@ public class PublicDataApiClient {
         String encodedServiceKey = resolveEncodedCredential(sourceConfig.getServiceKey(), "serviceKey", sourceConfig.getSourceType());
         UriComponentsBuilder builder = UriComponentsBuilder
                 .fromHttpUrl("https://api.odcloud.kr/api/" + publicDataPk + "/v1/" + publicDataDetailPk)
-                .queryParam("serviceKey", encodedServiceKey)
                 .queryParam("page", pageNo)
                 .queryParam("perPage", sourceConfig.getPageSize())
                 .queryParam("returnType", "JSON");
 
         if (filterField != null && !filterField.isBlank() && filterValue != null && !filterValue.isBlank()) {
             // fileData 변환 API는 컬럼명 기반 필터를 지원한다.
-            String encodedFilterField = UriUtils.encodeQueryParam(filterField.trim(), StandardCharsets.UTF_8);
-            String encodedFilterValue = UriUtils.encodeQueryParam(filterValue.trim(), StandardCharsets.UTF_8);
-            builder.queryParam(encodedFilterField, encodedFilterValue);
+            builder.queryParam(filterField.trim(), filterValue.trim());
         }
 
         applyQueryParams(builder, sourceConfig.getQueryParams());
-        return builder.build(true).toUriString();
+        String baseUri = builder.build().encode(StandardCharsets.UTF_8).toUriString();
+        return appendEncodedQueryParam(baseUri, "serviceKey", encodedServiceKey);
     }
 
     private String buildSeoulOpenApiRequestUri(
@@ -1096,7 +1098,7 @@ public class PublicDataApiClient {
             });
         }
 
-        return builder.build(true).toUriString();
+        return builder.build().encode(StandardCharsets.UTF_8).toUriString();
     }
 
     private String buildRailWheelchairLiftRequestUri(
@@ -1106,26 +1108,26 @@ public class PublicDataApiClient {
         String encodedServiceKey = resolveEncodedCredential(sourceConfig.getServiceKey(), "serviceKey", sourceConfig.getSourceType());
         UriComponentsBuilder builder = UriComponentsBuilder
                 .fromHttpUrl(sourceConfig.getBaseUrl())
-                .queryParam("serviceKey", encodedServiceKey)
                 .queryParam("railOprIsttCd", stationReference.railOprIsttCd())
                 .queryParam("lnCd", stationReference.lnCd())
                 .queryParam("stinCd", stationReference.stinCd());
 
         applyQueryParams(builder, sourceConfig.getQueryParams());
-        return builder.build(true).toUriString();
+        String baseUri = builder.build().encode(StandardCharsets.UTF_8).toUriString();
+        return appendEncodedQueryParam(baseUri, "serviceKey", encodedServiceKey);
     }
 
     private String buildVocationalTrainingRequestUri(BridgeWorkSyncProperties.SourceConfig sourceConfig, int pageNo) {
         String encodedAuthKey = resolveEncodedCredential(sourceConfig.getServiceKey(), "authKey", sourceConfig.getSourceType());
         UriComponentsBuilder builder = UriComponentsBuilder
                 .fromHttpUrl(sourceConfig.getBaseUrl())
-                .queryParam("authKey", encodedAuthKey)
                 .queryParam("returnType", "XML")
                 .queryParam("pageNum", pageNo)
                 .queryParam("pageSize", sourceConfig.getPageSize());
 
         applyQueryParams(builder, sourceConfig.getQueryParams());
-        return builder.build(true).toUriString();
+        String baseUri = builder.build().encode(StandardCharsets.UTF_8).toUriString();
+        return appendEncodedQueryParam(baseUri, "authKey", encodedAuthKey);
     }
 
     private String buildJobseekerCompetencyProgramRequestUri(
@@ -1136,14 +1138,14 @@ public class PublicDataApiClient {
         String encodedAuthKey = resolveEncodedCredential(sourceConfig.getServiceKey(), "authKey", sourceConfig.getSourceType());
         UriComponentsBuilder builder = UriComponentsBuilder
                 .fromHttpUrl(sourceConfig.getBaseUrl())
-                .queryParam("authKey", encodedAuthKey)
                 .queryParam("returnType", "XML")
                 .queryParam("startPage", pageNo)
                 .queryParam("display", sourceConfig.getPageSize())
                 .queryParam("pgmStdt", pgmStdt);
 
         applyQueryParams(builder, sourceConfig.getQueryParams());
-        return builder.build(true).toUriString();
+        String baseUri = builder.build().encode(StandardCharsets.UTF_8).toUriString();
+        return appendEncodedQueryParam(baseUri, "authKey", encodedAuthKey);
     }
 
     private void applyQueryParams(UriComponentsBuilder builder, Map<String, String> queryParams) {
@@ -1181,17 +1183,46 @@ public class PublicDataApiClient {
         if (rawCredential == null || rawCredential.isBlank()) {
             throw new ExternalApiException(credentialLabel + " 값이 비어 있습니다: " + sourceType);
         }
+        String trimmed = rawCredential.trim();
 
-        // 운영 환경에서는 data.go.kr 인증키를 Encoding 값으로 주입한다고 가정한다.
-        // build(true)와 함께 사용하므로 이 값은 재인코딩/디코딩하지 않고 그대로 전달한다.
-        return rawCredential.trim();
+        // 입력값이 Encoding 키(%2F...) 또는 Decoding 키(/, +, =) 어떤 형태든
+        // 원문으로 정규화 후 queryParam으로 안전하게 1회 인코딩한다.
+        String decoded = decodePercentEscapesSafely(trimmed);
+        String normalized = URLEncoder.encode(decoded, StandardCharsets.UTF_8);
+
+        log.debug("[CREDENTIAL] source={} label={} rawLength={} normalizedLength={} encodedForm={}",
+                sourceType,
+                credentialLabel,
+                trimmed.length(),
+                normalized.length(),
+                trimmed.contains("%"));
+        return normalized;
+    }
+
+    private String appendEncodedQueryParam(String uri, String name, String encodedValue) {
+        String separator = uri.contains("?") ? "&" : "?";
+        return uri + separator + name + "=" + encodedValue;
+    }
+
+    private String decodePercentEscapesSafely(String value) {
+        if (value == null || value.isBlank() || !value.contains("%")) {
+            return value;
+        }
+        try {
+            // serviceKey는 '+'가 실제 문자일 수 있으므로 디코딩 시 공백 치환을 방지한다.
+            String plusEscaped = value.replace("+", "%2B");
+            return URLDecoder.decode(plusEscaped, StandardCharsets.UTF_8);
+        } catch (IllegalArgumentException exception) {
+            // 잘못된 % escape 입력은 원문을 유지해 후속 인코딩에서 안전하게 처리한다.
+            return value;
+        }
     }
 
     private String fetchBody(String requestUri, PublicDataSourceType sourceType) {
-        log.info("[HTTP] source={} uri={}", sourceType, requestUri);
+        log.info("[HTTP] source={} uri={}", sourceType, maskCredentialQueryParams(requestUri));
         return webClient
                 .get()
-                .uri(requestUri)
+                .uri(URI.create(requestUri))
                 .retrieve()
                 .onStatus(status -> status.value() == 429 || status.is5xxServerError(), clientResponse ->
                         clientResponse.bodyToMono(String.class)
@@ -1217,6 +1248,14 @@ public class PublicDataApiClient {
                 )
                 .blockOptional()
                 .orElseThrow(() -> new ExternalApiException("공공데이터 API 응답이 비어 있습니다: " + sourceType));
+    }
+
+    private String maskCredentialQueryParams(String uri) {
+        if (uri == null || uri.isBlank()) {
+            return uri;
+        }
+        Matcher matcher = CREDENTIAL_QUERY_PARAM_PATTERN.matcher(uri);
+        return matcher.replaceAll("$1***");
     }
 
     private boolean isRetryableApiException(Throwable throwable) {

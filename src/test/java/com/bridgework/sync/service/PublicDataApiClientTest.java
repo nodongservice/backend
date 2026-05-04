@@ -10,6 +10,7 @@ import java.io.IOException;
 import java.time.Duration;
 import okhttp3.mockwebserver.MockResponse;
 import okhttp3.mockwebserver.MockWebServer;
+import okhttp3.mockwebserver.RecordedRequest;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -93,6 +94,58 @@ class PublicDataApiClientTest {
         assertThat(response.items()).hasSize(1);
         assertThat(response.items().get(0).externalId()).hasSize(64);
         assertThat(response.hasNext()).isFalse();
+    }
+
+    @Test
+    void fetchPage_whenServiceKeyIsDecodingForm_thenEncodesExactlyOnce() throws InterruptedException {
+        mockWebServer.enqueue(new MockResponse()
+                .setHeader("Content-Type", "application/json")
+                .setBody("""
+                        {
+                          "response": {
+                            "body": {
+                              "items": {"item": {"id": "A-1"}},
+                              "totalCount": 1
+                            }
+                          }
+                        }
+                        """));
+
+        BridgeWorkSyncProperties.SourceConfig sourceConfig = sourceConfig("id", 1);
+        sourceConfig.setServiceKey("abc/def+ghi==");
+        publicDataApiClient.fetchPage(sourceConfig, 1);
+
+        RecordedRequest request = mockWebServer.takeRequest();
+        assertThat(request.getRequestUrl().toString()).contains("serviceKey=abc%2Fdef%2Bghi%3D%3D");
+        assertThat(request.getRequestUrl().toString()).doesNotContain("%252F");
+        assertThat(request.getRequestUrl().toString()).doesNotContain("%252B");
+        assertThat(request.getRequestUrl().toString()).doesNotContain("%253D");
+    }
+
+    @Test
+    void fetchPage_whenServiceKeyIsEncodingForm_thenDoesNotDoubleEncode() throws InterruptedException {
+        mockWebServer.enqueue(new MockResponse()
+                .setHeader("Content-Type", "application/json")
+                .setBody("""
+                        {
+                          "response": {
+                            "body": {
+                              "items": {"item": {"id": "A-1"}},
+                              "totalCount": 1
+                            }
+                          }
+                        }
+                        """));
+
+        BridgeWorkSyncProperties.SourceConfig sourceConfig = sourceConfig("id", 1);
+        sourceConfig.setServiceKey("abc%2Fdef%2Bghi%3D%3D");
+        publicDataApiClient.fetchPage(sourceConfig, 1);
+
+        RecordedRequest request = mockWebServer.takeRequest();
+        assertThat(request.getRequestUrl().toString()).contains("serviceKey=abc%2Fdef%2Bghi%3D%3D");
+        assertThat(request.getRequestUrl().toString()).doesNotContain("%252F");
+        assertThat(request.getRequestUrl().toString()).doesNotContain("%252B");
+        assertThat(request.getRequestUrl().toString()).doesNotContain("%253D");
     }
 
     private BridgeWorkSyncProperties.SourceConfig sourceConfig(String itemIdField, int pageSize) {
