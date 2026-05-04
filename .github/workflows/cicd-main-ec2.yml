@@ -141,6 +141,8 @@ jobs:
               f"    naver-geocode-api-key: {q(val('NAVER_GEOCODE_API_KEY'))}",
               "  auth:",
               "    allowed-origins:",
+              "      - 'https://bridgework.cloud'",
+              "      - 'https://www.bridgework.cloud'",
               "      - 'http://localhost:3000'",
               "    jwt:",
               f"      secret: {q(val('BRIDGEWORK_AUTH_JWT_SECRET'))}",

@@ -28,6 +28,8 @@ bridgework:
     seoul-open-api-key: ${SEOUL_OPEN_API_KEY}
   auth:
     allowed-origins:
+      - https://bridgework.cloud
+      - https://www.bridgework.cloud
       - http://localhost:3000
     jwt:
       secret: ${BRIDGEWORK_AUTH_JWT_SECRET}
