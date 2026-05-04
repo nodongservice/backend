@@ -55,6 +55,7 @@ import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.util.UriComponentsBuilder;
+import org.springframework.web.util.UriUtils;
 import reactor.util.retry.Retry;
 
 @Component
@@ -857,7 +858,9 @@ public class PublicDataApiClient {
 
         if (filterField != null && !filterField.isBlank() && filterValue != null && !filterValue.isBlank()) {
             // fileData 변환 API는 컬럼명 기반 필터를 지원한다.
-            builder.queryParam(filterField.trim(), filterValue.trim());
+            String encodedFilterField = UriUtils.encodeQueryParam(filterField.trim(), StandardCharsets.UTF_8);
+            String encodedFilterValue = UriUtils.encodeQueryParam(filterValue.trim(), StandardCharsets.UTF_8);
+            builder.queryParam(encodedFilterField, encodedFilterValue);
         }
 
         applyQueryParams(builder, sourceConfig.getQueryParams());
