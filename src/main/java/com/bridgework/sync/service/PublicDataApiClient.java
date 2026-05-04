@@ -14,6 +14,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.dataformat.xml.XmlMapper;
 import java.io.ByteArrayInputStream;
 import java.io.StringReader;
+import java.net.URLEncoder;
 import java.time.Duration;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -1191,7 +1192,10 @@ public class PublicDataApiClient {
             decoded = trimmed;
         }
 
-        return UriUtils.encodeQueryParam(decoded, StandardCharsets.UTF_8);
+        // requests(params=...)와 동일하게 application/x-www-form-urlencoded 규칙으로 인코딩한다.
+        // 특히 '+'는 반드시 %2B로 전달되어야 data.go.kr에서 공백으로 해석되지 않는다.
+        return URLEncoder.encode(decoded, StandardCharsets.UTF_8)
+                .replace("+", "%20");
     }
 
     private String fetchBody(String requestUri, PublicDataSourceType sourceType) {
