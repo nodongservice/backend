@@ -24,7 +24,8 @@ public class BridgeWorkSyncProperties {
     private Duration requestTimeout = Duration.ofSeconds(20);
 
     private String kricStationCodeFilePath;
-    private String kakaoGeocodeRestKey;
+    private String naverGeocodeApiKeyId;
+    private String naverGeocodeApiKey;
 
     @Valid
     private List<SourceConfig> sources = new ArrayList<>();
@@ -53,12 +54,20 @@ public class BridgeWorkSyncProperties {
         this.kricStationCodeFilePath = kricStationCodeFilePath;
     }
 
-    public String getKakaoGeocodeRestKey() {
-        return kakaoGeocodeRestKey;
+    public String getNaverGeocodeApiKeyId() {
+        return naverGeocodeApiKeyId;
     }
 
-    public void setKakaoGeocodeRestKey(String kakaoGeocodeRestKey) {
-        this.kakaoGeocodeRestKey = kakaoGeocodeRestKey;
+    public void setNaverGeocodeApiKeyId(String naverGeocodeApiKeyId) {
+        this.naverGeocodeApiKeyId = naverGeocodeApiKeyId;
+    }
+
+    public String getNaverGeocodeApiKey() {
+        return naverGeocodeApiKey;
+    }
+
+    public void setNaverGeocodeApiKey(String naverGeocodeApiKey) {
+        this.naverGeocodeApiKey = naverGeocodeApiKey;
     }
 
     public List<SourceConfig> getSources() {

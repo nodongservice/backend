@@ -26,19 +26,19 @@ public class PublicDataNormalizedStoreService {
     private final NamedParameterJdbcTemplate namedParameterJdbcTemplate;
     private final ObjectMapper objectMapper;
     private final NormalizedSourceRegistry normalizedSourceRegistry;
-    private final KakaoGeocodingService kakaoGeocodingService;
+    private final NaverGeocodingService naverGeocodingService;
     private final BridgeWorkSyncProperties syncProperties;
     private final Map<PublicDataSourceType, String> upsertSqlCache = new HashMap<>();
 
     public PublicDataNormalizedStoreService(NamedParameterJdbcTemplate namedParameterJdbcTemplate,
                                             ObjectMapper objectMapper,
                                             NormalizedSourceRegistry normalizedSourceRegistry,
-                                            KakaoGeocodingService kakaoGeocodingService,
+                                            NaverGeocodingService naverGeocodingService,
                                             BridgeWorkSyncProperties syncProperties) {
         this.namedParameterJdbcTemplate = namedParameterJdbcTemplate;
         this.objectMapper = objectMapper;
         this.normalizedSourceRegistry = normalizedSourceRegistry;
-        this.kakaoGeocodingService = kakaoGeocodingService;
+        this.naverGeocodingService = naverGeocodingService;
         this.syncProperties = syncProperties;
     }
 
@@ -160,8 +160,13 @@ public class PublicDataNormalizedStoreService {
             return;
         }
 
-        String kakaoRestApiKey = syncProperties.getKakaoGeocodeRestKey();
-        Optional<NormalizedGeoPoint> geoPoint = kakaoGeocodingService.geocode(kakaoRestApiKey, originalAddress);
+        String naverApiKeyId = syncProperties.getNaverGeocodeApiKeyId();
+        String naverApiKey = syncProperties.getNaverGeocodeApiKey();
+        Optional<NormalizedGeoPoint> geoPoint = naverGeocodingService.geocode(
+                naverApiKeyId,
+                naverApiKey,
+                originalAddress
+        );
 
         if (geoPoint.isEmpty()) {
             params.addValue(definition.geocodeLatitudeColumn(), null);

@@ -91,10 +91,12 @@ public class PublicDataSyncService {
             if (sourceConfig.isEnabled()
                     && (sourceConfig.getSourceType() == PublicDataSourceType.KEPAD_RECRUITMENT
                     || sourceConfig.getSourceType() == PublicDataSourceType.KEPAD_SUPPORT_AGENCY)
-                    && (syncProperties.getKakaoGeocodeRestKey() == null
-                    || syncProperties.getKakaoGeocodeRestKey().isBlank())) {
+                    && (syncProperties.getNaverGeocodeApiKeyId() == null
+                    || syncProperties.getNaverGeocodeApiKeyId().isBlank()
+                    || syncProperties.getNaverGeocodeApiKey() == null
+                    || syncProperties.getNaverGeocodeApiKey().isBlank())) {
                 throw new IllegalStateException(
-                        "KEPAD_RECRUITMENT/KEPAD_SUPPORT_AGENCY 활성화 시 kakaoGeocodeRestKey가 필요합니다."
+                        "KEPAD_RECRUITMENT/KEPAD_SUPPORT_AGENCY 활성화 시 naverGeocodeApiKeyId/naverGeocodeApiKey가 필요합니다."
                 );
             }
         }

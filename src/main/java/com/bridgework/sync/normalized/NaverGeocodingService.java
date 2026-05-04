@@ -10,20 +10,20 @@ import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.util.UriComponentsBuilder;
 
 @Component
-public class KakaoGeocodingService {
+public class NaverGeocodingService {
 
-    private static final String GEOCODE_ENDPOINT = "https://dapi.kakao.com/v2/local/search/address.json";
+    private static final String GEOCODE_ENDPOINT = "https://maps.apigw.ntruss.com/map-geocode/v2/geocode";
 
     private final WebClient webClient;
     private final ObjectMapper objectMapper;
 
-    public KakaoGeocodingService(WebClient webClient, ObjectMapper objectMapper) {
+    public NaverGeocodingService(WebClient webClient, ObjectMapper objectMapper) {
         this.webClient = webClient;
         this.objectMapper = objectMapper;
     }
 
-    public Optional<NormalizedGeoPoint> geocode(String restApiKey, String queryAddress) {
-        if (restApiKey == null || restApiKey.isBlank()) {
+    public Optional<NormalizedGeoPoint> geocode(String apiKeyId, String apiKey, String queryAddress) {
+        if (apiKeyId == null || apiKeyId.isBlank() || apiKey == null || apiKey.isBlank()) {
             return Optional.empty();
         }
         if (queryAddress == null || queryAddress.isBlank()) {
@@ -38,21 +38,23 @@ public class KakaoGeocodingService {
         String responseBody = webClient
                 .get()
                 .uri(requestUri)
-                .header("Authorization", "KakaoAK " + restApiKey)
+                .header("x-ncp-apigw-api-key-id", apiKeyId)
+                .header("x-ncp-apigw-api-key", apiKey)
+                .header("Accept", "application/json")
                 .retrieve()
                 .bodyToMono(String.class)
                 .timeout(Duration.ofSeconds(10))
                 .blockOptional()
-                .orElseThrow(() -> new ExternalApiException("카카오 지오코딩 응답이 비어 있습니다."));
+                .orElseThrow(() -> new ExternalApiException("네이버 지오코딩 응답이 비어 있습니다."));
 
         try {
             JsonNode root = objectMapper.readTree(responseBody);
-            JsonNode documents = root.path("documents");
-            if (!documents.isArray() || documents.isEmpty()) {
+            JsonNode addresses = root.path("addresses");
+            if (!addresses.isArray() || addresses.isEmpty()) {
                 return Optional.empty();
             }
 
-            JsonNode first = documents.get(0);
+            JsonNode first = addresses.get(0);
             String latitudeText = first.path("y").asText("").trim();
             String longitudeText = first.path("x").asText("").trim();
             if (latitudeText.isBlank() || longitudeText.isBlank()) {
@@ -61,10 +63,12 @@ public class KakaoGeocodingService {
 
             Double latitude = Double.valueOf(latitudeText);
             Double longitude = Double.valueOf(longitudeText);
-            String matchedAddress = first.path("address_name").asText("").trim();
+            String roadAddress = first.path("roadAddress").asText("").trim();
+            String jibunAddress = first.path("jibunAddress").asText("").trim();
+            String matchedAddress = roadAddress.isBlank() ? jibunAddress : roadAddress;
             return Optional.of(new NormalizedGeoPoint(latitude, longitude, matchedAddress));
         } catch (Exception exception) {
-            throw new ExternalApiException("카카오 지오코딩 파싱 실패: " + exception.getMessage());
+            throw new ExternalApiException("네이버 지오코딩 파싱 실패: " + exception.getMessage());
         }
     }
 }

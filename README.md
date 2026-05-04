@@ -68,7 +68,8 @@
 - `SEOUL_OPEN_API_KEY`
 - `WORK24_VOCATIONAL_TRAINING_AUTH_KEY`
 - `WORK24_COMPETENCY_AUTH_KEY`
-- `KAKAO_GEOCODE_REST_KEY`
+- `NAVER_GEOCODE_API_KEY_ID`
+- `NAVER_GEOCODE_API_KEY`
 - `BRIDGEWORK_AUTH_JWT_SECRET`
 - `KAKAO_CLIENT_SECRET`
 - `NAVER_CLIENT_SECRET`
@@ -105,7 +106,8 @@
 - `WORK24_VOCATIONAL_TRAINING_AUTH_KEY`
 - `WORK24_COMPETENCY_AUTH_KEY`
 - `SEOUL_OPEN_API_KEY`
-- `KAKAO_GEOCODE_REST_KEY`
+- `NAVER_GEOCODE_API_KEY_ID`
+- `NAVER_GEOCODE_API_KEY`
 - `BRIDGEWORK_AUTH_JWT_SECRET`
 - `KAKAO_CLIENT_SECRET`
 - `NAVER_CLIENT_SECRET`
@@ -629,7 +631,7 @@
 - `pd_*` 정규화 테이블: 데이터셋별 컬럼형 저장(스코어링/지도 조회용)
 - 변경건만 payload/필드 재저장, 동일건은 수집시각만 갱신
 - 각 소스 전체 페이지 수집이 끝난 뒤 API 결과에 없는 기존 데이터는 DB에서 삭제
-- `KEPAD_RECRUITMENT`, `KEPAD_SUPPORT_AGENCY`는 카카오 지오코딩으로 `geo_latitude`, `geo_longitude`, `geo_matched_address`를 함께 저장
+- `KEPAD_RECRUITMENT`, `KEPAD_SUPPORT_AGENCY`는 네이버 지오코딩으로 `geo_latitude`, `geo_longitude`, `geo_matched_address`를 함께 저장
 
 ## 스케줄러
 - Cron: `bridgework.sync.cron`
