@@ -22,6 +22,7 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.HexFormat;
 import java.util.Iterator;
@@ -71,6 +72,15 @@ public class PublicDataApiClient {
     private static final Pattern PUBLIC_DATA_PK_PATTERN = Pattern.compile("id=\"publicDataPk\"[^>]*value=\"([^\"]+)\"");
     private static final Pattern PUBLIC_DATA_DETAIL_PK_PATTERN =
             Pattern.compile("id=\"publicDataDetailPk\"[^>]*value=\"([^\"]+)\"");
+    private static final Pattern PUBLIC_DATA_PK_CANDIDATE_PATTERN =
+            Pattern.compile("publicDataPk[^0-9]*([0-9]{5,})");
+    private static final Pattern PUBLIC_DATA_DETAIL_PK_CANDIDATE_PATTERN =
+            Pattern.compile("publicDataDetailPk[^0-9]*([0-9]{5,})");
+    private static final Pattern ODCLOUD_ENDPOINT_PATTERN =
+            Pattern.compile("api\\.odcloud\\.kr/api/([0-9]{5,})/v1/([0-9]{5,})");
+    private static final Pattern DATE_TOKEN_PATTERN =
+            Pattern.compile("(20\\d{2})[./-](\\d{1,2})[./-](\\d{1,2})");
+    private static final LocalDate UNKNOWN_MODIFIED_DATE = LocalDate.of(1970, 1, 1);
     private static final DateTimeFormatter SEOUL_FILE_MODIFIED_DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy.MM.dd");
     private static final String SEOUL_FILE_DOWNLOAD_URL = "https://datafile.seoul.go.kr/bigfile/iot/inf/nio_download.do?useCache=false";
 
@@ -150,16 +160,25 @@ public class PublicDataApiClient {
     }
 
     public Optional<SourceLatestRevisionDto> fetchLatestRevision(BridgeWorkSyncProperties.SourceConfig sourceConfig) {
-        if (!isSeoulDatasetFileSource(sourceConfig.getSourceType())) {
-            return Optional.empty();
+        if (isSeoulDatasetFileSource(sourceConfig.getSourceType())) {
+            SeoulDatasetLatestFile latestFile = resolveSeoulDatasetLatestFile(sourceConfig);
+            return Optional.of(new SourceLatestRevisionDto(
+                    latestFile.revisionKey(),
+                    latestFile.fileName(),
+                    latestFile.modifiedDate().toString()
+            ));
         }
 
-        SeoulDatasetLatestFile latestFile = resolveSeoulDatasetLatestFile(sourceConfig);
-        return Optional.of(new SourceLatestRevisionDto(
-                latestFile.revisionKey(),
-                latestFile.fileName(),
-                latestFile.modifiedDate().toString()
-        ));
+        if (isDataGoFileDataSource(sourceConfig.getSourceType())) {
+            DataGoFileDataVersion latestVersion = resolveLatestDataGoFileDataVersion(sourceConfig);
+            return Optional.of(new SourceLatestRevisionDto(
+                    latestVersion.revisionKey(),
+                    latestVersion.displayName(),
+                    latestVersion.modifiedDate().toString()
+            ));
+        }
+
+        return Optional.empty();
     }
 
     private PublicDataApiPageResponseDto fetchSeoulWheelchairLiftPage(
@@ -170,9 +189,9 @@ public class PublicDataApiClient {
             return new PublicDataApiPageResponseDto(List.of(), false);
         }
 
-        String fileDataPageBody = fetchBody(sourceConfig.getBaseUrl(), sourceConfig.getSourceType());
-        String publicDataPk = extractFileDataField(fileDataPageBody, PUBLIC_DATA_PK_PATTERN, "publicDataPk");
-        String publicDataDetailPk = extractFileDataField(fileDataPageBody, PUBLIC_DATA_DETAIL_PK_PATTERN, "publicDataDetailPk");
+        DataGoFileDataVersion latestVersion = resolveLatestDataGoFileDataVersion(sourceConfig);
+        String publicDataPk = latestVersion.publicDataPk();
+        String publicDataDetailPk = latestVersion.publicDataDetailPk();
 
         List<String> stationNames = kricStationCodeLoader.loadSeoulStationNames();
         List<PublicDataApiItemDto> aggregatedItems = new ArrayList<>();
@@ -219,9 +238,9 @@ public class PublicDataApiClient {
             return new PublicDataApiPageResponseDto(List.of(), false);
         }
 
-        String fileDataPageBody = fetchBody(sourceConfig.getBaseUrl(), sourceConfig.getSourceType());
-        String publicDataPk = extractFileDataField(fileDataPageBody, PUBLIC_DATA_PK_PATTERN, "publicDataPk");
-        String publicDataDetailPk = extractFileDataField(fileDataPageBody, PUBLIC_DATA_DETAIL_PK_PATTERN, "publicDataDetailPk");
+        DataGoFileDataVersion latestVersion = resolveLatestDataGoFileDataVersion(sourceConfig);
+        String publicDataPk = latestVersion.publicDataPk();
+        String publicDataDetailPk = latestVersion.publicDataDetailPk();
 
         List<PublicDataApiItemDto> items = fetchAllDataGoFileDataItems(
                 sourceConfig,
@@ -232,6 +251,141 @@ public class PublicDataApiClient {
                 "all"
         );
         return new PublicDataApiPageResponseDto(items, false);
+    }
+
+    private DataGoFileDataVersion resolveLatestDataGoFileDataVersion(BridgeWorkSyncProperties.SourceConfig sourceConfig) {
+        String fileDataPageBody = fetchBody(sourceConfig.getBaseUrl(), sourceConfig.getSourceType());
+        String fallbackPublicDataPk = extractFileDataField(fileDataPageBody, PUBLIC_DATA_PK_PATTERN, "publicDataPk");
+        String fallbackPublicDataDetailPk = extractFileDataField(fileDataPageBody, PUBLIC_DATA_DETAIL_PK_PATTERN, "publicDataDetailPk");
+
+        List<DataGoFileDataCandidate> candidates = resolveDataGoFileDataCandidates(
+                fileDataPageBody,
+                fallbackPublicDataPk,
+                sourceConfig.getSourceType()
+        );
+        DataGoFileDataCandidate selected = candidates.stream()
+                .max(Comparator
+                        .comparing((DataGoFileDataCandidate candidate) -> candidate.modifiedDate() != null)
+                        .thenComparing(candidate -> Optional.ofNullable(candidate.modifiedDate()).orElse(UNKNOWN_MODIFIED_DATE))
+                        .thenComparingInt(candidate -> parseIntSafe(candidate.publicDataDetailPk())))
+                .orElse(new DataGoFileDataCandidate(
+                        fallbackPublicDataPk,
+                        fallbackPublicDataDetailPk,
+                        null,
+                        "fallback-hidden-input"
+                ));
+
+        LocalDate modifiedDate = Optional.ofNullable(selected.modifiedDate()).orElse(UNKNOWN_MODIFIED_DATE);
+        String revisionDate = selected.modifiedDate() == null ? "unknown" : modifiedDate.toString();
+        String displayName = "publicDataDetailPk=" + selected.publicDataDetailPk();
+        String revisionKey = revisionDate + "|" + selected.publicDataPk() + "|" + selected.publicDataDetailPk();
+
+        log.info("[FILEDATA] source={} selected publicDataPk={} publicDataDetailPk={} modifiedDate={} matchedFrom={}",
+                sourceConfig.getSourceType(),
+                selected.publicDataPk(),
+                selected.publicDataDetailPk(),
+                selected.modifiedDate(),
+                selected.contextLabel());
+
+        return new DataGoFileDataVersion(
+                selected.publicDataPk(),
+                selected.publicDataDetailPk(),
+                revisionKey,
+                displayName,
+                modifiedDate
+        );
+    }
+
+    private List<DataGoFileDataCandidate> resolveDataGoFileDataCandidates(String htmlBody,
+                                                                          String fallbackPublicDataPk,
+                                                                          PublicDataSourceType sourceType) {
+        Document document = Jsoup.parse(htmlBody);
+        List<DataGoFileDataCandidate> candidates = new ArrayList<>();
+
+        for (Element rowElement : document.select("tr")) {
+            LocalDate modifiedDate = extractFirstDate(rowElement.text()).orElse(null);
+            collectDataGoCandidatesFromText(
+                    rowElement.outerHtml(),
+                    fallbackPublicDataPk,
+                    modifiedDate,
+                    "table-row",
+                    candidates
+            );
+        }
+
+        collectDataGoCandidatesFromText(
+                htmlBody,
+                fallbackPublicDataPk,
+                null,
+                "page-body",
+                candidates
+        );
+
+        Map<String, DataGoFileDataCandidate> dedupedCandidates = new LinkedHashMap<>();
+        for (DataGoFileDataCandidate candidate : candidates) {
+            String key = candidate.publicDataPk()
+                    + "|"
+                    + candidate.publicDataDetailPk()
+                    + "|"
+                    + (candidate.modifiedDate() == null ? "" : candidate.modifiedDate().toString());
+            dedupedCandidates.putIfAbsent(key, candidate);
+        }
+
+        if (dedupedCandidates.isEmpty()) {
+            log.warn("[FILEDATA] source={} 최신 API 후보를 찾지 못해 hidden input 식별자를 사용한다.", sourceType);
+        }
+        return new ArrayList<>(dedupedCandidates.values());
+    }
+
+    private void collectDataGoCandidatesFromText(String text,
+                                                 String fallbackPublicDataPk,
+                                                 LocalDate modifiedDate,
+                                                 String contextLabel,
+                                                 List<DataGoFileDataCandidate> candidates) {
+        Matcher endpointMatcher = ODCLOUD_ENDPOINT_PATTERN.matcher(text);
+        while (endpointMatcher.find()) {
+            String publicDataPk = endpointMatcher.group(1).trim();
+            String publicDataDetailPk = endpointMatcher.group(2).trim();
+            candidates.add(new DataGoFileDataCandidate(publicDataPk, publicDataDetailPk, modifiedDate, contextLabel));
+        }
+
+        List<String> detailPkValues = extractRegexMatches(text, PUBLIC_DATA_DETAIL_PK_CANDIDATE_PATTERN);
+        if (detailPkValues.isEmpty()) {
+            return;
+        }
+
+        List<String> publicDataPkValues = extractRegexMatches(text, PUBLIC_DATA_PK_CANDIDATE_PATTERN);
+        String publicDataPk = publicDataPkValues.isEmpty() ? fallbackPublicDataPk : publicDataPkValues.get(0);
+        for (String publicDataDetailPk : detailPkValues) {
+            candidates.add(new DataGoFileDataCandidate(publicDataPk, publicDataDetailPk, modifiedDate, contextLabel));
+        }
+    }
+
+    private List<String> extractRegexMatches(String text, Pattern pattern) {
+        List<String> matches = new ArrayList<>();
+        Matcher matcher = pattern.matcher(text);
+        while (matcher.find()) {
+            String value = matcher.group(1).trim();
+            if (!value.isBlank()) {
+                matches.add(value);
+            }
+        }
+        return matches;
+    }
+
+    private Optional<LocalDate> extractFirstDate(String text) {
+        Matcher matcher = DATE_TOKEN_PATTERN.matcher(text);
+        while (matcher.find()) {
+            try {
+                int year = Integer.parseInt(matcher.group(1));
+                int month = Integer.parseInt(matcher.group(2));
+                int day = Integer.parseInt(matcher.group(3));
+                return Optional.of(LocalDate.of(year, month, day));
+            } catch (RuntimeException exception) {
+                // 잘못된 날짜 토큰은 무시하고 다음 후보를 계속 탐색한다.
+            }
+        }
+        return Optional.empty();
     }
 
     private PublicDataApiPageResponseDto fetchSeoulDatasetFilePage(
@@ -258,6 +412,11 @@ public class PublicDataApiClient {
     private boolean isSeoulDatasetFileSource(PublicDataSourceType sourceType) {
         return sourceType == PublicDataSourceType.SEOUL_WHEELCHAIR_RAMP_STATUS
                 || sourceType == PublicDataSourceType.SEOUL_LOW_FLOOR_BUS_ROUTE_RETENTION;
+    }
+
+    private boolean isDataGoFileDataSource(PublicDataSourceType sourceType) {
+        return sourceType == PublicDataSourceType.SEOUL_WHEELCHAIR_LIFT
+                || sourceType == PublicDataSourceType.NATIONWIDE_BUS_STOP;
     }
 
     private SeoulDatasetLatestFile resolveSeoulDatasetLatestFile(BridgeWorkSyncProperties.SourceConfig sourceConfig) {
@@ -1044,16 +1203,28 @@ public class PublicDataApiClient {
     }
 
     private boolean isRetryableApiException(Throwable throwable) {
-        if (throwable == null || throwable.getMessage() == null) {
+        if (throwable == null) {
             return false;
         }
 
-        String message = throwable.getMessage();
-        return message.contains("재시도 대상")
-                || message.contains("Connection reset")
-                || message.contains("Read timed out")
-                || message.contains("connection prematurely closed")
-                || message.contains("failed to respond");
+        Throwable current = throwable;
+        while (current != null && current.getCause() != current) {
+            String message = current.getMessage();
+            if (message != null && !message.isBlank()) {
+                if (message.contains("재시도 대상")
+                        || message.contains("Connection reset")
+                        || message.contains("Read timed out")
+                        || message.contains("connection prematurely closed")
+                        || message.contains("failed to respond")
+                        || message.contains("failure when writing TLS control frames")
+                        || message.contains("TLS")
+                        || message.contains("SSL")) {
+                    return true;
+                }
+            }
+            current = current.getCause();
+        }
+        return false;
     }
 
     private String extractFileDataField(String body, Pattern pattern, String fieldName) {
@@ -1452,6 +1623,23 @@ public class PublicDataApiClient {
     private record FileDataPageResultDto(
             List<PublicDataApiItemDto> items,
             int totalCount
+    ) {
+    }
+
+    private record DataGoFileDataVersion(
+            String publicDataPk,
+            String publicDataDetailPk,
+            String revisionKey,
+            String displayName,
+            LocalDate modifiedDate
+    ) {
+    }
+
+    private record DataGoFileDataCandidate(
+            String publicDataPk,
+            String publicDataDetailPk,
+            LocalDate modifiedDate,
+            String contextLabel
     ) {
     }
 

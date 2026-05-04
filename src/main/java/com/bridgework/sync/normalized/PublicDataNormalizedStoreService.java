@@ -3,6 +3,7 @@ package com.bridgework.sync.normalized;
 import com.bridgework.sync.config.BridgeWorkSyncProperties;
 import com.bridgework.sync.dto.PublicDataApiItemDto;
 import com.bridgework.sync.entity.PublicDataSourceType;
+import com.bridgework.sync.exception.ExternalApiException;
 import com.bridgework.sync.exception.PayloadParseException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -154,14 +155,15 @@ public class PublicDataNormalizedStoreService {
         params.addValue(definition.geocodeOriginalAddressColumn(), originalAddress);
 
         if (originalAddress == null || originalAddress.isBlank()) {
-            params.addValue(definition.geocodeLatitudeColumn(), null);
-            params.addValue(definition.geocodeLongitudeColumn(), null);
-            params.addValue(definition.geocodeMatchedAddressColumn(), null);
-            return;
+            throw new ExternalApiException("지오코딩 실패: 주소 값이 비어 있습니다.");
         }
 
         String naverApiKeyId = syncProperties.getNaverGeocodeApiKeyId();
         String naverApiKey = syncProperties.getNaverGeocodeApiKey();
+        if (naverApiKeyId == null || naverApiKeyId.isBlank() || naverApiKey == null || naverApiKey.isBlank()) {
+            throw new ExternalApiException("지오코딩 실패: NAVER_GEOCODE_API_KEY_ID 또는 NAVER_GEOCODE_API_KEY가 비어 있습니다.");
+        }
+
         Optional<NormalizedGeoPoint> geoPoint = naverGeocodingService.geocode(
                 naverApiKeyId,
                 naverApiKey,
@@ -169,10 +171,7 @@ public class PublicDataNormalizedStoreService {
         );
 
         if (geoPoint.isEmpty()) {
-            params.addValue(definition.geocodeLatitudeColumn(), null);
-            params.addValue(definition.geocodeLongitudeColumn(), null);
-            params.addValue(definition.geocodeMatchedAddressColumn(), null);
-            return;
+            throw new ExternalApiException("지오코딩 실패: 주소 매칭 결과가 없습니다. address=" + originalAddress);
         }
 
         params.addValue(definition.geocodeLatitudeColumn(), geoPoint.get().latitude());

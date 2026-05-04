@@ -190,6 +190,7 @@ public class PublicDataSyncService {
         try {
             latestRevisionDto = publicDataApiClient.fetchLatestRevision(sourceConfig).orElse(null);
             if (latestRevisionDto != null && isUnchangedLatestRevision(sourceType, latestRevisionDto.revisionKey())) {
+                syncStatus = SyncStatus.SKIP;
                 message = "최신 파일 수정일 동일로 동기화 스킵";
                 finishSyncLog(syncLog, syncStatus, 0, 0, 0, 0, message);
                 return new SourceSyncResultDto(sourceType, syncStatus, 0, 0, 0, 0, message);
@@ -400,7 +401,9 @@ public class PublicDataSyncService {
         syncLog.setNewCount(newCount);
         syncLog.setUpdatedCount(updatedCount);
         syncLog.setFailedCount(failedCount);
-        syncLog.setErrorMessage(syncStatus == SyncStatus.SUCCESS ? null : truncateMessage(message));
+        syncLog.setErrorMessage((syncStatus == SyncStatus.SUCCESS || syncStatus == SyncStatus.SKIP)
+                ? null
+                : truncateMessage(message));
         syncLog.setEndedAt(OffsetDateTime.now());
         publicDataSyncLogRepository.save(syncLog);
     }
