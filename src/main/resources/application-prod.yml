@@ -14,6 +14,9 @@ spring:
       password: ${REDIS_PASSWORD}
       timeout: 3s
 
+server:
+  forward-headers-strategy: framework
+
 bridgework:
   recommend:
     fastapi-base-url: https://api.bridgework.cloud/api/py
