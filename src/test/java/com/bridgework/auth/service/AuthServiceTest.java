@@ -20,6 +20,7 @@ import com.bridgework.auth.exception.InvalidRefreshTokenException;
 import com.bridgework.auth.repository.AppUserRepository;
 import com.bridgework.auth.security.JwtTokenProvider;
 import com.bridgework.auth.security.ParsedJwtToken;
+import com.bridgework.common.notification.DiscordNotifierService;
 import com.bridgework.profile.dto.UserProfileUpsertRequestDto;
 import com.bridgework.profile.repository.UserProfileRepository;
 import com.bridgework.profile.service.UserProfileService;
@@ -29,7 +30,6 @@ import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -51,6 +51,8 @@ class AuthServiceTest {
     private UserProfileService userProfileService;
     @Mock
     private UserProfileRepository userProfileRepository;
+    @Mock
+    private DiscordNotifierService discordNotifierService;
 
     private AuthService authService;
 
@@ -67,7 +69,8 @@ class AuthServiceTest {
                 jwtTokenProvider,
                 authProperties,
                 userProfileService,
-                userProfileRepository
+                userProfileRepository,
+                discordNotifierService
         );
     }
 
@@ -142,6 +145,7 @@ class AuthServiceTest {
 
         verify(appUserRepository).save(any(AppUser.class));
         verify(userProfileService).create(eq(1L), any(UserProfileUpsertRequestDto.class));
+        verify(discordNotifierService).notifySignupCompleted(eq("social@example.com"), eq(0L));
     }
 
     @Test

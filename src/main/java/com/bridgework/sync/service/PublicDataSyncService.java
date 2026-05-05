@@ -1,6 +1,7 @@
 package com.bridgework.sync.service;
 
 import com.bridgework.sync.config.BridgeWorkSyncProperties;
+import com.bridgework.common.notification.DiscordNotifierService;
 import com.bridgework.sync.dto.PublicDataApiItemDto;
 import com.bridgework.sync.dto.PublicDataApiPageResponseDto;
 import com.bridgework.sync.dto.SourceLatestRevisionDto;
@@ -48,6 +49,7 @@ public class PublicDataSyncService {
     private final PublicDataSyncLogRepository publicDataSyncLogRepository;
     private final PublicDataSourceSnapshotRepository publicDataSourceSnapshotRepository;
     private final PublicDataNormalizedStoreService publicDataNormalizedStoreService;
+    private final DiscordNotifierService discordNotifierService;
 
     public PublicDataSyncService(BridgeWorkSyncProperties syncProperties,
                                  PublicDataApiClient publicDataApiClient,
@@ -55,7 +57,8 @@ public class PublicDataSyncService {
                                  PublicDataRecordFieldService publicDataRecordFieldService,
                                  PublicDataSyncLogRepository publicDataSyncLogRepository,
                                  PublicDataSourceSnapshotRepository publicDataSourceSnapshotRepository,
-                                 PublicDataNormalizedStoreService publicDataNormalizedStoreService) {
+                                 PublicDataNormalizedStoreService publicDataNormalizedStoreService,
+                                 DiscordNotifierService discordNotifierService) {
         this.syncProperties = syncProperties;
         this.publicDataApiClient = publicDataApiClient;
         this.publicDataRecordRepository = publicDataRecordRepository;
@@ -63,6 +66,7 @@ public class PublicDataSyncService {
         this.publicDataSyncLogRepository = publicDataSyncLogRepository;
         this.publicDataSourceSnapshotRepository = publicDataSourceSnapshotRepository;
         this.publicDataNormalizedStoreService = publicDataNormalizedStoreService;
+        this.discordNotifierService = discordNotifierService;
     }
 
     @PostConstruct
@@ -108,6 +112,7 @@ public class PublicDataSyncService {
 
     public SyncRunResponseDto syncAll(SyncRequestSource requestSource) {
         OffsetDateTime startedAt = OffsetDateTime.now();
+        discordNotifierService.notifySyncStarted(requestSource, null, startedAt);
         List<SourceSyncResultDto> results = new ArrayList<>();
 
         for (BridgeWorkSyncProperties.SourceConfig sourceConfig : syncProperties.getSources()) {
@@ -117,7 +122,9 @@ public class PublicDataSyncService {
             results.add(syncSourceInternal(sourceConfig, requestSource));
         }
 
-        return buildSummary(startedAt, results);
+        SyncRunResponseDto summary = buildSummary(startedAt, results);
+        discordNotifierService.notifySyncFinished(requestSource, null, summary);
+        return summary;
     }
 
     public SyncRunResponseDto syncSingle(PublicDataSourceType sourceType, SyncRequestSource requestSource) {
@@ -127,8 +134,11 @@ public class PublicDataSyncService {
         }
 
         OffsetDateTime startedAt = OffsetDateTime.now();
+        discordNotifierService.notifySyncStarted(requestSource, sourceType, startedAt);
         List<SourceSyncResultDto> results = List.of(syncSourceInternal(sourceConfig, requestSource));
-        return buildSummary(startedAt, results);
+        SyncRunResponseDto summary = buildSummary(startedAt, results);
+        discordNotifierService.notifySyncFinished(requestSource, sourceType, summary);
+        return summary;
     }
 
     public List<SyncLogResponseDto> getRecentLogs(PublicDataSourceType sourceType) {

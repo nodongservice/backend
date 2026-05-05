@@ -4,6 +4,7 @@ import com.bridgework.sync.exception.SyncInProgressException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Optional;
+import java.util.concurrent.Executor;
 import java.util.function.Supplier;
 import net.javacrumbs.shedlock.core.LockConfiguration;
 import net.javacrumbs.shedlock.core.LockProvider;
@@ -35,6 +36,26 @@ public class PublicDataSyncExecutionLockService {
         }
     }
 
+    public void runManualAsyncOrThrow(Executor executor, Runnable task) {
+        Optional<SimpleLock> lock = tryAcquire();
+        if (lock.isEmpty()) {
+            throw new SyncInProgressException();
+        }
+
+        try {
+            executor.execute(() -> {
+                try {
+                    task.run();
+                } finally {
+                    lock.get().unlock();
+                }
+            });
+        } catch (RuntimeException exception) {
+            lock.get().unlock();
+            throw exception;
+        }
+    }
+
     public boolean runSchedulerIfAvailable(Runnable task) {
         Optional<SimpleLock> lock = tryAcquire();
         if (lock.isEmpty()) {
@@ -58,4 +79,3 @@ public class PublicDataSyncExecutionLockService {
         return lockProvider.lock(lockConfiguration);
     }
 }
-
