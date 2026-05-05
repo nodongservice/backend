@@ -143,6 +143,51 @@ class PublicDataApiClientTest {
     }
 
     @Test
+    void fetchPage_whenCrosswalkXmlResponse_thenParsesItemsAndHasNext() {
+        mockWebServer.enqueue(new MockResponse()
+                .setHeader("Content-Type", "application/xml")
+                .setBody("""
+                        <?xml version="1.0" encoding="UTF-8"?>
+                        <response>
+                          <header>
+                            <resultCode>00</resultCode>
+                            <resultMsg>NORMAL SERVICE.</resultMsg>
+                          </header>
+                          <body>
+                            <items>
+                              <item>
+                                <crswlkManageNo>CW-1</crswlkManageNo>
+                                <ctprvnNm>서울특별시</ctprvnNm>
+                              </item>
+                              <item>
+                                <crswlkManageNo>CW-2</crswlkManageNo>
+                                <ctprvnNm>경기도</ctprvnNm>
+                              </item>
+                            </items>
+                            <numOfRows>2</numOfRows>
+                            <pageNo>1</pageNo>
+                            <totalCount>3</totalCount>
+                          </body>
+                        </response>
+                        """));
+
+        BridgeWorkSyncProperties.SourceConfig sourceConfig = new BridgeWorkSyncProperties.SourceConfig();
+        sourceConfig.setEnabled(true);
+        sourceConfig.setSourceType(PublicDataSourceType.NATIONWIDE_CROSSWALK);
+        sourceConfig.setBaseUrl(mockWebServer.url("/crosswalk").toString());
+        sourceConfig.setServiceKey("test-key");
+        sourceConfig.setPageSize(2);
+        sourceConfig.setMaxPages(1);
+        sourceConfig.setItemIdField("crswlkManageNo");
+        sourceConfig.setQueryParams(Map.of("type", "xml"));
+
+        PublicDataApiPageResponseDto response = publicDataApiClient.fetchPage(sourceConfig, 1);
+        assertThat(response.items()).hasSize(2);
+        assertThat(response.items().get(0).externalId()).isEqualTo("CW-1");
+        assertThat(response.hasNext()).isTrue();
+    }
+
+    @Test
     void fetchPage_whenIdFieldMissing_thenUsesPayloadHash() {
         mockWebServer.enqueue(new MockResponse()
                 .setHeader("Content-Type", "application/json")

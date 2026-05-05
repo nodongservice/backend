@@ -23,6 +23,7 @@ import com.bridgework.sync.repository.PublicDataSyncLogRepository;
 import com.bridgework.sync.normalized.PublicDataNormalizedStoreService;
 import jakarta.annotation.PostConstruct;
 import java.time.OffsetDateTime;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.LinkedHashMap;
@@ -114,16 +115,21 @@ public class PublicDataSyncService {
         OffsetDateTime startedAt = OffsetDateTime.now();
         discordNotifierService.notifySyncStarted(requestSource, null, startedAt);
         List<SourceSyncResultDto> results = new ArrayList<>();
+        Map<PublicDataSourceType, Duration> sourceDurations = new LinkedHashMap<>();
 
         for (BridgeWorkSyncProperties.SourceConfig sourceConfig : syncProperties.getSources()) {
             if (!sourceConfig.isEnabled()) {
                 continue;
             }
-            results.add(syncSourceInternal(sourceConfig, requestSource));
+            OffsetDateTime sourceStartedAt = OffsetDateTime.now();
+            SourceSyncResultDto sourceResult = syncSourceInternal(sourceConfig, requestSource);
+            OffsetDateTime sourceEndedAt = OffsetDateTime.now();
+            sourceDurations.put(sourceConfig.getSourceType(), Duration.between(sourceStartedAt, sourceEndedAt));
+            results.add(sourceResult);
         }
 
         SyncRunResponseDto summary = buildSummary(startedAt, results);
-        discordNotifierService.notifySyncFinished(requestSource, null, summary);
+        discordNotifierService.notifySyncFinished(requestSource, null, summary, sourceDurations);
         return summary;
     }
 
@@ -135,9 +141,16 @@ public class PublicDataSyncService {
 
         OffsetDateTime startedAt = OffsetDateTime.now();
         discordNotifierService.notifySyncStarted(requestSource, sourceType, startedAt);
-        List<SourceSyncResultDto> results = List.of(syncSourceInternal(sourceConfig, requestSource));
+        OffsetDateTime sourceStartedAt = OffsetDateTime.now();
+        SourceSyncResultDto sourceResult = syncSourceInternal(sourceConfig, requestSource);
+        OffsetDateTime sourceEndedAt = OffsetDateTime.now();
+        List<SourceSyncResultDto> results = List.of(sourceResult);
+        Map<PublicDataSourceType, Duration> sourceDurations = Map.of(
+                sourceType,
+                Duration.between(sourceStartedAt, sourceEndedAt)
+        );
         SyncRunResponseDto summary = buildSummary(startedAt, results);
-        discordNotifierService.notifySyncFinished(requestSource, sourceType, summary);
+        discordNotifierService.notifySyncFinished(requestSource, sourceType, summary, sourceDurations);
         return summary;
     }
 

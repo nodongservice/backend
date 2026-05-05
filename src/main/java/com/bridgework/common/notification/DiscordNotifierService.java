@@ -7,6 +7,7 @@ import com.bridgework.sync.entity.PublicDataSourceType;
 import com.bridgework.sync.entity.SyncRequestSource;
 import java.time.OffsetDateTime;
 import java.time.Duration;
+import java.util.List;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -33,7 +34,8 @@ public class DiscordNotifierService {
 
     public void notifySyncFinished(SyncRequestSource requestSource,
                                    PublicDataSourceType requestedSourceType,
-                                   SyncRunResponseDto result) {
+                                   SyncRunResponseDto result,
+                                   Map<PublicDataSourceType, Duration> sourceDurations) {
         if (result == null) {
             return;
         }
@@ -59,6 +61,8 @@ public class DiscordNotifierService {
         if (!failedSourceSummary.isBlank()) {
             builder.append('\n').append("실패 소스: ").append(failedSourceSummary);
         }
+        appendFailureDetails(builder, result);
+        appendPerSourceElapsed(builder, result, sourceDurations);
 
         send(builder.toString());
     }
@@ -128,6 +132,13 @@ public class DiscordNotifierService {
         }
 
         Duration elapsed = Duration.between(startedAt, endedAt);
+        return formatElapsed(elapsed);
+    }
+
+    private String formatElapsed(Duration elapsed) {
+        if (elapsed == null) {
+            return "계산 불가";
+        }
         if (elapsed.isNegative()) {
             elapsed = elapsed.abs();
         }
@@ -136,5 +147,66 @@ public class DiscordNotifierService {
         long minutes = totalSeconds / 60;
         long seconds = totalSeconds % 60;
         return minutes + "분 " + seconds + "초";
+    }
+
+    private void appendPerSourceElapsed(StringBuilder builder,
+                                        SyncRunResponseDto result,
+                                        Map<PublicDataSourceType, Duration> sourceDurations) {
+        if (sourceDurations == null || sourceDurations.isEmpty()) {
+            return;
+        }
+        List<String> lines = result.results().stream()
+                .map(sourceResult -> {
+                    Duration duration = sourceDurations.get(sourceResult.sourceType());
+                    if (duration == null) {
+                        return null;
+                    }
+                    return sourceResult.sourceType().name() + ": " + formatElapsed(duration);
+                })
+                .filter(line -> line != null && !line.isBlank())
+                .toList();
+        if (lines.isEmpty()) {
+            return;
+        }
+
+        builder.append('\n').append("소스별 소요 시간:");
+        for (String line : lines) {
+            builder.append('\n').append("- ").append(line);
+        }
+    }
+
+    private void appendFailureDetails(StringBuilder builder, SyncRunResponseDto result) {
+        List<String> failureLines = result.results().stream()
+                .filter(sourceResult -> sourceResult.failedCount() > 0)
+                .map(sourceResult -> {
+                    String message = sourceResult.message();
+                    if (message == null || message.isBlank()) {
+                        message = "오류 메시지 없음";
+                    }
+                    return sourceResult.sourceType().name() + ": " + truncateFailureMessage(message);
+                })
+                .toList();
+        if (failureLines.isEmpty()) {
+            return;
+        }
+
+        builder.append('\n').append("실패 상세:");
+        int maxLines = Math.min(5, failureLines.size());
+        for (int index = 0; index < maxLines; index++) {
+            builder.append('\n').append("- ").append(failureLines.get(index));
+        }
+        if (failureLines.size() > maxLines) {
+            builder.append('\n').append("- ... 외 ")
+                    .append(failureLines.size() - maxLines)
+                    .append("개 소스");
+        }
+    }
+
+    private String truncateFailureMessage(String message) {
+        String normalized = message.replace('\n', ' ').replace('\r', ' ').trim();
+        if (normalized.length() <= 180) {
+            return normalized;
+        }
+        return normalized.substring(0, 177) + "...";
     }
 }

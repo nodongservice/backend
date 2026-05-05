@@ -185,7 +185,7 @@ bridgework:
         max-pages: 1000
         item-id-field: crswlkManageNo
         query-params:
-          type: json
+          type: xml
       - source-type: VOCATIONAL_TRAINING
         enabled: true
         base-url: https://www.work24.go.kr/cm/openApi/call/hr/callOpenApiSvcInfo310L01.do

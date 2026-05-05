@@ -121,7 +121,8 @@ public class PublicDataApiClient {
                 || sourceType == PublicDataSourceType.SEOUL_WALKING_NETWORK) {
             return fetchSeoulOpenApiPage(sourceConfig, pageNo);
         }
-        if (sourceType == PublicDataSourceType.NATIONWIDE_TRAFFIC_LIGHT) {
+        if (sourceType == PublicDataSourceType.NATIONWIDE_TRAFFIC_LIGHT
+                || sourceType == PublicDataSourceType.NATIONWIDE_CROSSWALK) {
             return fetchDataGoXmlPage(sourceConfig, pageNo);
         }
         if (sourceType == PublicDataSourceType.VOCATIONAL_TRAINING) {
