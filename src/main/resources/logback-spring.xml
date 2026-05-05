@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
+    <include resource="org/springframework/boot/logging/logback/console-appender.xml"/>
+
+    <springProperty scope="context" name="DISCORD_WEBHOOK_URL" source="bridgework.discord.webhook-url" defaultValue=""/>
+    <springProperty scope="context" name="APP_ENV" source="spring.profiles.active" defaultValue="default"/>
+
+    <appender name="DISCORD_ERROR" class="com.bridgework.common.logging.DiscordWebhookAppender">
+        <webhookUrl>${DISCORD_WEBHOOK_URL}</webhookUrl>
+        <environment>${APP_ENV}</environment>
+    </appender>
+
+    <root level="INFO">
+        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="DISCORD_ERROR"/>
+    </root>
+</configuration>
