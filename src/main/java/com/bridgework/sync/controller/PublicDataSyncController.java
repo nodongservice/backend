@@ -6,6 +6,7 @@ import com.bridgework.sync.dto.SyncLogResetResponseDto;
 import com.bridgework.sync.dto.SyncRunResponseDto;
 import com.bridgework.sync.entity.PublicDataSourceType;
 import com.bridgework.sync.entity.SyncRequestSource;
+import com.bridgework.sync.service.PublicDataSyncExecutionLockService;
 import com.bridgework.sync.service.PublicDataSyncService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -24,9 +25,12 @@ import org.springframework.web.bind.annotation.RestController;
 public class PublicDataSyncController {
 
     private final PublicDataSyncService publicDataSyncService;
+    private final PublicDataSyncExecutionLockService publicDataSyncExecutionLockService;
 
-    public PublicDataSyncController(PublicDataSyncService publicDataSyncService) {
+    public PublicDataSyncController(PublicDataSyncService publicDataSyncService,
+                                    PublicDataSyncExecutionLockService publicDataSyncExecutionLockService) {
         this.publicDataSyncService = publicDataSyncService;
+        this.publicDataSyncExecutionLockService = publicDataSyncExecutionLockService;
     }
 
     @PostMapping("/run")
@@ -34,9 +38,9 @@ public class PublicDataSyncController {
     public ResponseEntity<SyncRunResponseDto> runSync(
             @RequestParam(name = "sourceType", required = false) PublicDataSourceType sourceType
     ) {
-        SyncRunResponseDto response = sourceType == null
+        SyncRunResponseDto response = publicDataSyncExecutionLockService.runManualOrThrow(() -> sourceType == null
                 ? publicDataSyncService.syncAll(SyncRequestSource.MANUAL)
-                : publicDataSyncService.syncSingle(sourceType, SyncRequestSource.MANUAL);
+                : publicDataSyncService.syncSingle(sourceType, SyncRequestSource.MANUAL));
 
         return ResponseEntity.ok(response);
     }

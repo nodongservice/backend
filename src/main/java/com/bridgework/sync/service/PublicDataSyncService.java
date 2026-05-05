@@ -39,6 +39,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class PublicDataSyncService {
 
     private static final Logger log = LoggerFactory.getLogger(PublicDataSyncService.class);
+    private static final int DELETE_BATCH_SIZE = 500;
 
     private final BridgeWorkSyncProperties syncProperties;
     private final PublicDataApiClient publicDataApiClient;
@@ -225,6 +226,10 @@ public class PublicDataSyncService {
                             updatedCount++;
                         }
                     } catch (Exception exception) {
+                        // 지오코딩 실패는 데이터 품질 오류로 간주하여 소스 동기화를 즉시 실패 처리한다.
+                        if (isGeocodingFailure(exception)) {
+                            throw exception;
+                        }
                         failedCount++;
                         String failureReason = summarizeFailureReason(exception);
                         failureReasonCounts.merge(failureReason, 1, Integer::sum);
@@ -260,7 +265,11 @@ public class PublicDataSyncService {
             }
         } catch (Exception exception) {
             failedCount++;
-            syncStatus = processedCount > 0 ? SyncStatus.PARTIAL_SUCCESS : SyncStatus.FAILED;
+            if (isGeocodingFailure(exception)) {
+                syncStatus = SyncStatus.FAILED;
+            } else {
+                syncStatus = processedCount > 0 ? SyncStatus.PARTIAL_SUCCESS : SyncStatus.FAILED;
+            }
             message = exception.getMessage();
             log.error("동기화 실패 source={} reason={}", sourceType, exception.getMessage(), exception);
         }
@@ -288,6 +297,11 @@ public class PublicDataSyncService {
             normalized = normalized.substring(0, 120) + "...";
         }
         return normalized;
+    }
+
+    private boolean isGeocodingFailure(Exception exception) {
+        String reason = summarizeFailureReason(exception);
+        return reason != null && reason.startsWith("지오코딩 실패:");
     }
 
     private String buildFailureSummaryMessage(String baseMessage, Map<String, Integer> failureReasonCounts) {
@@ -330,21 +344,27 @@ public class PublicDataSyncService {
     }
 
     private int removeDeletedRecords(PublicDataSourceType sourceType, Set<String> fetchedExternalIds) {
-        List<PublicDataRecord> existingRecords = publicDataRecordRepository.findBySourceType(sourceType);
-        List<PublicDataRecord> recordsToDelete = new ArrayList<>();
+        List<PublicDataRecordRepository.RecordIdentityView> existingRecords =
+                publicDataRecordRepository.findRecordIdentityBySourceType(sourceType);
+        List<Long> idsToDelete = new ArrayList<>();
 
-        for (PublicDataRecord existingRecord : existingRecords) {
+        for (PublicDataRecordRepository.RecordIdentityView existingRecord : existingRecords) {
             if (!fetchedExternalIds.contains(existingRecord.getExternalId())) {
-                recordsToDelete.add(existingRecord);
+                idsToDelete.add(existingRecord.getId());
             }
         }
 
-        if (recordsToDelete.isEmpty()) {
+        if (idsToDelete.isEmpty()) {
             return 0;
         }
 
-        publicDataRecordRepository.deleteAllInBatch(recordsToDelete);
-        return recordsToDelete.size();
+        // 대량 삭제를 청크로 분할해 HQL 파서 StackOverflow를 방지한다.
+        for (int start = 0; start < idsToDelete.size(); start += DELETE_BATCH_SIZE) {
+            int end = Math.min(start + DELETE_BATCH_SIZE, idsToDelete.size());
+            List<Long> chunk = idsToDelete.subList(start, end);
+            publicDataRecordRepository.deleteAllByIdInNative(chunk);
+        }
+        return idsToDelete.size();
     }
 
     private UpsertResult upsertRecord(PublicDataSourceType sourceType, PublicDataApiItemDto item) {

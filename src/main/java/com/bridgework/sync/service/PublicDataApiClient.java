@@ -35,6 +35,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.TimeoutException;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.apache.commons.csv.CSVFormat;
@@ -71,15 +72,8 @@ public class PublicDataApiClient {
     private static final Duration API_RETRY_BACKOFF = Duration.ofMillis(500);
     private static final String DEFAULT_ITEMS_POINTER = "/response/body/items/item";
     private static final String DEFAULT_TOTAL_COUNT_POINTER = "/response/body/totalCount";
-    private static final Pattern PUBLIC_DATA_PK_PATTERN = Pattern.compile("id=\"publicDataPk\"[^>]*value=\"([^\"]+)\"");
-    private static final Pattern PUBLIC_DATA_DETAIL_PK_PATTERN =
-            Pattern.compile("id=\"publicDataDetailPk\"[^>]*value=\"([^\"]+)\"");
-    private static final Pattern PUBLIC_DATA_PK_CANDIDATE_PATTERN =
-            Pattern.compile("publicDataPk[^0-9]*([0-9]{5,})");
-    private static final Pattern PUBLIC_DATA_DETAIL_PK_CANDIDATE_PATTERN =
-            Pattern.compile("publicDataDetailPk[^0-9]*([0-9]{5,})");
     private static final Pattern ODCLOUD_ENDPOINT_PATTERN =
-            Pattern.compile("api\\.odcloud\\.kr/api/([0-9]{5,})/v1/([0-9]{5,})");
+            Pattern.compile("api\\.odcloud\\.kr/api/([0-9]{5,})/v1/([a-zA-Z0-9:_-]{5,})");
     private static final Pattern DATE_TOKEN_PATTERN =
             Pattern.compile("(20\\d{2})[./-](\\d{1,2})[./-](\\d{1,2})");
     private static final Pattern CREDENTIAL_QUERY_PARAM_PATTERN =
@@ -138,7 +132,7 @@ public class PublicDataApiClient {
         }
 
         String requestUri = buildRequestUri(sourceConfig, pageNo);
-        String responseBody = fetchBody(requestUri, sourceConfig.getSourceType());
+        String responseBody = fetchBody(requestUri, sourceConfig);
 
         try {
             JsonNode rootNode = objectMapper.readTree(responseBody);
@@ -200,16 +194,30 @@ public class PublicDataApiClient {
         List<String> stationNames = kricStationCodeLoader.loadSeoulStationNames();
         List<PublicDataApiItemDto> aggregatedItems = new ArrayList<>();
         Set<String> dedupedExternalIds = new LinkedHashSet<>();
+        boolean shouldFallbackToAll = false;
 
         for (String stationName : stationNames) {
-            List<PublicDataApiItemDto> stationItems = fetchAllDataGoFileDataItems(
-                    sourceConfig,
-                    publicDataPk,
-                    publicDataDetailPk,
-                    "역명",
-                    stationName,
-                    "station=" + stationName
-            );
+            List<PublicDataApiItemDto> stationItems;
+            try {
+                stationItems = fetchAllDataGoFileDataItems(
+                        sourceConfig,
+                        publicDataPk,
+                        publicDataDetailPk,
+                        "역명",
+                        stationName,
+                        "station=" + stationName
+                );
+            } catch (ExternalApiException exception) {
+                if (isDataGoFileDataFilterRejected(exception)) {
+                    // 일부 fileData 버전은 한글 컬럼 필터를 허용하지 않으므로 전체 조회로 전환한다.
+                    log.warn("[FILEDATA] source={} filterField=역명 filterValue={} rejectedByApi, fallback=all",
+                            sourceConfig.getSourceType(),
+                            stationName);
+                    shouldFallbackToAll = true;
+                    break;
+                }
+                throw exception;
+            }
 
             for (PublicDataApiItemDto stationItem : stationItems) {
                 if (dedupedExternalIds.add(stationItem.externalId())) {
@@ -218,7 +226,7 @@ public class PublicDataApiClient {
             }
         }
 
-        if (!aggregatedItems.isEmpty()) {
+        if (!shouldFallbackToAll && !aggregatedItems.isEmpty()) {
             return new PublicDataApiPageResponseDto(aggregatedItems, false);
         }
 
@@ -232,6 +240,15 @@ public class PublicDataApiClient {
                 "fallback=all"
         );
         return new PublicDataApiPageResponseDto(fallbackItems, false);
+    }
+
+    private boolean isDataGoFileDataFilterRejected(ExternalApiException exception) {
+        if (exception == null || exception.getMessage() == null) {
+            return false;
+        }
+        String message = exception.getMessage();
+        return message.contains("호출 실패")
+                && message.contains(": 400");
     }
 
     private PublicDataApiPageResponseDto fetchDataGoFileDataPage(
@@ -258,18 +275,54 @@ public class PublicDataApiClient {
     }
 
     private DataGoFileDataVersion resolveLatestDataGoFileDataVersion(BridgeWorkSyncProperties.SourceConfig sourceConfig) {
-        String fileDataPageBody = fetchBody(sourceConfig.getBaseUrl(), sourceConfig.getSourceType());
-        String fallbackPublicDataPk = extractFileDataField(fileDataPageBody, PUBLIC_DATA_PK_PATTERN, "publicDataPk");
-        String fallbackPublicDataDetailPk = extractFileDataField(fileDataPageBody, PUBLIC_DATA_DETAIL_PK_PATTERN, "publicDataDetailPk");
+        String fileDataPageBody = fetchBody(sourceConfig.getBaseUrl(), sourceConfig);
+        Document document = Jsoup.parse(fileDataPageBody);
+        String fallbackPublicDataPk = extractFileDataField(document, "publicDataPk");
+        String fallbackPublicDataDetailPk = extractFileDataField(document, "publicDataDetailPk");
+        // SEOUL_WHEELCHAIR_LIFT는 추천 데이터셋 마크업이 자주 섞여 잘못된 상세키를 유발하므로
+        // 페이지 hidden input의 식별자를 단일 진실원으로 사용한다.
+        if (sourceConfig.getSourceType() == PublicDataSourceType.SEOUL_WHEELCHAIR_LIFT) {
+            DataGoFileDataCandidate selected = new DataGoFileDataCandidate(
+                    fallbackPublicDataPk,
+                    fallbackPublicDataDetailPk,
+                    null,
+                    "fallback-hidden-input"
+            );
+            log.info("[FILEDATA] source={} selected publicDataPk={} publicDataDetailPk={} modifiedDate={} matchedFrom={}",
+                    sourceConfig.getSourceType(),
+                    selected.publicDataPk(),
+                    selected.publicDataDetailPk(),
+                    selected.modifiedDate(),
+                    selected.contextLabel());
+            return new DataGoFileDataVersion(
+                    selected.publicDataPk(),
+                    selected.publicDataDetailPk(),
+                    "unknown|" + selected.publicDataPk() + "|" + selected.publicDataDetailPk(),
+                    "publicDataDetailPk=" + selected.publicDataDetailPk(),
+                    UNKNOWN_MODIFIED_DATE
+            );
+        }
 
-        List<DataGoFileDataCandidate> candidates = resolveDataGoFileDataCandidates(
+        List<DataGoFileDataCandidate> candidates = new ArrayList<>(resolveDataGoFileDataCandidates(
                 fileDataPageBody,
                 fallbackPublicDataPk,
                 sourceConfig.getSourceType()
-        );
+        ).stream()
+                // 상세키는 동일 publicDataPk 범위에서만 신뢰한다.
+                .filter(candidate -> fallbackPublicDataPk.equals(candidate.publicDataPk()))
+                .toList());
+        // hidden input 식별자는 포털이 현재 제공하는 정식 상세키이므로 항상 후보군에 포함한다.
+        candidates.add(new DataGoFileDataCandidate(
+                fallbackPublicDataPk,
+                fallbackPublicDataDetailPk,
+                null,
+                "fallback-hidden-input"
+        ));
         DataGoFileDataCandidate selected = candidates.stream()
                 .max(Comparator
-                        .comparing((DataGoFileDataCandidate candidate) -> candidate.modifiedDate() != null)
+                        // 최신 fileData는 uddi 식별자를 사용하므로 숫자형보다 우선 선택한다.
+                        .comparing((DataGoFileDataCandidate candidate) -> isUddiDetailPk(candidate.publicDataDetailPk()))
+                        .thenComparing((DataGoFileDataCandidate candidate) -> candidate.modifiedDate() != null)
                         .thenComparing(candidate -> Optional.ofNullable(candidate.modifiedDate()).orElse(UNKNOWN_MODIFIED_DATE))
                         .thenComparingInt(candidate -> parseIntSafe(candidate.publicDataDetailPk())))
                 .orElse(new DataGoFileDataCandidate(
@@ -310,7 +363,6 @@ public class PublicDataApiClient {
             LocalDate modifiedDate = extractFirstDate(rowElement.text()).orElse(null);
             collectDataGoCandidatesFromText(
                     rowElement.outerHtml(),
-                    fallbackPublicDataPk,
                     modifiedDate,
                     "table-row",
                     candidates
@@ -319,7 +371,6 @@ public class PublicDataApiClient {
 
         collectDataGoCandidatesFromText(
                 htmlBody,
-                fallbackPublicDataPk,
                 null,
                 "page-body",
                 candidates
@@ -342,7 +393,6 @@ public class PublicDataApiClient {
     }
 
     private void collectDataGoCandidatesFromText(String text,
-                                                 String fallbackPublicDataPk,
                                                  LocalDate modifiedDate,
                                                  String contextLabel,
                                                  List<DataGoFileDataCandidate> candidates) {
@@ -350,17 +400,6 @@ public class PublicDataApiClient {
         while (endpointMatcher.find()) {
             String publicDataPk = endpointMatcher.group(1).trim();
             String publicDataDetailPk = endpointMatcher.group(2).trim();
-            candidates.add(new DataGoFileDataCandidate(publicDataPk, publicDataDetailPk, modifiedDate, contextLabel));
-        }
-
-        List<String> detailPkValues = extractRegexMatches(text, PUBLIC_DATA_DETAIL_PK_CANDIDATE_PATTERN);
-        if (detailPkValues.isEmpty()) {
-            return;
-        }
-
-        List<String> publicDataPkValues = extractRegexMatches(text, PUBLIC_DATA_PK_CANDIDATE_PATTERN);
-        String publicDataPk = publicDataPkValues.isEmpty() ? fallbackPublicDataPk : publicDataPkValues.get(0);
-        for (String publicDataDetailPk : detailPkValues) {
             candidates.add(new DataGoFileDataCandidate(publicDataPk, publicDataDetailPk, modifiedDate, contextLabel));
         }
     }
@@ -424,7 +463,7 @@ public class PublicDataApiClient {
     }
 
     private SeoulDatasetLatestFile resolveSeoulDatasetLatestFile(BridgeWorkSyncProperties.SourceConfig sourceConfig) {
-        String htmlBody = fetchBody(sourceConfig.getBaseUrl(), sourceConfig.getSourceType());
+        String htmlBody = fetchBody(sourceConfig.getBaseUrl(), sourceConfig);
 
         Document document = Jsoup.parse(htmlBody);
         Element frmFile = document.selectFirst("form[name=frmFile]");
@@ -518,6 +557,10 @@ public class PublicDataApiClient {
         } catch (NumberFormatException exception) {
             return -1;
         }
+    }
+
+    private boolean isUddiDetailPk(String detailPk) {
+        return detailPk != null && detailPk.startsWith("uddi:");
     }
 
     private LocalDate parseSeoulModifiedDate(String modifiedDateText) {
@@ -729,7 +772,7 @@ public class PublicDataApiClient {
                     filterField,
                     filterValue
             );
-            String responseBody = fetchBody(requestUri, sourceConfig.getSourceType());
+            String responseBody = fetchBody(requestUri, sourceConfig);
             FileDataPageResultDto pageResult = parseDataGoFileDataItems(responseBody, sourceConfig);
 
             log.info("[COUNT] source={} {} page={} detected={}",
@@ -776,7 +819,7 @@ public class PublicDataApiClient {
                 .orElseThrow(() -> new ExternalApiException("서울 열린데이터 serviceName 설정이 비어 있습니다: " + sourceConfig.getSourceType()));
 
         String requestUri = buildSeoulOpenApiRequestUri(sourceConfig, serviceName, pageNo);
-        String responseBody = fetchBody(requestUri, sourceConfig.getSourceType());
+        String responseBody = fetchBody(requestUri, sourceConfig);
 
         try {
             JsonNode rootNode = objectMapper.readTree(responseBody);
@@ -869,7 +912,7 @@ public class PublicDataApiClient {
 
         for (KricStationCodeLoader.StationReference stationReference : stationReferences) {
             String requestUri = buildRailWheelchairLiftRequestUri(sourceConfig, stationReference);
-            String responseBody = fetchBody(requestUri, sourceConfig.getSourceType());
+            String responseBody = fetchBody(requestUri, sourceConfig);
 
             try {
                 JsonNode rootNode = objectMapper.readTree(responseBody);
@@ -909,7 +952,7 @@ public class PublicDataApiClient {
             int pageNo
     ) {
         String requestUri = buildRequestUri(sourceConfig, pageNo);
-        String responseBody = fetchBody(requestUri, sourceConfig.getSourceType());
+        String responseBody = fetchBody(requestUri, sourceConfig);
         JsonNode rootNode = parseXml(responseBody, "공공데이터 XML 응답 파싱 실패: " + sourceConfig.getSourceType());
 
         validateApiResultOrThrow(rootNode, sourceConfig.getSourceType());
@@ -931,7 +974,7 @@ public class PublicDataApiClient {
             int pageNo
     ) {
         String requestUri = buildVocationalTrainingRequestUri(sourceConfig, pageNo);
-        String responseBody = fetchBody(requestUri, sourceConfig.getSourceType());
+        String responseBody = fetchBody(requestUri, sourceConfig);
         JsonNode rootNode = parseXml(responseBody, "직업훈련 API 응답 파싱 실패");
 
         JsonNode itemsNode = resolveFirstNodeByPointers(
@@ -978,7 +1021,7 @@ public class PublicDataApiClient {
 
             for (int datePageNo = 1; datePageNo <= sourceConfig.getMaxPages(); datePageNo++) {
                 String requestUri = buildJobseekerCompetencyProgramRequestUri(sourceConfig, datePageNo, pgmStdt);
-                String responseBody = fetchBody(requestUri, sourceConfig.getSourceType());
+                String responseBody = fetchBody(requestUri, sourceConfig);
                 JsonNode rootNode = parseXml(
                         responseBody,
                         "구직자 취업역량 강화프로그램 API 응답 파싱 실패: pgmStdt=" + pgmStdt + ", startPage=" + datePageNo
@@ -1218,7 +1261,9 @@ public class PublicDataApiClient {
         }
     }
 
-    private String fetchBody(String requestUri, PublicDataSourceType sourceType) {
+    private String fetchBody(String requestUri, BridgeWorkSyncProperties.SourceConfig sourceConfig) {
+        PublicDataSourceType sourceType = sourceConfig.getSourceType();
+        Duration requestTimeout = resolveRequestTimeout(sourceConfig);
         log.info("[HTTP] source={} uri={}", sourceType, maskCredentialQueryParams(requestUri));
         return webClient
                 .get()
@@ -1241,13 +1286,24 @@ public class PublicDataApiClient {
                                 ))
                 )
                 .bodyToMono(String.class)
-                .timeout(syncProperties.getRequestTimeout())
+                .timeout(requestTimeout)
                 .retryWhen(
                         Retry.backoff(API_RETRY_COUNT, API_RETRY_BACKOFF)
                                 .filter(this::isRetryableApiException)
                 )
+                .onErrorMap(TimeoutException.class, exception ->
+                        new ExternalApiException("공공데이터 API 호출 타임아웃(" + sourceType + "): "
+                                + requestTimeout.toSeconds() + "초"))
                 .blockOptional()
                 .orElseThrow(() -> new ExternalApiException("공공데이터 API 응답이 비어 있습니다: " + sourceType));
+    }
+
+    private Duration resolveRequestTimeout(BridgeWorkSyncProperties.SourceConfig sourceConfig) {
+        Duration sourceTimeout = sourceConfig.getRequestTimeout();
+        if (sourceTimeout != null && !sourceTimeout.isNegative() && !sourceTimeout.isZero()) {
+            return sourceTimeout;
+        }
+        return syncProperties.getRequestTimeout();
     }
 
     private String maskCredentialQueryParams(String uri) {
@@ -1265,11 +1321,17 @@ public class PublicDataApiClient {
 
         Throwable current = throwable;
         while (current != null && current.getCause() != current) {
+            if (current instanceof TimeoutException) {
+                return true;
+            }
             String message = current.getMessage();
             if (message != null && !message.isBlank()) {
                 if (message.contains("재시도 대상")
                         || message.contains("Connection reset")
                         || message.contains("Read timed out")
+                        || message.contains("Failed to resolve")
+                        || message.contains("UnknownHostException")
+                        || message.contains("SERVFAIL")
                         || message.contains("connection prematurely closed")
                         || message.contains("failed to respond")
                         || message.contains("failure when writing TLS control frames")
@@ -1283,13 +1345,24 @@ public class PublicDataApiClient {
         return false;
     }
 
-    private String extractFileDataField(String body, Pattern pattern, String fieldName) {
-        Matcher matcher = pattern.matcher(body);
-        if (!matcher.find()) {
+    private String extractFileDataField(Document document, String fieldName) {
+        Element formElement = document.selectFirst("form#frmFile, form[name=frmFile]");
+        Element inputElement = null;
+        if (formElement != null) {
+            inputElement = formElement.selectFirst("input#" + fieldName + ", input[name=" + fieldName + "]");
+        }
+        if (inputElement == null) {
+            inputElement = document.selectFirst("input#" + fieldName + ", input[name=" + fieldName + "]");
+        }
+        if (inputElement == null) {
             throw new ExternalApiException("파일데이터 페이지에서 " + fieldName + " 추출 실패");
         }
+        String value = inputElement.attr("value").trim();
+        if (value.isBlank()) {
+            throw new ExternalApiException("파일데이터 페이지에서 " + fieldName + " 값이 비어 있습니다.");
+        }
         // fileData 페이지의 식별자를 그대로 사용해야 변환 OpenAPI의 최신 버전 경로를 고정할 수 있다.
-        return matcher.group(1);
+        return value;
     }
 
     private JsonNode resolveItemsNode(JsonNode rootNode, String configuredPointer) {
@@ -1302,9 +1375,37 @@ public class PublicDataApiClient {
             return itemsNode;
         }
 
+        JsonNode bodyItemsNode = rootNode.path("response").path("body").path("items");
+        if (!bodyItemsNode.isMissingNode() && !bodyItemsNode.isNull()) {
+            // 표준데이터 API는 items가 배열로 내려오는 경우가 있어 item 하위 키 없이도 처리한다.
+            if (bodyItemsNode.isArray()) {
+                return bodyItemsNode;
+            }
+            JsonNode nestedItemNode = bodyItemsNode.path("item");
+            if (!nestedItemNode.isMissingNode() && !nestedItemNode.isNull()) {
+                return nestedItemNode;
+            }
+        }
+
         JsonNode fallbackItems = rootNode.path("response").path("body").path("items").path("item");
         if (!fallbackItems.isMissingNode() && !fallbackItems.isNull()) {
             return fallbackItems;
+        }
+
+        JsonNode bareBodyItemsNode = rootNode.path("body").path("items");
+        if (!bareBodyItemsNode.isMissingNode() && !bareBodyItemsNode.isNull()) {
+            if (bareBodyItemsNode.isArray()) {
+                return bareBodyItemsNode;
+            }
+            JsonNode nestedItemNode = bareBodyItemsNode.path("item");
+            if (!nestedItemNode.isMissingNode() && !nestedItemNode.isNull()) {
+                return nestedItemNode;
+            }
+        }
+
+        JsonNode bareFallbackItems = rootNode.path("body").path("items").path("item");
+        if (!bareFallbackItems.isMissingNode() && !bareFallbackItems.isNull()) {
+            return bareFallbackItems;
         }
 
         return objectMapper.createArrayNode();
@@ -1349,6 +1450,14 @@ public class PublicDataApiClient {
         JsonNode fallbackCount = rootNode.path("response").path("body").path("totalCount");
         if (!fallbackCount.isMissingNode()) {
             Optional<Integer> parsed = parseInteger(fallbackCount.asText(null));
+            if (parsed.isPresent()) {
+                return parsed;
+            }
+        }
+
+        JsonNode bareFallbackCount = rootNode.path("body").path("totalCount");
+        if (!bareFallbackCount.isMissingNode()) {
+            Optional<Integer> parsed = parseInteger(bareFallbackCount.asText(null));
             if (parsed.isPresent()) {
                 return parsed;
             }

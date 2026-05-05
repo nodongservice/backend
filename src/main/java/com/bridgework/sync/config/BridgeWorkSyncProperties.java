@@ -96,6 +96,8 @@ public class BridgeWorkSyncProperties {
         @Min(1)
         private int maxPages = 20;
 
+        private Duration requestTimeout;
+
         @NotBlank
         private String itemsJsonPointer = "/response/body/items/item";
 
@@ -152,6 +154,14 @@ public class BridgeWorkSyncProperties {
 
         public void setMaxPages(int maxPages) {
             this.maxPages = maxPages;
+        }
+
+        public Duration getRequestTimeout() {
+            return requestTimeout;
+        }
+
+        public void setRequestTimeout(Duration requestTimeout) {
+            this.requestTimeout = requestTimeout;
         }
 
         public String getItemsJsonPointer() {

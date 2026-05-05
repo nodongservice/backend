@@ -178,6 +178,7 @@ bridgework:
         enabled: true
         base-url: https://api.data.go.kr/openapi/tn_pubr_public_crosswalk_api
         service-key: ${bridgework.sync.data-go-kr-service-key}
+        request-timeout: 60s
         page-size: 1000
         max-pages: 1000
         item-id-field: crswlkManageNo
