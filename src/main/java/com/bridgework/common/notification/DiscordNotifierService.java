@@ -10,18 +10,23 @@ import java.time.Duration;
 import java.util.List;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
+import reactor.util.retry.Retry;
 
 @Service
 public class DiscordNotifierService {
 
     private static final Logger log = LoggerFactory.getLogger(DiscordNotifierService.class);
     private static final int DISCORD_MAX_MESSAGE_LENGTH = 1900;
+    private static final int DISCORD_RETRY_COUNT = 2;
+    private static final Duration DISCORD_RETRY_BACKOFF = Duration.ofMillis(700);
+    private static final Duration DISCORD_REQUEST_TIMEOUT = Duration.ofSeconds(10);
 
     private final WebClient webClient;
     private final BridgeWorkDiscordProperties discordProperties;
@@ -108,11 +113,15 @@ public class DiscordNotifierService {
                     .bodyValue(body)
                     .retrieve()
                     .toBodilessEntity()
-                    .timeout(Duration.ofSeconds(5))
+                    .timeout(DISCORD_REQUEST_TIMEOUT)
+                    .retryWhen(
+                            Retry.backoff(DISCORD_RETRY_COUNT, DISCORD_RETRY_BACKOFF)
+                                    .filter(this::isRetryableDiscordException)
+                    )
                     .block();
         } catch (Exception exception) {
             // 알림 실패가 본 업무 플로우를 막지 않도록 예외를 삼킨다.
-            log.warn("Discord 알림 전송 실패: {}", exception.getMessage());
+            log.warn("Discord 알림 전송 실패: {}", summarizeFailureReason(exception));
         }
     }
 
@@ -208,5 +217,45 @@ public class DiscordNotifierService {
             return normalized;
         }
         return normalized.substring(0, 177) + "...";
+    }
+
+    private boolean isRetryableDiscordException(Throwable throwable) {
+        Throwable current = throwable;
+        while (current != null && current.getCause() != current) {
+            if (current instanceof TimeoutException) {
+                return true;
+            }
+            String message = current.getMessage();
+            if (message != null && !message.isBlank()) {
+                if (message.contains("Did not observe any item or terminal signal")
+                        || message.contains("Read timed out")
+                        || message.contains("Connection reset")
+                        || message.contains("Failed to resolve")
+                        || message.contains("UnknownHostException")
+                        || message.contains("connection prematurely closed")
+                        || message.contains("TLS")
+                        || message.contains("SSL")) {
+                    return true;
+                }
+            }
+            current = current.getCause();
+        }
+        return false;
+    }
+
+    private String summarizeFailureReason(Throwable throwable) {
+        Throwable current = throwable;
+        while (current != null && current.getCause() != null && current.getCause() != current) {
+            current = current.getCause();
+        }
+
+        String message = current == null ? null : current.getMessage();
+        if (message == null || message.isBlank()) {
+            message = throwable == null ? null : throwable.getMessage();
+        }
+        if (message == null || message.isBlank()) {
+            message = throwable == null ? "unknown" : throwable.getClass().getSimpleName();
+        }
+        return message.replace('\n', ' ').replace('\r', ' ').trim();
     }
 }
