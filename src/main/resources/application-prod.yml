@@ -18,6 +18,8 @@ server:
   forward-headers-strategy: framework
 
 bridgework:
+  discord:
+    webhook-url: ${DISCORD_WEBHOOK_URL}
   recommend:
     fastapi-base-url: https://api.bridgework.cloud/api/py
   sync:

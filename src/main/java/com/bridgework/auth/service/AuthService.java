@@ -14,6 +14,7 @@ import com.bridgework.auth.exception.UserNotFoundException;
 import com.bridgework.auth.repository.AppUserRepository;
 import com.bridgework.auth.security.JwtTokenProvider;
 import com.bridgework.auth.security.ParsedJwtToken;
+import com.bridgework.common.notification.DiscordNotifierService;
 import com.bridgework.profile.repository.UserProfileRepository;
 import com.bridgework.profile.service.UserProfileService;
 import jakarta.transaction.Transactional;
@@ -33,6 +34,7 @@ public class AuthService {
     private final BridgeWorkAuthProperties authProperties;
     private final UserProfileService userProfileService;
     private final UserProfileRepository userProfileRepository;
+    private final DiscordNotifierService discordNotifierService;
 
     public AuthService(AppUserRepository appUserRepository,
                        SocialOAuthService socialOAuthService,
@@ -41,7 +43,8 @@ public class AuthService {
                        JwtTokenProvider jwtTokenProvider,
                        BridgeWorkAuthProperties authProperties,
                        UserProfileService userProfileService,
-                       UserProfileRepository userProfileRepository) {
+                       UserProfileRepository userProfileRepository,
+                       DiscordNotifierService discordNotifierService) {
         this.appUserRepository = appUserRepository;
         this.socialOAuthService = socialOAuthService;
         this.signupSessionStoreService = signupSessionStoreService;
@@ -50,6 +53,7 @@ public class AuthService {
         this.authProperties = authProperties;
         this.userProfileService = userProfileService;
         this.userProfileRepository = userProfileRepository;
+        this.discordNotifierService = discordNotifierService;
     }
 
     @Transactional
@@ -120,6 +124,7 @@ public class AuthService {
 
         // 회원가입이 완료되면 세션 토큰은 즉시 제거해 재사용을 차단한다.
         signupSessionStoreService.deleteSession(request.signupToken());
+        discordNotifierService.notifySignupCompleted(savedUser.getEmail(), appUserRepository.count());
         return issueAndStoreTokenPair(savedUser);
     }
 

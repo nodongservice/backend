@@ -5,6 +5,8 @@ import com.bridgework.sync.exception.SyncDomainException;
 import jakarta.validation.ConstraintViolationException;
 import java.time.OffsetDateTime;
 import java.util.stream.Collectors;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -13,6 +15,8 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
     @ExceptionHandler(SyncDomainException.class)
     public ResponseEntity<ApiErrorResponse> handleSyncDomainException(SyncDomainException exception) {
@@ -66,6 +70,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiErrorResponse> handleUnexpectedException(Exception exception) {
+        log.error("처리되지 않은 예외 발생", exception);
         return ResponseEntity.internalServerError().body(new ApiErrorResponse(
                 "INTERNAL_SERVER_ERROR",
                 "내부 서버 오류가 발생했습니다.",

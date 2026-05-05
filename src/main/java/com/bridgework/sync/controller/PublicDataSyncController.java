@@ -3,15 +3,18 @@ package com.bridgework.sync.controller;
 import com.bridgework.sync.dto.SourceConfigResponseDto;
 import com.bridgework.sync.dto.SyncLogResponseDto;
 import com.bridgework.sync.dto.SyncLogResetResponseDto;
-import com.bridgework.sync.dto.SyncRunResponseDto;
+import com.bridgework.sync.dto.SyncRunAcceptedResponseDto;
 import com.bridgework.sync.entity.PublicDataSourceType;
 import com.bridgework.sync.entity.SyncRequestSource;
 import com.bridgework.sync.service.PublicDataSyncExecutionLockService;
 import com.bridgework.sync.service.PublicDataSyncService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.concurrent.Executor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -26,23 +29,34 @@ public class PublicDataSyncController {
 
     private final PublicDataSyncService publicDataSyncService;
     private final PublicDataSyncExecutionLockService publicDataSyncExecutionLockService;
+    private final Executor syncTaskExecutor;
 
     public PublicDataSyncController(PublicDataSyncService publicDataSyncService,
-                                    PublicDataSyncExecutionLockService publicDataSyncExecutionLockService) {
+                                    PublicDataSyncExecutionLockService publicDataSyncExecutionLockService,
+                                    @Qualifier("syncTaskExecutor") Executor syncTaskExecutor) {
         this.publicDataSyncService = publicDataSyncService;
         this.publicDataSyncExecutionLockService = publicDataSyncExecutionLockService;
+        this.syncTaskExecutor = syncTaskExecutor;
     }
 
     @PostMapping("/run")
     @Operation(summary = "공공데이터 수동 동기화 실행", description = "전체 또는 특정 소스의 최신 데이터를 수집하고 DB를 동기화한다.")
-    public ResponseEntity<SyncRunResponseDto> runSync(
+    public ResponseEntity<SyncRunAcceptedResponseDto> runSync(
             @RequestParam(name = "sourceType", required = false) PublicDataSourceType sourceType
     ) {
-        SyncRunResponseDto response = publicDataSyncExecutionLockService.runManualOrThrow(() -> sourceType == null
-                ? publicDataSyncService.syncAll(SyncRequestSource.MANUAL)
-                : publicDataSyncService.syncSingle(sourceType, SyncRequestSource.MANUAL));
+        publicDataSyncExecutionLockService.runManualAsyncOrThrow(syncTaskExecutor, () -> {
+            if (sourceType == null) {
+                publicDataSyncService.syncAll(SyncRequestSource.MANUAL);
+            } else {
+                publicDataSyncService.syncSingle(sourceType, SyncRequestSource.MANUAL);
+            }
+        });
 
-        return ResponseEntity.ok(response);
+        return ResponseEntity.accepted().body(new SyncRunAcceptedResponseDto(
+                OffsetDateTime.now(),
+                sourceType,
+                "동기화 요청이 접수되었습니다. 최종 결과는 Discord 알림으로 전달됩니다."
+        ));
     }
 
     @GetMapping("/logs")

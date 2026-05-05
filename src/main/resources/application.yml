@@ -39,6 +39,8 @@ springdoc:
     tags-sorter: alpha
 
 bridgework:
+  discord:
+    webhook-url: ""
   recommend:
     fastapi-base-url: http://localhost:8000
     quick-path: /ai/v1/score/quick
