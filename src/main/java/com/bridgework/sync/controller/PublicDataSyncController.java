@@ -1,6 +1,7 @@
 package com.bridgework.sync.controller;
 
 import com.bridgework.sync.dto.SourceConfigResponseDto;
+import com.bridgework.sync.dto.NormalizedCountSummaryResponseDto;
 import com.bridgework.sync.dto.SyncLogResponseDto;
 import com.bridgework.sync.dto.SyncLogResetResponseDto;
 import com.bridgework.sync.dto.SyncRunAcceptedResponseDto;
@@ -78,5 +79,11 @@ public class PublicDataSyncController {
     @Operation(summary = "동기화 소스 설정 조회", description = "서버에 등록된 공공데이터 소스별 동기화 설정을 조회한다.")
     public ResponseEntity<List<SourceConfigResponseDto>> getSources() {
         return ResponseEntity.ok(publicDataSyncService.getSourceConfigs());
+    }
+
+    @GetMapping("/normalized-counts")
+    @Operation(summary = "정규화 테이블 건수 조회", description = "모든 공공데이터 정규화 테이블(pd_*)의 소스별/전체 건수를 조회한다.")
+    public ResponseEntity<NormalizedCountSummaryResponseDto> getNormalizedCounts() {
+        return ResponseEntity.ok(publicDataSyncService.getNormalizedCounts());
     }
 }

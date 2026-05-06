@@ -4,6 +4,8 @@ import com.bridgework.sync.config.BridgeWorkSyncProperties;
 import com.bridgework.common.notification.DiscordNotifierService;
 import com.bridgework.sync.dto.PublicDataApiItemDto;
 import com.bridgework.sync.dto.PublicDataApiPageResponseDto;
+import com.bridgework.sync.dto.NormalizedCountSummaryResponseDto;
+import com.bridgework.sync.dto.NormalizedSourceCountResponseDto;
 import com.bridgework.sync.dto.SourceLatestRevisionDto;
 import com.bridgework.sync.dto.SourceConfigResponseDto;
 import com.bridgework.sync.dto.SourceSyncResultDto;
@@ -186,6 +188,20 @@ public class PublicDataSyncService {
                         source.getMaxPages()
                 ))
                 .toList();
+    }
+
+    public NormalizedCountSummaryResponseDto getNormalizedCounts() {
+        List<NormalizedSourceCountResponseDto> sourceCounts = new ArrayList<>();
+        long totalCount = 0L;
+
+        for (PublicDataSourceType sourceType : PublicDataSourceType.values()) {
+            String tableName = publicDataNormalizedStoreService.resolveTableName(sourceType);
+            long rowCount = publicDataNormalizedStoreService.countBySource(sourceType);
+            sourceCounts.add(new NormalizedSourceCountResponseDto(sourceType, tableName, rowCount));
+            totalCount += rowCount;
+        }
+
+        return new NormalizedCountSummaryResponseDto(totalCount, sourceCounts);
     }
 
     @Transactional
