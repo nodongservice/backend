@@ -79,6 +79,7 @@
 - `WORK24_COMPETENCY_AUTH_KEY`
 - `NAVER_GEOCODE_API_KEY_ID`
 - `NAVER_GEOCODE_API_KEY`
+- `DISCORD_WEBHOOK_URL`
 - `BRIDGEWORK_AUTH_JWT_SECRET`
 - `KAKAO_CLIENT_SECRET`
 - `NAVER_CLIENT_SECRET`
@@ -89,7 +90,7 @@
 
 ### 실행 예시
 - 로컬: `SPRING_PROFILES_ACTIVE=local`
-- 로컬 FastAPI 주소 변경(선택): `FASTAPI_BASE_URL=http://localhost:19000`
+- 로컬 FastAPI 주소 변경(선택): `BRIDGEWORK_RECOMMEND_FASTAPI_BASE_URL=http://localhost:19000`
 - 운영: `SPRING_PROFILES_ACTIVE=prod`
 
 ## CI/CD (main -> EC2 무중단 배포)
@@ -118,6 +119,7 @@
 - `SEOUL_OPEN_API_KEY`
 - `NAVER_GEOCODE_API_KEY_ID`
 - `NAVER_GEOCODE_API_KEY`
+- `DISCORD_WEBHOOK_URL`
 - `BRIDGEWORK_AUTH_JWT_SECRET`
 - `KAKAO_CLIENT_SECRET`
 - `NAVER_CLIENT_SECRET`
@@ -153,7 +155,7 @@
 | `SEOUL_WHEELCHAIR_RAMP_STATUS` (서울교통공사_휠체어경사로 설치 현황)              | [OA-13116](https://data.seoul.go.kr/dataList/OA-13116/S/1/datasetView.do) | `https://datafile.seoul.go.kr/bigfile/iot/inf/nio_download.do` (datasetView의 파일목록에서 최신 `수정일` 1건 선택 후 다운로드) | 없음 | `infId`, `infSeq`, `seq`, `seqNo`, `useCache=false` |
 | `SEOUL_LOW_FLOOR_BUS_ROUTE_RETENTION` (서울시 저상버스 도입 노선 및 노선별 보유율)  | [OA-22229](https://data.seoul.go.kr/dataList/OA-22229/F/1/datasetView.do) | `https://datafile.seoul.go.kr/bigfile/iot/inf/nio_download.do` (datasetView의 파일목록에서 최신 `수정일` 1건 선택 후 다운로드) | 없음 | `infId`, `infSeq`, `seq`, `seqNo`, `useCache=false` |
 | `NATIONWIDE_TRAFFIC_LIGHT` (전국신호등표준데이터)                           | [15028198](https://www.data.go.kr/data/15028198/standard.do#) | `https://api.data.go.kr/openapi/tn_pubr_public_traffic_light_api` | data.go.kr 서비스키 | `serviceKey`, `pageNo`, `numOfRows(max=1000)`, `type=xml` |
-| `NATIONWIDE_CROSSWALK` (전국횡단보도표준데이터)                              | [15028201](https://www.data.go.kr/data/15028201/standard.do) | `https://api.data.go.kr/openapi/tn_pubr_public_crosswalk_api` | data.go.kr 서비스키 | `serviceKey`, `pageNo`, `numOfRows(max=1000)`, `type=json` |
+| `NATIONWIDE_CROSSWALK` (전국횡단보도표준데이터)                              | [15028201](https://www.data.go.kr/data/15028201/standard.do) | `https://api.data.go.kr/openapi/tn_pubr_public_crosswalk_api` | data.go.kr 서비스키 | `serviceKey`, `pageNo`, `numOfRows(max=1000)`, `type=xml` |
 | `VOCATIONAL_TRAINING` (한국고용정보원_직업훈련_국민내일배움카드 훈련과정)                | [work24 000004](https://www.work24.go.kr/cm/e/a/0110/selectOpenApiSvcInfo.do?apiSvcId=&upprApiSvcId=&fullApiSvcId=000000000000000000000000000004) | `https://www.work24.go.kr/cm/openApi/call/hr/callOpenApiSvcInfo310L01.do` | Work24 인증키 | `authKey`, `returnType=XML`, `pageNum`, `pageSize(max=100)` |
 | `JOBSEEKER_COMPETENCY_PROGRAM` (한국고용정보원_구직자취업역량 강화프로그램)           | [work24 000098](https://www.work24.go.kr/cm/e/a/0110/selectOpenApiSvcInfo.do?apiSvcId=&upprApiSvcId=&fullApiSvcId=000000000000000000000000000098) | `https://www.work24.go.kr/cm/openApi/call/wk/callOpenApiSvcInfo217L01.do` | Work24 인증키 | `authKey`, `returnType=XML`, `startPage`, `display(max=100)`, `pgmStdt(YYYYMMDD, 오늘~1개월 후 반복)` |
 
@@ -722,7 +724,7 @@
 
 ## 스케줄러
 - Cron: `bridgework.sync.cron`
-- 기본값: `0 0/30 * * * *`
+- 기본값: `0 0 0 * * *`
 - ShedLock 적용으로 다중 인스턴스 중복 실행 방지
 - 페이징은 API별 최대 페이지 크기로 조회하고 마지막 페이지까지 순회
 - `SEOUL_WHEELCHAIR_RAMP_STATUS`, `SEOUL_LOW_FLOOR_BUS_ROUTE_RETENTION`는 최신 파일 revision 동일 시 스킵(`public_data_source_snapshot` 기준)
@@ -755,6 +757,7 @@
 - 전체 동기화: `POST /api/v1/sync/public-data/run`
 - 단일 동기화: `POST /api/v1/sync/public-data/run?sourceType=KEPAD_RECRUITMENT`
 - 동기화 로그: `GET /api/v1/sync/public-data/logs`
+- 동기화 로그 초기화: `DELETE /api/v1/sync/public-data/logs`
 - 소스 설정: `GET /api/v1/sync/public-data/sources`
 - 저장 레코드 목록: `GET /api/v1/public-data/records?sourceType=KEPAD_RECRUITMENT&page=0&size=20&includePayload=false`
 - 저장 레코드 상세: `GET /api/v1/public-data/records/{recordId}?includePayload=true`
