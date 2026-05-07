@@ -24,8 +24,9 @@ import com.bridgework.sync.repository.PublicDataSourceSnapshotRepository;
 import com.bridgework.sync.repository.PublicDataSyncLogRepository;
 import com.bridgework.sync.normalized.PublicDataNormalizedStoreService;
 import jakarta.annotation.PostConstruct;
-import java.time.OffsetDateTime;
 import java.time.Duration;
+import java.time.OffsetDateTime;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.LinkedHashMap;
@@ -44,6 +45,7 @@ public class PublicDataSyncService {
 
     private static final Logger log = LoggerFactory.getLogger(PublicDataSyncService.class);
     private static final int DELETE_BATCH_SIZE = 500;
+    private static final ZoneId SEOUL_ZONE_ID = ZoneId.of("Asia/Seoul");
 
     private final BridgeWorkSyncProperties syncProperties;
     private final PublicDataApiClient publicDataApiClient;
@@ -172,10 +174,18 @@ public class PublicDataSyncService {
                         logItem.getUpdatedCount(),
                         logItem.getFailedCount(),
                         logItem.getErrorMessage(),
-                        logItem.getStartedAt(),
-                        logItem.getEndedAt()
+                        toSeoulOffset(logItem.getStartedAt()),
+                        toSeoulOffset(logItem.getEndedAt())
                 ))
                 .toList();
+    }
+
+    private OffsetDateTime toSeoulOffset(OffsetDateTime value) {
+        if (value == null) {
+            return null;
+        }
+        // DB에는 절대시각을 저장하고, API 응답 직전에 KST로 표준화한다.
+        return value.atZoneSameInstant(SEOUL_ZONE_ID).toOffsetDateTime();
     }
 
     public List<SourceConfigResponseDto> getSourceConfigs() {

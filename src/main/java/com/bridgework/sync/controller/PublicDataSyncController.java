@@ -12,6 +12,7 @@ import com.bridgework.sync.service.PublicDataSyncService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import java.time.OffsetDateTime;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.concurrent.Executor;
 import org.springframework.http.ResponseEntity;
@@ -27,6 +28,8 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/v1/sync/public-data")
 @Tag(name = "PublicDataSync", description = "공공데이터 동기화 실행/로그/설정 조회 API")
 public class PublicDataSyncController {
+
+    private static final ZoneId SEOUL_ZONE_ID = ZoneId.of("Asia/Seoul");
 
     private final PublicDataSyncService publicDataSyncService;
     private final PublicDataSyncExecutionLockService publicDataSyncExecutionLockService;
@@ -54,7 +57,7 @@ public class PublicDataSyncController {
         });
 
         return ResponseEntity.accepted().body(new SyncRunAcceptedResponseDto(
-                OffsetDateTime.now(),
+                OffsetDateTime.now(SEOUL_ZONE_ID),
                 sourceType,
                 "동기화 요청이 접수되었습니다. 최종 결과는 Discord 알림으로 전달됩니다."
         ));
