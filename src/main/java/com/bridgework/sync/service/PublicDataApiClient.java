@@ -74,9 +74,14 @@ public class PublicDataApiClient {
     private static final String DEFAULT_ITEMS_POINTER = "/response/body/items/item";
     private static final String DEFAULT_TOTAL_COUNT_POINTER = "/response/body/totalCount";
     private static final Pattern ODCLOUD_ENDPOINT_PATTERN =
-            Pattern.compile("api\\.odcloud\\.kr/api/([0-9]{5,})/v1/([a-zA-Z0-9:_-]{5,})");
+            Pattern.compile("(?:https?://|//)?(?:api\\.odcloud\\.kr)?/?api/([0-9]{5,})/v1/([a-zA-Z0-9:%_:-]{5,})",
+                    Pattern.CASE_INSENSITIVE);
+    private static final Pattern ODCLOUD_UDDI_DETAIL_PATTERN =
+            Pattern.compile("uddi(?::|%3A)[0-9a-fA-F-]{20,}", Pattern.CASE_INSENSITIVE);
     private static final Pattern DATE_TOKEN_PATTERN =
             Pattern.compile("(20\\d{2})[./-](\\d{1,2})[./-](\\d{1,2})");
+    private static final Pattern DATE_TOKEN_COMPACT_PATTERN =
+            Pattern.compile("(?<!\\d)(20\\d{2})(\\d{2})(\\d{2})(?!\\d)");
     private static final Pattern CREDENTIAL_QUERY_PARAM_PATTERN =
             Pattern.compile("([?&](?:serviceKey|authKey)=)([^&]+)");
     private static final LocalDate UNKNOWN_MODIFIED_DATE = LocalDate.of(1970, 1, 1);
@@ -334,13 +339,12 @@ public class PublicDataApiClient {
                                                                           BridgeWorkSyncProperties.SourceConfig sourceConfig,
                                                                           String fallbackPublicDataPk,
                                                                           PublicDataSourceType sourceType) {
-        Document document = Jsoup.parse(htmlBody);
         List<DataGoFileDataCandidate> candidates = new ArrayList<>();
 
-        // fileData 원문에서 후보를 찾지 못하는 경우를 대비해 openapi 페이지의 swagger 영역도 함께 탐색한다.
+        // fileData 소스는 openapi 페이지의 swagger 영역 기준으로 최신 endpoint 후보를 추출한다.
         String openApiPageBody = fetchOpenApiPageBody(sourceConfig);
         if (openApiPageBody != null && !openApiPageBody.isBlank()) {
-            collectDataGoCandidatesFromSwaggerPage(openApiPageBody, candidates);
+            collectDataGoCandidatesFromSwaggerPage(openApiPageBody, fallbackPublicDataPk, candidates);
         }
 
         Map<String, DataGoFileDataCandidate> dedupedCandidates = new LinkedHashMap<>();
@@ -360,6 +364,7 @@ public class PublicDataApiClient {
     }
 
     private void collectDataGoCandidatesFromSwaggerPage(String openApiPageBody,
+                                                        String fallbackPublicDataPk,
                                                         List<DataGoFileDataCandidate> candidates) {
         Document openApiDocument = Jsoup.parse(openApiPageBody);
 
@@ -367,22 +372,31 @@ public class PublicDataApiClient {
                 openApiPageBody,
                 extractFirstDate(openApiDocument.text()).orElse(null),
                 "openapi-page-body",
+                fallbackPublicDataPk,
                 candidates
         );
         collectDataGoCandidatesFromText(
                 normalizeSwaggerCandidateText(openApiPageBody),
                 extractFirstDate(openApiDocument.text()).orElse(null),
                 "openapi-page-body-normalized",
+                fallbackPublicDataPk,
                 candidates
         );
 
         for (Element swaggerElement : openApiDocument.select("#swagger-container, #swagger-ui, [id*=swagger]")) {
             LocalDate modifiedDate = extractFirstDate(swaggerElement.text()).orElse(null);
-            collectDataGoCandidatesFromText(swaggerElement.outerHtml(), modifiedDate, "swagger-container", candidates);
+            collectDataGoCandidatesFromText(
+                    swaggerElement.outerHtml(),
+                    modifiedDate,
+                    "swagger-container",
+                    fallbackPublicDataPk,
+                    candidates
+            );
             collectDataGoCandidatesFromText(
                     normalizeSwaggerCandidateText(swaggerElement.outerHtml()),
                     modifiedDate,
                     "swagger-container-normalized",
+                    fallbackPublicDataPk,
                     candidates
             );
         }
@@ -397,11 +411,18 @@ public class PublicDataApiClient {
                     .or(() -> extractFirstDate(scriptData))
                     .orElse(null);
 
-            collectDataGoCandidatesFromText(scriptData, modifiedDate, "swagger-script", candidates);
+            collectDataGoCandidatesFromText(
+                    scriptData,
+                    modifiedDate,
+                    "swagger-script",
+                    fallbackPublicDataPk,
+                    candidates
+            );
             collectDataGoCandidatesFromText(
                     normalizedScriptData,
                     modifiedDate,
                     "swagger-script-normalized",
+                    fallbackPublicDataPk,
                     candidates
             );
         }
@@ -441,7 +462,9 @@ public class PublicDataApiClient {
         normalized = normalized
                 .replace("\\/", "/")
                 .replace("\\u002F", "/")
+                .replace("\\u002f", "/")
                 .replace("\\u003A", ":")
+                .replace("\\u003a", ":")
                 .replace("\\u0026", "&");
 
         String decoded = decodePercentEscapesSafely(normalized);
@@ -454,13 +477,47 @@ public class PublicDataApiClient {
     private void collectDataGoCandidatesFromText(String text,
                                                  LocalDate modifiedDate,
                                                  String contextLabel,
+                                                 String fallbackPublicDataPk,
                                                  List<DataGoFileDataCandidate> candidates) {
         Matcher endpointMatcher = ODCLOUD_ENDPOINT_PATTERN.matcher(text);
         while (endpointMatcher.find()) {
             String publicDataPk = endpointMatcher.group(1).trim();
-            String publicDataDetailPk = endpointMatcher.group(2).trim();
+            String publicDataDetailPk = normalizeDataGoDetailPk(endpointMatcher.group(2));
+            if (publicDataDetailPk.isBlank()) {
+                continue;
+            }
             candidates.add(new DataGoFileDataCandidate(publicDataPk, publicDataDetailPk, modifiedDate, contextLabel));
         }
+
+        if (fallbackPublicDataPk == null || fallbackPublicDataPk.isBlank()) {
+            return;
+        }
+
+        Matcher uddiMatcher = ODCLOUD_UDDI_DETAIL_PATTERN.matcher(text);
+        while (uddiMatcher.find()) {
+            String publicDataDetailPk = normalizeDataGoDetailPk(uddiMatcher.group());
+            if (!isUddiDetailPk(publicDataDetailPk)) {
+                continue;
+            }
+            candidates.add(new DataGoFileDataCandidate(
+                    fallbackPublicDataPk.trim(),
+                    publicDataDetailPk,
+                    modifiedDate,
+                    contextLabel + "-uddi-token"
+            ));
+        }
+    }
+
+    private String normalizeDataGoDetailPk(String rawValue) {
+        if (rawValue == null || rawValue.isBlank()) {
+            return "";
+        }
+
+        String normalized = rawValue.trim();
+        normalized = normalized.replace("%3A", ":").replace("%3a", ":");
+        normalized = decodePercentEscapesSafely(normalized);
+        normalized = normalized.replaceAll("[\"'<>\\s]+$", "");
+        return normalized;
     }
 
     private List<String> extractRegexMatches(String text, Pattern pattern) {
@@ -476,6 +533,18 @@ public class PublicDataApiClient {
     }
 
     private Optional<LocalDate> extractFirstDate(String text) {
+        Matcher compactMatcher = DATE_TOKEN_COMPACT_PATTERN.matcher(text);
+        while (compactMatcher.find()) {
+            try {
+                int year = Integer.parseInt(compactMatcher.group(1));
+                int month = Integer.parseInt(compactMatcher.group(2));
+                int day = Integer.parseInt(compactMatcher.group(3));
+                return Optional.of(LocalDate.of(year, month, day));
+            } catch (RuntimeException exception) {
+                // 잘못된 날짜 토큰은 무시하고 다음 후보를 계속 탐색한다.
+            }
+        }
+
         Matcher matcher = DATE_TOKEN_PATTERN.matcher(text);
         while (matcher.find()) {
             try {
@@ -619,7 +688,7 @@ public class PublicDataApiClient {
     }
 
     private boolean isUddiDetailPk(String detailPk) {
-        return detailPk != null && detailPk.startsWith("uddi:");
+        return detailPk != null && detailPk.toLowerCase(Locale.ROOT).startsWith("uddi:");
     }
 
     private LocalDate parseSeoulModifiedDate(String modifiedDateText) {
