@@ -148,16 +148,18 @@
 | `TRANSPORT_SUPPORT_CENTER` (전국교통약자이동지원센터정보표준데이터)                  | [15028207](https://www.data.go.kr/tcs/dss/selectStdDataDetailView.do?publicDataPk=15028207) | `https://api.data.go.kr/openapi/tn_pubr_public_tfcwker_mvmn_cnter_api` | data.go.kr 서비스키 | `serviceKey`, `pageNo`, `numOfRows(max=1000)`, `type=json` |
 | `RAIL_WHEELCHAIR_LIFT` (국가철도공단_역사별 휠체어리프트 위치)                     | [15041686](https://www.data.go.kr/data/15041686/openapi.do) | `https://openapi.kric.go.kr/openapi/vulnerableUserInfo/stationWheelchairLiftLocation` | `KRIC_SERVICE_KEY` | `service=vulnerableUserInfo`, `operation=stationWheelchairLiftLocation`, `serviceKey`, `railOprIsttCd`, `lnCd`, `stinCd`, `format=json` |
 | `RAIL_WHEELCHAIR_LIFT_MOVEMENT` (역사별 휠체어리프트 이동동선)                 | [KRIC 209](https://data.kric.go.kr/rips/M_01_02/detail.do?id=209&service=vulnerableUserInfo&operation=stationWheelchairLiftMovement) | `https://openapi.kric.go.kr/openapi/vulnerableUserInfo/stationWheelchairLiftMovement` | `KRIC_SERVICE_KEY` | `service=vulnerableUserInfo`, `operation=stationWheelchairLiftMovement`, `serviceKey`, `railOprIsttCd`, `lnCd`, `stinCd`, `format=json` |
-| `SEOUL_WHEELCHAIR_LIFT` (서울교통공사_휠체어리프트 설치현황)                      | [15044262](https://www.data.go.kr/data/15044262/fileData.do) | `https://api.odcloud.kr/api/{publicDataPk}/v1/{publicDataDetailPk}` (fileData 페이지에서 식별자 추출 후 호출) | data.go.kr 서비스키 | `serviceKey`, `page`, `perPage(max=10000)`, `returnType=JSON`, `역명`(xlsx의 `STIN_NM` 기반 순회) |
+| `SEOUL_WHEELCHAIR_LIFT` (서울교통공사_휠체어리프트 설치현황)                      | [15044262](https://www.data.go.kr/data/15044262/fileData.do) | `https://api.odcloud.kr/api/{publicDataPk}/v1/{publicDataDetailPk}` (`openapi.do`의 `swagger-container`/`swagger-ui`/`script`에서 최신 endpoint 후보를 추출해 호출) | data.go.kr 서비스키 | `serviceKey`, `page`, `perPage(max=10000)`, `returnType=JSON`, `역명`(xlsx의 `STIN_NM` 기반 순회) |
 | `SEOUL_SUBWAY_ENTRANCE_LIFT` (서울시 지하철 출입구 리프트 위치정보)               | [OA-21211](https://data.seoul.go.kr/dataList/OA-21211/S/1/datasetView.do) | `http://openapi.seoul.go.kr:8088/{API_KEY}/json/tbTraficEntrcLft/{start}/{end}` | data.seoul.go.kr 키 | `start/end(페이지 범위)`, `max rows=1000` |
 | `SEOUL_WALKING_NETWORK` (서울특별시_자치구별 도보 네트워크 공간정보)                 | [OA-21208](https://data.seoul.go.kr/dataList/OA-21208/S/1/datasetView.do) | `http://openapi.seoul.go.kr:8088/{API_KEY}/json/TbTraficWlkNet/{start}/{end}` | data.seoul.go.kr 키 | `start/end(페이지 범위)`, `max rows=1000` |
-| `NATIONWIDE_BUS_STOP` (국토교통부_전국 버스정류장 위치정보)                       | [15067528](https://www.data.go.kr/data/15067528/fileData.do#tab-layer-openapi) | `https://api.odcloud.kr/api/{publicDataPk}/v1/{publicDataDetailPk}` (fileData 페이지에서 식별자 추출 후 호출) | data.go.kr 서비스키 | `serviceKey`, `page`, `perPage(max=10000)`, `returnType=JSON` |
+| `NATIONWIDE_BUS_STOP` (국토교통부_전국 버스정류장 위치정보)                       | [15067528](https://www.data.go.kr/data/15067528/fileData.do#tab-layer-openapi) | `https://api.odcloud.kr/api/{publicDataPk}/v1/{publicDataDetailPk}` (`openapi.do`의 `swagger-container`/`swagger-ui`/`script`에서 최신 endpoint 후보를 추출해 호출) | data.go.kr 서비스키 | `serviceKey`, `page`, `perPage(max=10000)`, `returnType=JSON` |
 | `SEOUL_WHEELCHAIR_RAMP_STATUS` (서울교통공사_휠체어경사로 설치 현황)              | [OA-13116](https://data.seoul.go.kr/dataList/OA-13116/S/1/datasetView.do) | `https://datafile.seoul.go.kr/bigfile/iot/inf/nio_download.do` (datasetView의 파일목록에서 최신 `수정일` 1건 선택 후 다운로드) | 없음 | `infId`, `infSeq`, `seq`, `seqNo`, `useCache=false` |
 | `SEOUL_LOW_FLOOR_BUS_ROUTE_RETENTION` (서울시 저상버스 도입 노선 및 노선별 보유율)  | [OA-22229](https://data.seoul.go.kr/dataList/OA-22229/F/1/datasetView.do) | `https://datafile.seoul.go.kr/bigfile/iot/inf/nio_download.do` (datasetView의 파일목록에서 최신 `수정일` 1건 선택 후 다운로드) | 없음 | `infId`, `infSeq`, `seq`, `seqNo`, `useCache=false` |
 | `NATIONWIDE_TRAFFIC_LIGHT` (전국신호등표준데이터)                           | [15028198](https://www.data.go.kr/data/15028198/standard.do#) | `https://api.data.go.kr/openapi/tn_pubr_public_traffic_light_api` | data.go.kr 서비스키 | `serviceKey`, `pageNo`, `numOfRows(max=1000)`, `type=xml` |
 | `NATIONWIDE_CROSSWALK` (전국횡단보도표준데이터)                              | [15028201](https://www.data.go.kr/data/15028201/standard.do) | `https://api.data.go.kr/openapi/tn_pubr_public_crosswalk_api` | data.go.kr 서비스키 | `serviceKey`, `pageNo`, `numOfRows(max=1000)`, `type=xml` |
 | `VOCATIONAL_TRAINING` (한국고용정보원_직업훈련_국민내일배움카드 훈련과정)                | [work24 000004](https://www.work24.go.kr/cm/e/a/0110/selectOpenApiSvcInfo.do?apiSvcId=&upprApiSvcId=&fullApiSvcId=000000000000000000000000000004) | `https://www.work24.go.kr/cm/openApi/call/hr/callOpenApiSvcInfo310L01.do` | Work24 인증키 | `authKey`, `returnType=XML`, `pageNum`, `pageSize(max=100)` |
 | `JOBSEEKER_COMPETENCY_PROGRAM` (한국고용정보원_구직자취업역량 강화프로그램)           | [work24 000098](https://www.work24.go.kr/cm/e/a/0110/selectOpenApiSvcInfo.do?apiSvcId=&upprApiSvcId=&fullApiSvcId=000000000000000000000000000098) | `https://www.work24.go.kr/cm/openApi/call/wk/callOpenApiSvcInfo217L01.do` | Work24 인증키 | `authKey`, `returnType=XML`, `startPage`, `display(max=100)`, `pgmStdt(YYYYMMDD, 오늘~1개월 후 반복)` |
+
+- `SEOUL_WHEELCHAIR_LIFT`, `NATIONWIDE_BUS_STOP`은 `openapi.do`의 swagger 영역에서 최신 OpenAPI 후보를 찾지 못하면 동기화를 실패 처리한다(성공 fallback 없음).
 
 ## API 응답 컬럼(공식 소개 페이지 기준)
 - 기준: 각 데이터 소개 페이지의 `출력결과(Response Element)`/`출력변수`/`데이터항목(컬럼) 정보`/`swaggerJson`
@@ -729,6 +731,15 @@
 - 페이징은 API별 최대 페이지 크기로 조회하고 마지막 페이지까지 순회
 - `SEOUL_WHEELCHAIR_RAMP_STATUS`, `SEOUL_LOW_FLOOR_BUS_ROUTE_RETENTION`는 최신 파일 revision 동일 시 스킵(`public_data_source_snapshot` 기준)
 
+## Discord 알림
+- 동기화 시작: `🚀 [공공데이터 동기화 시작 알림]`
+- 동기화 완료: `✅ [공공데이터 동기화 완료 알림]`
+- Error 로그: `🚨 [Error 로그 발생]`
+- 회원가입 완료: `🎉 [회원가입 완료 알림]`
+- 모든 알림 메시지는 마지막 줄바꿈(`\n`)을 포함한다.
+- 동기화 완료 알림은 단일 동기화일 때 소스별 상세를 생략하고, 전체 동기화일 때 소스별 상태/건수/소요 시간을 상세로 포함한다.
+- Discord 전송 실패는 본 업무 플로우를 중단하지 않으며, 타임아웃/네트워크 계열 오류에 대해 재시도한다(`retry=2`, `backoff=700ms`, `timeout=10s`).
+
 ## 수동 실행/조회 API
 - 소셜 로그인: `POST /api/v1/auth/social/login`
 - 회원가입 완료(기본 프로필 생성 포함): `POST /api/v1/auth/social/signup/complete`
@@ -759,6 +770,8 @@
 - 동기화 로그: `GET /api/v1/sync/public-data/logs`
 - 동기화 로그 초기화: `DELETE /api/v1/sync/public-data/logs`
 - 소스 설정: `GET /api/v1/sync/public-data/sources`
+- 정규화 테이블 건수: `GET /api/v1/sync/public-data/normalized-counts`
+  - 인증 없이 조회 가능(`permitAll`)
 - 저장 레코드 목록: `GET /api/v1/public-data/records?sourceType=KEPAD_RECRUITMENT&page=0&size=20&includePayload=false`
 - 저장 레코드 상세: `GET /api/v1/public-data/records/{recordId}?includePayload=true`
 
