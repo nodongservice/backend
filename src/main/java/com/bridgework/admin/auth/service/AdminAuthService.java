@@ -9,13 +9,13 @@ import com.bridgework.admin.auth.repository.AdminAccountRepository;
 import com.bridgework.auth.entity.UserRole;
 import com.bridgework.auth.security.JwtTokenProvider;
 import com.bridgework.common.notification.DiscordNotifierService;
-import jakarta.transaction.Transactional;
 import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.Locale;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 @Service
@@ -39,7 +39,7 @@ public class AdminAuthService {
         this.discordNotifierService = discordNotifierService;
     }
 
-    @Transactional
+    @Transactional(noRollbackFor = {InvalidAdminCredentialsException.class, AdminAccountLockedException.class})
     public AdminLoginResponseDto login(AdminLoginRequestDto request) {
         String normalizedLoginId = normalizeLoginId(request.loginId());
         if (!StringUtils.hasText(normalizedLoginId)) {
