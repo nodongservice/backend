@@ -555,6 +555,7 @@ class PublicDataApiClientTest {
 
     @Test
     void resolveLatestDataGoFileDataVersion_whenFileDataHasSwaggerOasUrl_thenUsesOasLatestCandidate() throws Exception {
+        String swaggerOasUrl = mockWebServer.url("/oas/docs?namespace=15044262/v1").toString();
         mockWebServer.enqueue(new MockResponse()
                 .setHeader("Content-Type", "text/html")
                 .setBody("""
@@ -566,12 +567,12 @@ class PublicDataApiClientTest {
                             </form>
                             <script>
                               window.ui = SwaggerUIBundle({
-                                url: 'http://kubernetes.docker.internal:%d/oas/docs?namespace=15044262/v1'
+                                url: '%s'
                               });
                             </script>
                           </body>
                         </html>
-                        """.formatted(mockWebServer.getPort())));
+                        """.formatted(swaggerOasUrl)));
         mockWebServer.enqueue(new MockResponse()
                 .setHeader("Content-Type", "application/json")
                 .setBody("""
