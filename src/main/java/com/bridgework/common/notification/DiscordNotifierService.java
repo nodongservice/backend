@@ -32,6 +32,7 @@ public class DiscordNotifierService {
     private static final String HEADER_SYNC_FINISHED_SUCCESS = "✅ [공공데이터 동기화 완료 알림]";
     private static final String HEADER_SYNC_FINISHED_FAILED = "❌ [공공데이터 동기화 완료 알림]";
     private static final String HEADER_SIGNUP_COMPLETED = "🎉 [회원가입 완료 알림]";
+    private static final String HEADER_ADMIN_LOCKED = "🔒 [관리자 계정 잠금 알림]";
     private static final String HEADER_GENERIC = "ℹ️ [시스템 알림]";
 
     private final WebClient webClient;
@@ -99,6 +100,19 @@ public class DiscordNotifierService {
         String message = HEADER_SIGNUP_COMPLETED + '\n'
                 + "이메일: " + safeEmail + '\n'
                 + "현재 회원 수: " + totalUserCount + "명\n"
+                + '\n';
+        send(message);
+    }
+
+    public void notifyAdminAccountLocked(String loginId, OffsetDateTime lockedUntil, String reason) {
+        String safeLoginId = (loginId == null || loginId.isBlank()) ? "(loginId 없음)" : loginId;
+        String safeLockedUntil = lockedUntil == null ? "(미확인)" : lockedUntil.toString();
+        String safeReason = (reason == null || reason.isBlank()) ? "사유 미기록" : reason;
+
+        String message = HEADER_ADMIN_LOCKED + '\n'
+                + "loginId: " + safeLoginId + '\n'
+                + "잠금 해제 시각(UTC): " + safeLockedUntil + '\n'
+                + "사유: " + safeReason + '\n'
                 + '\n';
         send(message);
     }
