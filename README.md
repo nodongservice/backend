@@ -743,6 +743,9 @@
 ## 수동 실행/조회 API
 - 소셜 로그인: `POST /api/v1/auth/social/login`
 - 회원가입 완료(기본 프로필 생성 포함): `POST /api/v1/auth/social/signup/complete`
+- 관리자 로그인: `POST /api/v1/auth/admin/login`
+  - 요청 바디: `{"loginId":"admin01","password":"***"}`
+  - 관리자 계정은 `admin_account` 테이블에 사전 등록되어 있어야 함
 - 토큰 재발급: `POST /api/v1/auth/token/refresh`
 - 로그아웃: `POST /api/v1/auth/logout`
 - 내 정보 조회: `GET /api/v1/auth/me`
@@ -765,15 +768,20 @@
 - 지도 추천 게이트웨이(기능3): `POST /api/v1/recommend/map`
   - 요청 바디: `{"aiEnabled": true|false, "profileId": 1}`
 
-- 전체 동기화: `POST /api/v1/sync/public-data/run`
-- 단일 동기화: `POST /api/v1/sync/public-data/run?sourceType=KEPAD_RECRUITMENT`
-- 동기화 로그: `GET /api/v1/sync/public-data/logs`
-- 동기화 로그 초기화: `DELETE /api/v1/sync/public-data/logs`
-- 소스 설정: `GET /api/v1/sync/public-data/sources`
-- 정규화 테이블 건수: `GET /api/v1/sync/public-data/normalized-counts`
-  - 인증 없이 조회 가능(`permitAll`)
-- 저장 레코드 목록: `GET /api/v1/public-data/records?sourceType=KEPAD_RECRUITMENT&page=0&size=20&includePayload=false`
-- 저장 레코드 상세: `GET /api/v1/public-data/records/{recordId}?includePayload=true`
+- 전체 동기화(관리자): `POST /api/v1/admin/sync/public-data/run`
+- 단일 동기화(관리자): `POST /api/v1/admin/sync/public-data/run?sourceType=KEPAD_RECRUITMENT`
+- 동기화 로그(관리자): `GET /api/v1/admin/sync/public-data/logs`
+- 동기화 로그 초기화(관리자): `DELETE /api/v1/admin/sync/public-data/logs`
+- 소스 설정(관리자): `GET /api/v1/admin/sync/public-data/sources`
+- 정규화 테이블 건수(관리자): `GET /api/v1/admin/sync/public-data/normalized-counts`
+- 저장 레코드 목록(관리자): `GET /api/v1/admin/public-data/records?sourceType=KEPAD_RECRUITMENT&page=0&size=20&includePayload=false`
+- 저장 레코드 상세(관리자): `GET /api/v1/admin/public-data/records/{recordId}?includePayload=true`
+
+### 관리자 계정 등록 예시
+```sql
+INSERT INTO admin_account (login_id, password_hash, role, is_active, created_at, updated_at)
+VALUES ('admin01', '$2a$12$REPLACE_WITH_BCRYPT_HASH', 'ADMIN', TRUE, NOW(), NOW());
+```
 
 ## CSV 내보내기 스크립트
 - 파일: `scripts/export_public_data_to_csv.py`

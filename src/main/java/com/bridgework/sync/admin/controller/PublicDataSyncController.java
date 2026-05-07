@@ -1,4 +1,4 @@
-package com.bridgework.sync.controller;
+package com.bridgework.sync.admin.controller;
 
 import com.bridgework.sync.dto.SourceConfigResponseDto;
 import com.bridgework.sync.dto.NormalizedCountSummaryResponseDto;
@@ -25,8 +25,8 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/api/v1/sync/public-data")
-@Tag(name = "PublicDataSync", description = "공공데이터 동기화 실행/로그/설정 조회 API")
+@RequestMapping("/api/v1/admin/sync/public-data")
+@Tag(name = "PublicDataSync", description = "공공데이터 동기화 실행/로그/설정 조회 API (관리자 전용)")
 public class PublicDataSyncController {
 
     private static final ZoneId SEOUL_ZONE_ID = ZoneId.of("Asia/Seoul");

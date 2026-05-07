@@ -53,17 +53,13 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**").permitAll()
                         .requestMatchers("/actuator/health", "/actuator/info").permitAll()
+                        .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/v1/auth/me").hasRole("USER")
                         .requestMatchers(HttpMethod.GET,
-                                "/api/v1/public-data/records",
-                                "/api/v1/public-data/records/*",
-                                "/api/v1/sync/public-data/logs",
-                                "/api/v1/sync/public-data/sources",
-                                "/api/v1/sync/public-data/normalized-counts",
                                 "/api/v1/options/**",
                                 "/api/v1/map/support-agencies").permitAll()
-                        .requestMatchers(HttpMethod.DELETE, "/api/v1/sync/public-data/logs").permitAll()
-                        .requestMatchers(HttpMethod.POST, "/api/v1/sync/public-data/run").permitAll()
                         .requestMatchers(HttpMethod.POST,
+                                "/api/v1/auth/admin/login",
                                 "/api/v1/auth/social/login",
                                 "/api/v1/auth/social/signup/complete",
                                 "/api/v1/auth/token/refresh").permitAll()

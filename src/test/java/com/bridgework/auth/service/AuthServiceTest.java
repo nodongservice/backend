@@ -53,7 +53,6 @@ class AuthServiceTest {
     private UserProfileRepository userProfileRepository;
     @Mock
     private DiscordNotifierService discordNotifierService;
-
     private AuthService authService;
 
     @BeforeEach

@@ -1,4 +1,4 @@
-package com.bridgework.sync.controller;
+package com.bridgework.sync.admin.controller;
 
 import com.bridgework.sync.dto.PublicDataRecordPageResponseDto;
 import com.bridgework.sync.dto.PublicDataRecordResponseDto;
@@ -18,8 +18,8 @@ import org.springframework.web.bind.annotation.RestController;
 
 @Validated
 @RestController
-@RequestMapping("/api/v1/public-data/records")
-@Tag(name = "PublicDataRecord", description = "공공데이터 원본 저장 레코드 조회 API")
+@RequestMapping("/api/v1/admin/public-data/records")
+@Tag(name = "PublicDataRecord", description = "공공데이터 원본 저장 레코드 조회 API (관리자 전용)")
 public class PublicDataRecordController {
 
     private final PublicDataRecordQueryService publicDataRecordQueryService;

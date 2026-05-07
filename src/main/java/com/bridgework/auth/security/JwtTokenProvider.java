@@ -40,16 +40,7 @@ public class JwtTokenProvider {
         OffsetDateTime refreshExpiresAt = now.plus(authProperties.getJwt().getRefreshTokenValidity());
         String refreshTokenId = UUID.randomUUID().toString();
 
-        String accessToken = Jwts.builder()
-                .subject(String.valueOf(userId))
-                .issuer(authProperties.getJwt().getIssuer())
-                .issuedAt(Date.from(now.toInstant()))
-                .expiration(Date.from(accessExpiresAt.toInstant()))
-                .id(UUID.randomUUID().toString())
-                .claim("role", role.name())
-                .claim("token_type", TOKEN_TYPE_ACCESS)
-                .signWith(signingKey)
-                .compact();
+        String accessToken = buildToken(userId, role, TOKEN_TYPE_ACCESS, accessExpiresAt, UUID.randomUUID().toString(), now);
 
         String refreshToken = Jwts.builder()
                 .subject(String.valueOf(userId))
@@ -63,6 +54,13 @@ public class JwtTokenProvider {
                 .compact();
 
         return new JwtTokenPair(accessToken, refreshToken, refreshTokenId, accessExpiresAt, refreshExpiresAt);
+    }
+
+    public IssuedAccessToken issueAccessToken(Long userId, UserRole role) {
+        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+        OffsetDateTime accessExpiresAt = now.plus(authProperties.getJwt().getAccessTokenValidity());
+        String accessToken = buildToken(userId, role, TOKEN_TYPE_ACCESS, accessExpiresAt, UUID.randomUUID().toString(), now);
+        return new IssuedAccessToken(accessToken, accessExpiresAt);
     }
 
     public ParsedJwtToken parse(String token) {
@@ -91,5 +89,31 @@ public class JwtTokenProvider {
         } catch (JwtException | IllegalArgumentException exception) {
             throw new InvalidJwtException("JWT가 유효하지 않습니다.");
         }
+    }
+
+    private String buildToken(
+            Long userId,
+            UserRole role,
+            String tokenType,
+            OffsetDateTime expiresAt,
+            String tokenId,
+            OffsetDateTime issuedAt
+    ) {
+        return Jwts.builder()
+                .subject(String.valueOf(userId))
+                .issuer(authProperties.getJwt().getIssuer())
+                .issuedAt(Date.from(issuedAt.toInstant()))
+                .expiration(Date.from(expiresAt.toInstant()))
+                .id(tokenId)
+                .claim("role", role.name())
+                .claim("token_type", tokenType)
+                .signWith(signingKey)
+                .compact();
+    }
+
+    public record IssuedAccessToken(
+            String token,
+            OffsetDateTime expiresAt
+    ) {
     }
 }
