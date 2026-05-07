@@ -93,6 +93,16 @@ public class PublicDataApiClient {
     private static final LocalDate UNKNOWN_MODIFIED_DATE = LocalDate.of(1970, 1, 1);
     private static final DateTimeFormatter SEOUL_FILE_MODIFIED_DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy.MM.dd");
     private static final String SEOUL_FILE_DOWNLOAD_URL = "https://datafile.seoul.go.kr/bigfile/iot/inf/nio_download.do?useCache=false";
+    private static final Set<String> RETRYABLE_RESULT_CODES = Set.of(
+            "01", "02", "04", "05", "21", "22",
+            "ERROR-500", "ERROR-600", "ERROR-601"
+    );
+    private static final Set<String> PERMANENT_RESULT_CODES = Set.of(
+            "10", "11", "12", "20", "30", "31", "32", "33",
+            "INFO-100",
+            "ERROR-300", "ERROR-301", "ERROR-310",
+            "ERROR-331", "ERROR-332", "ERROR-333", "ERROR-334", "ERROR-335", "ERROR-336"
+    );
 
     private final WebClient webClient;
     private final ObjectMapper objectMapper;
@@ -1052,6 +1062,10 @@ public class PublicDataApiClient {
             int totalCount = parseInteger(rootNode.path("totalCount").asText(null)).orElse(-1);
             return new FileDataPageResultDto(items, totalCount);
         } catch (JsonProcessingException exception) {
+            ExternalApiException apiError = classifyBodyLevelApiError(responseBody, sourceConfig.getSourceType());
+            if (apiError != null) {
+                throw apiError;
+            }
             throw new PayloadParseException("파일데이터 변환 API 응답 파싱 실패: " + sourceConfig.getSourceType(), exception);
         }
     }
@@ -1069,7 +1083,7 @@ public class PublicDataApiClient {
         String responseBody = fetchBody(requestUri, sourceConfig);
 
         try {
-            JsonNode rootNode = objectMapper.readTree(responseBody);
+            JsonNode rootNode = parseSeoulOpenApiResponseBody(responseBody, requestUri, sourceConfig);
             JsonNode serviceNode = resolveSeoulServiceNode(rootNode, serviceName);
             validateSeoulOpenApiResultOrThrow(serviceNode, sourceConfig.getSourceType());
 
@@ -1085,9 +1099,79 @@ public class PublicDataApiClient {
                     items.size(),
                     hasNext);
             return new PublicDataApiPageResponseDto(items, hasNext);
-        } catch (JsonProcessingException exception) {
+        } catch (ExternalApiException exception) {
+            throw exception;
+        } catch (PayloadParseException exception) {
+            throw exception;
+        } catch (Exception exception) {
             throw new PayloadParseException("서울 열린데이터 응답 파싱 실패: " + sourceConfig.getSourceType(), exception);
         }
+    }
+
+    private JsonNode parseSeoulOpenApiResponseBody(
+            String responseBody,
+            String requestUri,
+            BridgeWorkSyncProperties.SourceConfig sourceConfig
+    ) {
+        String trimmedBody = responseBody == null ? "" : responseBody.stripLeading();
+        if (trimmedBody.isBlank()) {
+            throw new ExternalApiException("서울 열린데이터 API 응답이 비어 있습니다: " + sourceConfig.getSourceType());
+        }
+
+        try {
+            return objectMapper.readTree(trimmedBody);
+        } catch (JsonProcessingException jsonException) {
+            if (!trimmedBody.startsWith("<")) {
+                throw new PayloadParseException(
+                        "서울 열린데이터 응답 파싱 실패: "
+                                + sourceConfig.getSourceType()
+                                + " preview=" + buildPayloadPreview(trimmedBody),
+                        jsonException
+                );
+            }
+
+            if (looksLikeHtmlDocument(trimmedBody)) {
+                String message = "서울 열린데이터 API가 JSON 대신 HTML 응답을 반환했습니다: "
+                        + sourceConfig.getSourceType()
+                        + " uri=" + maskCredentialInUri(requestUri, sourceConfig.getServiceKey())
+                        + " preview=" + buildPayloadPreview(trimmedBody);
+                if (looksRetryableErrorMessage(trimmedBody)) {
+                    throw ExternalApiException.retryable(message);
+                }
+                throw new ExternalApiException(message);
+            }
+
+            // 일부 구간에서 XML로 내려오는 경우가 있어 안전하게 XML 파싱으로 복구한다.
+            return parseXml(
+                    trimmedBody,
+                    "서울 열린데이터 XML 응답 파싱 실패: "
+                            + sourceConfig.getSourceType()
+                            + " preview=" + buildPayloadPreview(trimmedBody)
+            );
+        }
+    }
+
+    private boolean looksLikeHtmlDocument(String payload) {
+        if (payload == null || payload.isBlank()) {
+            return false;
+        }
+        String lower = payload.stripLeading().toLowerCase(Locale.ROOT);
+        return lower.startsWith("<!doctype html")
+                || lower.startsWith("<html")
+                || lower.contains("<head")
+                || lower.contains("<body");
+    }
+
+    private String buildPayloadPreview(String payload) {
+        if (payload == null || payload.isBlank()) {
+            return "";
+        }
+        String normalized = payload.replaceAll("\\s+", " ").trim();
+        int maxLength = 180;
+        if (normalized.length() <= maxLength) {
+            return normalized;
+        }
+        return normalized.substring(0, maxLength) + "...";
     }
 
     private JsonNode resolveSeoulServiceNode(JsonNode rootNode, String serviceName) {
@@ -1113,19 +1197,13 @@ public class PublicDataApiClient {
 
     private void validateSeoulOpenApiResultOrThrow(JsonNode serviceNode, PublicDataSourceType sourceType) {
         JsonNode resultNode = extractSeoulResultNode(serviceNode);
-        String resultCode = resultNode.path("CODE").asText("").trim();
-        if (resultCode.isBlank()
-                || "INFO-000".equalsIgnoreCase(resultCode)
-                || "INFO-200".equalsIgnoreCase(resultCode)) {
+        String resultCode = normalizeResultCode(resultNode.path("CODE").asText(""));
+        if (resultCode.isBlank() || isSuccessResultCode(resultCode) || isNoDataResultCode(sourceType, resultCode)) {
             return;
         }
 
         String message = resultNode.path("MESSAGE").asText("알 수 없는 오류").trim();
-        throw new ExternalApiException(
-                "서울 열린데이터 API 응답 오류(" + sourceType + "): "
-                        + message
-                        + " [CODE=" + resultCode + "]"
-        );
+        throw buildApiErrorException(sourceType, resultCode, message, "서울 열린데이터 API 응답 오류");
     }
 
     private JsonNode extractSeoulResultNode(JsonNode serviceNode) {
@@ -1519,7 +1597,7 @@ public class PublicDataApiClient {
                 .onStatus(status -> status.value() == 429 || status.is5xxServerError(), clientResponse ->
                         clientResponse.bodyToMono(String.class)
                                 .defaultIfEmpty("")
-                                .map(body -> new ExternalApiException(
+                                .map(body -> ExternalApiException.retryable(
                                         "공공데이터 API 호출 실패(재시도 대상, " + sourceType + "): "
                                                 + clientResponse.statusCode().value()
                                 ))
@@ -1539,7 +1617,7 @@ public class PublicDataApiClient {
                                 .filter(this::isRetryableApiException)
                 )
                 .onErrorMap(TimeoutException.class, exception ->
-                        new ExternalApiException("공공데이터 API 호출 타임아웃(" + sourceType + "): "
+                        ExternalApiException.retryable("공공데이터 API 호출 타임아웃(" + sourceType + "): "
                                 + requestTimeout.toSeconds() + "초"))
                 .blockOptional()
                 .orElseThrow(() -> new ExternalApiException("공공데이터 API 응답이 비어 있습니다: " + sourceType));
@@ -1594,6 +1672,10 @@ public class PublicDataApiClient {
         Throwable current = throwable;
         while (current != null && current.getCause() != current) {
             if (current instanceof TimeoutException) {
+                return true;
+            }
+            if (current instanceof ExternalApiException externalApiException
+                    && externalApiException.isRetryable()) {
                 return true;
             }
             String message = current.getMessage();
@@ -2004,36 +2086,158 @@ public class PublicDataApiClient {
     }
 
     private void validateApiResultOrThrow(JsonNode rootNode, PublicDataSourceType sourceType) {
-        String resultCode = extractTextAt(rootNode, "/response/header/resultCode")
-                .or(() -> extractTextAt(rootNode, "/header/resultCode"))
-                .orElse("");
+        String resultCode = extractApiResultCode(rootNode);
 
         if (resultCode.isBlank() || isSuccessResultCode(resultCode) || isNoDataResultCode(sourceType, resultCode)) {
             return;
         }
 
-        String resultMessage = extractTextAt(rootNode, "/response/header/resultMsg")
-                .or(() -> extractTextAt(rootNode, "/header/resultMsg"))
-                .orElse("알 수 없는 오류");
-
-        throw new ExternalApiException(
-                "공공데이터 API 응답 오류(" + sourceType + "): "
-                        + resultMessage
-                        + " [resultCode=" + resultCode + "]"
-        );
+        String resultMessage = extractApiResultMessage(rootNode);
+        throw buildApiErrorException(sourceType, resultCode, resultMessage, "공공데이터 API 응답 오류");
     }
 
     private boolean isSuccessResultCode(String resultCode) {
-        String normalized = resultCode.trim();
-        return "00".equals(normalized) || "0000".equals(normalized) || "0".equals(normalized);
+        String normalized = normalizeResultCode(resultCode);
+        return "00".equals(normalized)
+                || "0000".equals(normalized)
+                || "0".equals(normalized)
+                || "NORMAL_CODE".equals(normalized)
+                || "INFO-000".equals(normalized)
+                || "SUCCESS".equals(normalized);
     }
 
     private boolean isNoDataResultCode(PublicDataSourceType sourceType, String resultCode) {
-        if (sourceType != PublicDataSourceType.RAIL_WHEELCHAIR_LIFT
-                && sourceType != PublicDataSourceType.RAIL_WHEELCHAIR_LIFT_MOVEMENT) {
+        String normalized = normalizeResultCode(resultCode);
+        return "03".equals(normalized)
+                || "NODATA_ERROR".equals(normalized)
+                || "INFO-200".equals(normalized)
+                || "006".equals(normalized);
+    }
+
+    private String extractApiResultCode(JsonNode rootNode) {
+        return normalizeResultCode(extractTextAt(rootNode, "/response/header/resultCode")
+                .or(() -> extractTextAt(rootNode, "/header/resultCode"))
+                .or(() -> extractTextAt(rootNode, "/resultCode"))
+                .or(() -> extractTextAt(rootNode, "/cmmMsgHeader/returnReasonCode"))
+                .or(() -> extractTextAt(rootNode, "/RESULT/CODE"))
+                .or(() -> extractTextAt(rootNode, "/messageCd"))
+                .orElse(""));
+    }
+
+    private String extractApiResultMessage(JsonNode rootNode) {
+        return extractTextAt(rootNode, "/response/header/resultMsg")
+                .or(() -> extractTextAt(rootNode, "/header/resultMsg"))
+                .or(() -> extractTextAt(rootNode, "/resultMsg"))
+                .or(() -> extractTextAt(rootNode, "/cmmMsgHeader/errMsg"))
+                .or(() -> extractTextAt(rootNode, "/RESULT/MESSAGE"))
+                .or(() -> extractTextAt(rootNode, "/message"))
+                .orElse("알 수 없는 오류");
+    }
+
+    private ExternalApiException buildApiErrorException(
+            PublicDataSourceType sourceType,
+            String resultCode,
+            String resultMessage,
+            String label
+    ) {
+        String normalizedCode = normalizeResultCode(resultCode);
+        String normalizedMessage = normalizeMessage(resultMessage);
+        String message = label + "(" + sourceType + "): "
+                + normalizedMessage
+                + " [resultCode=" + normalizedCode + "]";
+        if (isRetryableResultCode(normalizedCode, normalizedMessage)) {
+            return ExternalApiException.retryable(message);
+        }
+        return new ExternalApiException(message);
+    }
+
+    private String normalizeResultCode(String resultCode) {
+        if (resultCode == null) {
+            return "";
+        }
+        return resultCode.trim().toUpperCase(Locale.ROOT);
+    }
+
+    private String normalizeMessage(String message) {
+        if (message == null || message.isBlank()) {
+            return "알 수 없는 오류";
+        }
+        return message.trim();
+    }
+
+    private boolean isRetryableResultCode(String resultCode, String resultMessage) {
+        if (RETRYABLE_RESULT_CODES.contains(resultCode)) {
+            return true;
+        }
+        if (PERMANENT_RESULT_CODES.contains(resultCode)) {
             return false;
         }
-        return "03".equals(resultCode.trim());
+        if (looksRetryableErrorMessage(resultMessage)) {
+            return true;
+        }
+        return false;
+    }
+
+    private boolean looksRetryableErrorMessage(String message) {
+        if (message == null || message.isBlank()) {
+            return false;
+        }
+        String lower = message.toLowerCase(Locale.ROOT);
+        return lower.contains("일시")
+                || lower.contains("temporar")
+                || lower.contains("timeout")
+                || lower.contains("time out")
+                || lower.contains("연결")
+                || lower.contains("server error")
+                || lower.contains("db error")
+                || lower.contains("database")
+                || lower.contains("too many requests")
+                || lower.contains("limit")
+                || lower.contains("busy");
+    }
+
+    private ExternalApiException classifyBodyLevelApiError(String responseBody, PublicDataSourceType sourceType) {
+        if (responseBody == null || responseBody.isBlank()) {
+            return null;
+        }
+
+        String trimmedBody = responseBody.stripLeading();
+        try {
+            JsonNode jsonNode = objectMapper.readTree(trimmedBody);
+            String resultCode = extractApiResultCode(jsonNode);
+            if (resultCode.isBlank() || isSuccessResultCode(resultCode) || isNoDataResultCode(sourceType, resultCode)) {
+                return null;
+            }
+            String resultMessage = extractApiResultMessage(jsonNode);
+            return buildApiErrorException(sourceType, resultCode, resultMessage, "공공데이터 API 응답 오류");
+        } catch (Exception ignored) {
+            // JSON 파싱 실패 시 XML/HTML 형태를 추가 판단한다.
+        }
+
+        if (!trimmedBody.startsWith("<")) {
+            return null;
+        }
+        if (looksLikeHtmlDocument(trimmedBody)) {
+            String message = "공공데이터 API가 HTML 오류 문서를 반환했습니다: "
+                    + sourceType
+                    + " preview=" + buildPayloadPreview(trimmedBody);
+            if (looksRetryableErrorMessage(trimmedBody)) {
+                return ExternalApiException.retryable(message);
+            }
+            return new ExternalApiException(message);
+        }
+
+        try {
+            JsonNode xmlNode = xmlMapper.readTree(trimmedBody.getBytes(StandardCharsets.UTF_8));
+            String resultCode = extractApiResultCode(xmlNode);
+            if (resultCode.isBlank() || isSuccessResultCode(resultCode) || isNoDataResultCode(sourceType, resultCode)) {
+                return null;
+            }
+            String resultMessage = extractApiResultMessage(xmlNode);
+            return buildApiErrorException(sourceType, resultCode, resultMessage, "공공데이터 API 응답 오류");
+        } catch (Exception ignored) {
+            return null;
+        }
     }
 
     private Optional<String> extractTextAt(JsonNode rootNode, String pointer) {
