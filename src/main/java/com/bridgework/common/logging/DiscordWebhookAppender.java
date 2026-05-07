@@ -16,6 +16,7 @@ import java.util.concurrent.Executors;
 public class DiscordWebhookAppender extends AppenderBase<ILoggingEvent> {
 
     private static final int DISCORD_MAX_MESSAGE_LENGTH = 1900;
+    private static final String HEADER_ERROR = "🚨 [Error 로그 발생]";
 
     private String webhookUrl;
     private String environment;
@@ -86,7 +87,7 @@ public class DiscordWebhookAppender extends AppenderBase<ILoggingEvent> {
 
     private String buildMessage(ILoggingEvent eventObject) {
         StringBuilder builder = new StringBuilder();
-        builder.append("안녕하세요, 브릿지워크 모니터링 봇입니다. 에러 로그를 전달드려요.\n");
+        builder.append(HEADER_ERROR).append('\n');
         builder.append("환경: ").append(safe(environment)).append('\n');
         builder.append("레벨: ").append(eventObject.getLevel()).append('\n');
         builder.append("로거: ").append(safe(eventObject.getLoggerName())).append('\n');
@@ -101,6 +102,7 @@ public class DiscordWebhookAppender extends AppenderBase<ILoggingEvent> {
                 builder.append('\n').append("예외: ").append(firstLine);
             }
         }
+        builder.append('\n');
 
         String message = builder.toString();
         if (message.length() <= DISCORD_MAX_MESSAGE_LENGTH) {

@@ -27,6 +27,10 @@ public class DiscordNotifierService {
     private static final int DISCORD_RETRY_COUNT = 2;
     private static final Duration DISCORD_RETRY_BACKOFF = Duration.ofMillis(700);
     private static final Duration DISCORD_REQUEST_TIMEOUT = Duration.ofSeconds(10);
+    private static final String HEADER_SYNC_STARTED = "🚀 [공공데이터 동기화 시작 알림]";
+    private static final String HEADER_SYNC_FINISHED = "✅ [공공데이터 동기화 완료 알림]";
+    private static final String HEADER_SIGNUP_COMPLETED = "🎉 [회원가입 완료 알림]";
+    private static final String HEADER_GENERIC = "ℹ️ [시스템 알림]";
 
     private final WebClient webClient;
     private final BridgeWorkDiscordProperties discordProperties;
@@ -53,7 +57,7 @@ public class DiscordNotifierService {
                 .collect(Collectors.joining(", "));
 
         StringBuilder builder = new StringBuilder();
-        builder.append("안녕하세요! 브릿지워크 동기화 알림 봇입니다.\n");
+        builder.append(HEADER_SYNC_FINISHED).append('\n');
         builder.append("요청 구분: ").append(requestSourceText).append('\n');
         builder.append("대상: ").append(targetText).append('\n');
         builder.append("시작: ").append(result.startedAt()).append('\n');
@@ -67,7 +71,8 @@ public class DiscordNotifierService {
             builder.append('\n').append("실패 소스: ").append(failedSourceSummary);
         }
         appendFailureDetails(builder, result);
-        appendPerSourceElapsed(builder, result, sourceDurations);
+        appendPerSourceDetails(builder, requestedSourceType, result, sourceDurations);
+        builder.append('\n');
 
         send(builder.toString());
     }
@@ -78,20 +83,18 @@ public class DiscordNotifierService {
         String requestSourceText = requestSource == SyncRequestSource.MANUAL ? "수동" : "스케줄러";
         String targetText = requestedSourceType == null ? "전체 소스" : requestedSourceType.name();
 
-        String message = "안녕하세요! 브릿지워크 동기화 알림 봇입니다.\n"
-                + "동기화 작업을 시작했어요.\n"
+        String message = HEADER_SYNC_STARTED + '\n'
                 + "요청 구분: " + requestSourceText + '\n'
                 + "대상: " + targetText + '\n'
-                + "시작 시각: " + startedAt;
+                + "시작 시각: " + startedAt + '\n';
         send(message);
     }
 
     public void notifySignupCompleted(String email, long totalUserCount) {
         String safeEmail = (email == null || email.isBlank()) ? "(이메일 없음)" : email;
-        String message = "안녕하세요! 브릿지워크 가입 알림 봇입니다.\n"
-                + "신규 회원이 가입을 완료했어요.\n"
+        String message = HEADER_SIGNUP_COMPLETED + '\n'
                 + "이메일: " + safeEmail + '\n'
-                + "현재 회원 수: " + totalUserCount + "명";
+                + "현재 회원 수: " + totalUserCount + "명\n";
         send(message);
     }
 
@@ -127,7 +130,7 @@ public class DiscordNotifierService {
 
     private String truncate(String content) {
         if (content == null || content.isBlank()) {
-            return "안녕하세요! 브릿지워크 알림 봇입니다. 비어 있는 메시지를 감지했습니다.";
+            return HEADER_GENERIC + "\n비어 있는 메시지를 감지했습니다.\n";
         }
         if (content.length() <= DISCORD_MAX_MESSAGE_LENGTH) {
             return content;
@@ -158,29 +161,33 @@ public class DiscordNotifierService {
         return minutes + "분 " + seconds + "초";
     }
 
-    private void appendPerSourceElapsed(StringBuilder builder,
+    private void appendPerSourceDetails(StringBuilder builder,
+                                        PublicDataSourceType requestedSourceType,
                                         SyncRunResponseDto result,
                                         Map<PublicDataSourceType, Duration> sourceDurations) {
-        if (sourceDurations == null || sourceDurations.isEmpty()) {
+        if (requestedSourceType != null) {
+            // 단일 소스 동기화는 상단 요약의 소요 시간으로 충분하므로 소스별 상세를 생략한다.
             return;
         }
-        List<String> lines = result.results().stream()
-                .map(sourceResult -> {
-                    Duration duration = sourceDurations.get(sourceResult.sourceType());
-                    if (duration == null) {
-                        return null;
-                    }
-                    return sourceResult.sourceType().name() + ": " + formatElapsed(duration);
-                })
-                .filter(line -> line != null && !line.isBlank())
-                .toList();
-        if (lines.isEmpty()) {
+        if (result.results() == null || result.results().isEmpty()) {
             return;
         }
 
-        builder.append('\n').append("소스별 소요 시간:");
-        for (String line : lines) {
-            builder.append('\n').append("- ").append(line);
+        builder.append('\n').append("상세 내용:");
+        for (SourceSyncResultDto sourceResult : result.results()) {
+            Duration duration = sourceDurations == null
+                    ? null
+                    : sourceDurations.get(sourceResult.sourceType());
+            String elapsedText = formatElapsed(duration);
+            builder.append('\n')
+                    .append("- ")
+                    .append(sourceResult.sourceType().name())
+                    .append(" | 상태: ").append(sourceResult.status())
+                    .append(" | 처리: ").append(sourceResult.processedCount()).append("건")
+                    .append(" | 신규: ").append(sourceResult.newCount()).append("건")
+                    .append(" | 수정: ").append(sourceResult.updatedCount()).append("건")
+                    .append(" | 실패: ").append(sourceResult.failedCount()).append("건")
+                    .append(" | 소요 시간: ").append(elapsedText);
         }
     }
 
