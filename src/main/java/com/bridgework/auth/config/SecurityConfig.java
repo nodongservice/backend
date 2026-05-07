@@ -58,6 +58,7 @@ public class SecurityConfig {
                                 "/api/v1/public-data/records/*",
                                 "/api/v1/sync/public-data/logs",
                                 "/api/v1/sync/public-data/sources",
+                                "/api/v1/sync/public-data/normalized-counts",
                                 "/api/v1/options/**",
                                 "/api/v1/map/support-agencies").permitAll()
                         .requestMatchers(HttpMethod.DELETE, "/api/v1/sync/public-data/logs").permitAll()
