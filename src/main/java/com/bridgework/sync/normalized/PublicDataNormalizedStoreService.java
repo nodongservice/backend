@@ -124,6 +124,30 @@ public class PublicDataNormalizedStoreService {
         return deletedCount;
     }
 
+    @Transactional(readOnly = true)
+    public long countBySource(PublicDataSourceType sourceType) {
+        NormalizedSourceDefinition definition = normalizedSourceRegistry.get(sourceType);
+        if (definition == null) {
+            return 0L;
+        }
+
+        Long count = namedParameterJdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM " + definition.tableName(),
+                new MapSqlParameterSource(),
+                Long.class
+        );
+        return count == null ? 0L : count;
+    }
+
+    @Transactional(readOnly = true)
+    public String resolveTableName(PublicDataSourceType sourceType) {
+        NormalizedSourceDefinition definition = normalizedSourceRegistry.get(sourceType);
+        if (definition == null) {
+            return null;
+        }
+        return definition.tableName();
+    }
+
     private JsonNode parsePayload(String payloadJson) {
         try {
             return objectMapper.readTree(payloadJson);
