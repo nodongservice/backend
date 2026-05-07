@@ -24,6 +24,7 @@ import java.time.format.DateTimeFormatter;
 import java.net.URI;
 import java.net.URLDecoder;
 import java.net.URLEncoder;
+import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -317,7 +318,9 @@ public class PublicDataApiClient {
         LocalDate modifiedDate = Optional.ofNullable(selected.modifiedDate()).orElse(UNKNOWN_MODIFIED_DATE);
         String revisionDate = selected.modifiedDate() == null ? "unknown" : modifiedDate.toString();
         String displayName = "publicDataDetailPk=" + selected.publicDataDetailPk();
-        String revisionKey = revisionDate + "|" + selected.publicDataPk() + "|" + selected.publicDataDetailPk();
+        // fileData 기반 최신성 판정은 swagger 제목/수정일(날짜) 중심으로 한다.
+        // detailPk 교체가 있어도 날짜가 동일하면 재수집을 스킵할 수 있도록 revisionKey를 날짜+dataset으로 구성한다.
+        String revisionKey = revisionDate + "|" + selected.publicDataPk();
 
         log.info("[FILEDATA] source={} selected publicDataPk={} publicDataDetailPk={} modifiedDate={} matchedFrom={}",
                 sourceConfig.getSourceType(),
@@ -342,9 +345,15 @@ public class PublicDataApiClient {
         List<DataGoFileDataCandidate> candidates = new ArrayList<>();
 
         // fileData 소스는 openapi 페이지의 swagger 영역 기준으로 최신 endpoint 후보를 추출한다.
-        String openApiPageBody = fetchOpenApiPageBody(sourceConfig);
-        if (openApiPageBody != null && !openApiPageBody.isBlank()) {
-            collectDataGoCandidatesFromSwaggerPage(openApiPageBody, fallbackPublicDataPk, candidates);
+        OpenApiPage openApiPage = fetchOpenApiPage(sourceConfig);
+        if (openApiPage != null && openApiPage.body() != null && !openApiPage.body().isBlank()) {
+            collectDataGoCandidatesFromSwaggerPage(
+                    openApiPage.url(),
+                    openApiPage.body(),
+                    sourceConfig,
+                    fallbackPublicDataPk,
+                    candidates
+            );
         }
 
         Map<String, DataGoFileDataCandidate> dedupedCandidates = new LinkedHashMap<>();
@@ -363,7 +372,9 @@ public class PublicDataApiClient {
         return new ArrayList<>(dedupedCandidates.values());
     }
 
-    private void collectDataGoCandidatesFromSwaggerPage(String openApiPageBody,
+    private void collectDataGoCandidatesFromSwaggerPage(String openApiPageUrl,
+                                                        String openApiPageBody,
+                                                        BridgeWorkSyncProperties.SourceConfig sourceConfig,
                                                         String fallbackPublicDataPk,
                                                         List<DataGoFileDataCandidate> candidates) {
         Document openApiDocument = Jsoup.parse(openApiPageBody);
@@ -426,12 +437,83 @@ public class PublicDataApiClient {
                     candidates
             );
         }
+
+        collectDataGoCandidatesFromExternalScripts(
+                openApiPageUrl,
+                sourceConfig,
+                openApiDocument,
+                extractFirstDate(openApiDocument.text()).orElse(null),
+                fallbackPublicDataPk,
+                candidates
+        );
     }
 
-    private String fetchOpenApiPageBody(BridgeWorkSyncProperties.SourceConfig sourceConfig) {
+    private void collectDataGoCandidatesFromExternalScripts(String openApiPageUrl,
+                                                            BridgeWorkSyncProperties.SourceConfig sourceConfig,
+                                                            Document openApiDocument,
+                                                            LocalDate defaultModifiedDate,
+                                                            String fallbackPublicDataPk,
+                                                            List<DataGoFileDataCandidate> candidates) {
+        if (openApiDocument == null) {
+            return;
+        }
+        Set<String> visitedScriptUrls = new LinkedHashSet<>();
+        for (Element scriptElement : openApiDocument.select("script[src]")) {
+            String src = scriptElement.attr("src");
+            if (src == null || src.isBlank()) {
+                continue;
+            }
+
+            String scriptUrl = resolveAgainstBaseUrl(openApiPageUrl, src.trim());
+            if (scriptUrl == null || scriptUrl.isBlank() || !visitedScriptUrls.add(scriptUrl)) {
+                continue;
+            }
+
+            LocalDate scriptUrlDate = extractFirstDate(scriptUrl).orElse(null);
+            collectDataGoCandidatesFromText(
+                    scriptUrl,
+                    scriptUrlDate,
+                    "swagger-script-src-url",
+                    fallbackPublicDataPk,
+                    candidates
+            );
+
+            try {
+                String scriptBody = fetchBody(scriptUrl, sourceConfig);
+                if (scriptBody == null || scriptBody.isBlank()) {
+                    continue;
+                }
+
+                LocalDate modifiedDate = extractFirstDate(scriptBody)
+                        .or(() -> extractFirstDate(normalizeSwaggerCandidateText(scriptBody)))
+                        .orElse(defaultModifiedDate);
+                collectDataGoCandidatesFromText(
+                        scriptBody,
+                        modifiedDate,
+                        "swagger-script-src-body",
+                        fallbackPublicDataPk,
+                        candidates
+                );
+                collectDataGoCandidatesFromText(
+                        normalizeSwaggerCandidateText(scriptBody),
+                        modifiedDate,
+                        "swagger-script-src-body-normalized",
+                        fallbackPublicDataPk,
+                        candidates
+                );
+            } catch (Exception exception) {
+                log.warn("[FILEDATA] source={} swagger script 조회 실패 url={} reason={}",
+                        sourceConfig.getSourceType(),
+                        scriptUrl,
+                        exception.getMessage());
+            }
+        }
+    }
+
+    private OpenApiPage fetchOpenApiPage(BridgeWorkSyncProperties.SourceConfig sourceConfig) {
         String baseUrl = sourceConfig.getBaseUrl();
         if (baseUrl == null || baseUrl.isBlank()) {
-            return "";
+            return null;
         }
 
         String openApiPageUrl = baseUrl.replaceFirst("(?i)/filedata\\.do$", "/openapi.do");
@@ -439,17 +521,50 @@ public class PublicDataApiClient {
             openApiPageUrl = baseUrl.replaceFirst("(?i)/filedata$", "/openapi.do");
         }
         if (openApiPageUrl.equals(baseUrl)) {
-            return "";
+            return null;
         }
 
         try {
-            return fetchBody(openApiPageUrl, sourceConfig);
+            return new OpenApiPage(openApiPageUrl, fetchBody(openApiPageUrl, sourceConfig));
         } catch (Exception exception) {
             log.warn("[FILEDATA] source={} openapi 페이지 조회 실패 url={} reason={}",
                     sourceConfig.getSourceType(),
                     openApiPageUrl,
                     exception.getMessage());
-            return "";
+            return null;
+        }
+    }
+
+    private String resolveAgainstBaseUrl(String baseUrl, String relativeOrAbsoluteUrl) {
+        if (relativeOrAbsoluteUrl == null || relativeOrAbsoluteUrl.isBlank()) {
+            return null;
+        }
+        try {
+            URI candidateUri = URI.create(relativeOrAbsoluteUrl);
+            if (candidateUri.isAbsolute()) {
+                return candidateUri.toString();
+            }
+
+            if (baseUrl == null || baseUrl.isBlank()) {
+                return null;
+            }
+            URI baseUri = URI.create(baseUrl);
+            return baseUri.resolve(relativeOrAbsoluteUrl).toString();
+        } catch (IllegalArgumentException exception) {
+            try {
+                String sanitized = relativeOrAbsoluteUrl.replace(" ", "%20");
+                URI candidateUri = new URI(sanitized);
+                if (candidateUri.isAbsolute()) {
+                    return candidateUri.toString();
+                }
+                if (baseUrl == null || baseUrl.isBlank()) {
+                    return null;
+                }
+                URI baseUri = URI.create(baseUrl);
+                return baseUri.resolve(sanitized).toString();
+            } catch (URISyntaxException | IllegalArgumentException ignored) {
+                return null;
+            }
         }
     }
 
@@ -1958,6 +2073,12 @@ public class PublicDataApiClient {
             String publicDataDetailPk,
             LocalDate modifiedDate,
             String contextLabel
+    ) {
+    }
+
+    private record OpenApiPage(
+            String url,
+            String body
     ) {
     }
 

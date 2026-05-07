@@ -500,7 +500,7 @@ class PublicDataApiClientTest {
         String detailPk = (String) version.getClass().getMethod("publicDataDetailPk").invoke(version);
         String revisionKey = (String) version.getClass().getMethod("revisionKey").invoke(version);
         assertThat(detailPk).isEqualTo("uddi:ed6d9b4d-96cc-4e2a-85b3-98769395fc87");
-        assertThat(revisionKey).startsWith("2024-10-28|15067528|uddi:ed6d9b4d-96cc-4e2a-85b3-98769395fc87");
+        assertThat(revisionKey).isEqualTo("2024-10-28|15067528");
     }
 
     @Test
@@ -550,7 +550,57 @@ class PublicDataApiClientTest {
         String detailPk = (String) version.getClass().getMethod("publicDataDetailPk").invoke(version);
         String revisionKey = (String) version.getClass().getMethod("revisionKey").invoke(version);
         assertThat(detailPk).isEqualTo("uddi:ed6d9b4d-96cc-4e2a-85b3-98769395fc87");
-        assertThat(revisionKey).startsWith("2024-10-28|15067528|uddi:ed6d9b4d-96cc-4e2a-85b3-98769395fc87");
+        assertThat(revisionKey).isEqualTo("2024-10-28|15067528");
+    }
+
+    @Test
+    void resolveLatestDataGoFileDataVersion_whenSwaggerEndpointIsInExternalScript_thenFindsCandidate() throws Exception {
+        mockWebServer.enqueue(new MockResponse()
+                .setHeader("Content-Type", "text/html")
+                .setBody("""
+                        <html>
+                          <body>
+                            <form id="frmFile" name="frmFile">
+                              <input type="hidden" id="publicDataPk" name="publicDataPk" value="15044262"/>
+                              <input type="hidden" id="publicDataDetailPk" name="publicDataDetailPk" value="uddi:legacy-old-value"/>
+                            </form>
+                          </body>
+                        </html>
+                        """));
+        mockWebServer.enqueue(new MockResponse()
+                .setHeader("Content-Type", "text/html")
+                .setBody("""
+                        <html>
+                          <body>
+                            <div id="swagger-container">서울교통공사_휠체어리프트 설치현황_20260211</div>
+                            <script src="/assets/swagger-source.js"></script>
+                          </body>
+                        </html>
+                        """));
+        mockWebServer.enqueue(new MockResponse()
+                .setHeader("Content-Type", "application/javascript")
+                .setBody("""
+                        const apiPath = "/api/15044262/v1/uddi:54994cec-189c-4158-a0c0-c23bde567cad";
+                        """));
+
+        BridgeWorkSyncProperties.SourceConfig sourceConfig = new BridgeWorkSyncProperties.SourceConfig();
+        sourceConfig.setEnabled(true);
+        sourceConfig.setSourceType(PublicDataSourceType.SEOUL_WHEELCHAIR_LIFT);
+        sourceConfig.setBaseUrl(mockWebServer.url("/fileData.do").toString());
+        sourceConfig.setServiceKey("test-key");
+        sourceConfig.setPageSize(1000);
+        sourceConfig.setMaxPages(1);
+
+        Object version = ReflectionTestUtils.invokeMethod(
+                publicDataApiClient,
+                "resolveLatestDataGoFileDataVersion",
+                sourceConfig
+        );
+
+        String detailPk = (String) version.getClass().getMethod("publicDataDetailPk").invoke(version);
+        String revisionKey = (String) version.getClass().getMethod("revisionKey").invoke(version);
+        assertThat(detailPk).isEqualTo("uddi:54994cec-189c-4158-a0c0-c23bde567cad");
+        assertThat(revisionKey).isEqualTo("2026-02-11|15044262");
     }
 
     @Test
