@@ -554,7 +554,7 @@ class PublicDataApiClientTest {
     }
 
     @Test
-    void resolveLatestDataGoFileDataVersion_whenSwaggerEndpointIsInExternalScript_thenFindsCandidate() throws Exception {
+    void resolveLatestDataGoFileDataVersion_whenFileDataHasSwaggerOasUrl_thenUsesOasLatestCandidate() throws Exception {
         mockWebServer.enqueue(new MockResponse()
                 .setHeader("Content-Type", "text/html")
                 .setBody("""
@@ -564,23 +564,28 @@ class PublicDataApiClientTest {
                               <input type="hidden" id="publicDataPk" name="publicDataPk" value="15044262"/>
                               <input type="hidden" id="publicDataDetailPk" name="publicDataDetailPk" value="uddi:legacy-old-value"/>
                             </form>
+                            <script>
+                              window.ui = SwaggerUIBundle({
+                                url: 'http://kubernetes.docker.internal:%d/oas/docs?namespace=15044262/v1'
+                              });
+                            </script>
                           </body>
                         </html>
-                        """));
+                        """.formatted(mockWebServer.getPort())));
         mockWebServer.enqueue(new MockResponse()
-                .setHeader("Content-Type", "text/html")
+                .setHeader("Content-Type", "application/json")
                 .setBody("""
-                        <html>
-                          <body>
-                            <div id="swagger-container">서울교통공사_휠체어리프트 설치현황_20260211</div>
-                            <script src="/assets/swagger-source.js"></script>
-                          </body>
-                        </html>
-                        """));
-        mockWebServer.enqueue(new MockResponse()
-                .setHeader("Content-Type", "application/javascript")
-                .setBody("""
-                        const apiPath = "/api/15044262/v1/uddi:54994cec-189c-4158-a0c0-c23bde567cad";
+                        {
+                          "swagger": "2.0",
+                          "paths": {
+                            "/15044262/v1/uddi:2fc7a997-dac2-4d50-989e-b0fd0c699db9": {
+                              "get": { "summary": "서울교통공사_휠체어리프트 설치현황_20250807" }
+                            },
+                            "/15044262/v1/uddi:54994cec-189c-4158-a0c0-c23bde567cad": {
+                              "get": { "summary": "서울교통공사_휠체어리프트 설치현황_20260211" }
+                            }
+                          }
+                        }
                         """));
 
         BridgeWorkSyncProperties.SourceConfig sourceConfig = new BridgeWorkSyncProperties.SourceConfig();

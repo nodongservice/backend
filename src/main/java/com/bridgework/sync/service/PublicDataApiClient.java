@@ -83,6 +83,11 @@ public class PublicDataApiClient {
             Pattern.compile("(20\\d{2})[./-](\\d{1,2})[./-](\\d{1,2})");
     private static final Pattern DATE_TOKEN_COMPACT_PATTERN =
             Pattern.compile("(?<!\\d)(20\\d{2})(\\d{2})(\\d{2})(?!\\d)");
+    private static final Pattern SWAGGER_OAS_URL_PATTERN =
+            Pattern.compile("url\\s*:\\s*['\"]([^'\"]*oas/docs\\?namespace=[^'\"]+)['\"]",
+                    Pattern.CASE_INSENSITIVE);
+    private static final Pattern ODCLOUD_OAS_PATH_PATTERN =
+            Pattern.compile("^/?([0-9]{5,})/v1/([^/?#]+)$");
     private static final Pattern CREDENTIAL_QUERY_PARAM_PATTERN =
             Pattern.compile("([?&](?:serviceKey|authKey)=)([^&]+)");
     private static final LocalDate UNKNOWN_MODIFIED_DATE = LocalDate.of(1970, 1, 1);
@@ -344,16 +349,27 @@ public class PublicDataApiClient {
                                                                           PublicDataSourceType sourceType) {
         List<DataGoFileDataCandidate> candidates = new ArrayList<>();
 
-        // fileData 소스는 openapi 페이지의 swagger 영역 기준으로 최신 endpoint 후보를 추출한다.
-        OpenApiPage openApiPage = fetchOpenApiPage(sourceConfig);
-        if (openApiPage != null && openApiPage.body() != null && !openApiPage.body().isBlank()) {
-            collectDataGoCandidatesFromSwaggerPage(
-                    openApiPage.url(),
-                    openApiPage.body(),
-                    sourceConfig,
-                    fallbackPublicDataPk,
-                    candidates
-            );
+        // 1) fileData 페이지 내 SwaggerUI OAS URL을 우선 사용해 최신 후보를 추출한다.
+        collectDataGoCandidatesFromSwaggerOas(
+                htmlBody,
+                sourceConfig,
+                fallbackPublicDataPk,
+                sourceType,
+                candidates
+        );
+
+        // 2) OAS에서 후보를 찾지 못한 경우에만 openapi 페이지 본문 파싱으로 보조 탐색한다.
+        if (candidates.isEmpty()) {
+            OpenApiPage openApiPage = fetchOpenApiPage(sourceConfig);
+            if (openApiPage != null && openApiPage.body() != null && !openApiPage.body().isBlank()) {
+                collectDataGoCandidatesFromSwaggerPage(
+                        openApiPage.url(),
+                        openApiPage.body(),
+                        sourceConfig,
+                        fallbackPublicDataPk,
+                        candidates
+                );
+            }
         }
 
         Map<String, DataGoFileDataCandidate> dedupedCandidates = new LinkedHashMap<>();
@@ -370,6 +386,95 @@ public class PublicDataApiClient {
             log.warn("[FILEDATA] source={} swagger 영역에서 최신 API 후보를 찾지 못했습니다.", sourceType);
         }
         return new ArrayList<>(dedupedCandidates.values());
+    }
+
+    private void collectDataGoCandidatesFromSwaggerOas(String fileDataPageBody,
+                                                       BridgeWorkSyncProperties.SourceConfig sourceConfig,
+                                                       String fallbackPublicDataPk,
+                                                       PublicDataSourceType sourceType,
+                                                       List<DataGoFileDataCandidate> candidates) {
+        String swaggerOasUrl = extractSwaggerOasUrl(fileDataPageBody);
+        if (swaggerOasUrl == null || swaggerOasUrl.isBlank()) {
+            log.warn("[FILEDATA] source={} fileData 페이지에서 swagger OAS URL을 찾지 못했습니다.", sourceType);
+            return;
+        }
+
+        String oasBody;
+        try {
+            oasBody = fetchBody(swaggerOasUrl, sourceConfig);
+        } catch (Exception exception) {
+            log.warn("[FILEDATA] source={} swagger OAS 조회 실패 url={} reason={}",
+                    sourceType,
+                    swaggerOasUrl,
+                    exception.getMessage());
+            return;
+        }
+
+        try {
+            JsonNode rootNode = objectMapper.readTree(oasBody);
+            JsonNode pathsNode = rootNode.path("paths");
+            if (!pathsNode.isObject()) {
+                log.warn("[FILEDATA] source={} swagger OAS paths가 비어 있습니다. url={}", sourceType, swaggerOasUrl);
+                return;
+            }
+
+            Iterator<Map.Entry<String, JsonNode>> iterator = pathsNode.fields();
+            while (iterator.hasNext()) {
+                Map.Entry<String, JsonNode> entry = iterator.next();
+                String pathKey = entry.getKey();
+                Matcher pathMatcher = ODCLOUD_OAS_PATH_PATTERN.matcher(pathKey == null ? "" : pathKey.trim());
+                if (!pathMatcher.find()) {
+                    continue;
+                }
+
+                String publicDataPk = pathMatcher.group(1).trim();
+                String publicDataDetailPk = normalizeDataGoDetailPk(pathMatcher.group(2));
+                if (publicDataDetailPk.isBlank()) {
+                    continue;
+                }
+                if (fallbackPublicDataPk != null
+                        && !fallbackPublicDataPk.isBlank()
+                        && !fallbackPublicDataPk.equals(publicDataPk)) {
+                    continue;
+                }
+
+                JsonNode getNode = entry.getValue() == null ? null : entry.getValue().path("get");
+                String summary = getNode == null ? "" : getNode.path("summary").asText("");
+                String description = getNode == null ? "" : getNode.path("description").asText("");
+                LocalDate modifiedDate = extractFirstDate(summary)
+                        .or(() -> extractFirstDate(description))
+                        .orElse(null);
+
+                candidates.add(new DataGoFileDataCandidate(
+                        publicDataPk,
+                        publicDataDetailPk,
+                        modifiedDate,
+                        "swagger-oas-path"
+                ));
+            }
+        } catch (Exception exception) {
+            log.warn("[FILEDATA] source={} swagger OAS 파싱 실패 url={} reason={}",
+                    sourceType,
+                    swaggerOasUrl,
+                    exception.getMessage());
+        }
+    }
+
+    private String extractSwaggerOasUrl(String fileDataPageBody) {
+        if (fileDataPageBody == null || fileDataPageBody.isBlank()) {
+            return null;
+        }
+
+        String normalizedBody = normalizeSwaggerCandidateText(fileDataPageBody);
+        Matcher matcher = SWAGGER_OAS_URL_PATTERN.matcher(normalizedBody);
+        if (matcher.find()) {
+            return matcher.group(1).trim();
+        }
+        matcher = SWAGGER_OAS_URL_PATTERN.matcher(fileDataPageBody);
+        if (matcher.find()) {
+            return matcher.group(1).trim();
+        }
+        return null;
     }
 
     private void collectDataGoCandidatesFromSwaggerPage(String openApiPageUrl,
@@ -438,76 +543,7 @@ public class PublicDataApiClient {
             );
         }
 
-        collectDataGoCandidatesFromExternalScripts(
-                openApiPageUrl,
-                sourceConfig,
-                openApiDocument,
-                extractFirstDate(openApiDocument.text()).orElse(null),
-                fallbackPublicDataPk,
-                candidates
-        );
-    }
-
-    private void collectDataGoCandidatesFromExternalScripts(String openApiPageUrl,
-                                                            BridgeWorkSyncProperties.SourceConfig sourceConfig,
-                                                            Document openApiDocument,
-                                                            LocalDate defaultModifiedDate,
-                                                            String fallbackPublicDataPk,
-                                                            List<DataGoFileDataCandidate> candidates) {
-        if (openApiDocument == null) {
-            return;
-        }
-        Set<String> visitedScriptUrls = new LinkedHashSet<>();
-        for (Element scriptElement : openApiDocument.select("script[src]")) {
-            String src = scriptElement.attr("src");
-            if (src == null || src.isBlank()) {
-                continue;
-            }
-
-            String scriptUrl = resolveAgainstBaseUrl(openApiPageUrl, src.trim());
-            if (scriptUrl == null || scriptUrl.isBlank() || !visitedScriptUrls.add(scriptUrl)) {
-                continue;
-            }
-
-            LocalDate scriptUrlDate = extractFirstDate(scriptUrl).orElse(null);
-            collectDataGoCandidatesFromText(
-                    scriptUrl,
-                    scriptUrlDate,
-                    "swagger-script-src-url",
-                    fallbackPublicDataPk,
-                    candidates
-            );
-
-            try {
-                String scriptBody = fetchBody(scriptUrl, sourceConfig);
-                if (scriptBody == null || scriptBody.isBlank()) {
-                    continue;
-                }
-
-                LocalDate modifiedDate = extractFirstDate(scriptBody)
-                        .or(() -> extractFirstDate(normalizeSwaggerCandidateText(scriptBody)))
-                        .orElse(defaultModifiedDate);
-                collectDataGoCandidatesFromText(
-                        scriptBody,
-                        modifiedDate,
-                        "swagger-script-src-body",
-                        fallbackPublicDataPk,
-                        candidates
-                );
-                collectDataGoCandidatesFromText(
-                        normalizeSwaggerCandidateText(scriptBody),
-                        modifiedDate,
-                        "swagger-script-src-body-normalized",
-                        fallbackPublicDataPk,
-                        candidates
-                );
-            } catch (Exception exception) {
-                log.warn("[FILEDATA] source={} swagger script 조회 실패 url={} reason={}",
-                        sourceConfig.getSourceType(),
-                        scriptUrl,
-                        exception.getMessage());
-            }
-        }
+        // openapi 페이지의 외부 script는 공통 UI 스크립트가 대부분이라 불필요한 네트워크 호출을 줄이기 위해 탐색하지 않는다.
     }
 
     private OpenApiPage fetchOpenApiPage(BridgeWorkSyncProperties.SourceConfig sourceConfig) {
@@ -535,38 +571,6 @@ public class PublicDataApiClient {
         }
     }
 
-    private String resolveAgainstBaseUrl(String baseUrl, String relativeOrAbsoluteUrl) {
-        if (relativeOrAbsoluteUrl == null || relativeOrAbsoluteUrl.isBlank()) {
-            return null;
-        }
-        try {
-            URI candidateUri = URI.create(relativeOrAbsoluteUrl);
-            if (candidateUri.isAbsolute()) {
-                return candidateUri.toString();
-            }
-
-            if (baseUrl == null || baseUrl.isBlank()) {
-                return null;
-            }
-            URI baseUri = URI.create(baseUrl);
-            return baseUri.resolve(relativeOrAbsoluteUrl).toString();
-        } catch (IllegalArgumentException exception) {
-            try {
-                String sanitized = relativeOrAbsoluteUrl.replace(" ", "%20");
-                URI candidateUri = new URI(sanitized);
-                if (candidateUri.isAbsolute()) {
-                    return candidateUri.toString();
-                }
-                if (baseUrl == null || baseUrl.isBlank()) {
-                    return null;
-                }
-                URI baseUri = URI.create(baseUrl);
-                return baseUri.resolve(sanitized).toString();
-            } catch (URISyntaxException | IllegalArgumentException ignored) {
-                return null;
-            }
-        }
-    }
 
     private String normalizeSwaggerCandidateText(String rawText) {
         if (rawText == null || rawText.isBlank()) {
