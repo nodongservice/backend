@@ -1265,7 +1265,7 @@ public class PublicDataApiClient {
     private String fetchBody(String requestUri, BridgeWorkSyncProperties.SourceConfig sourceConfig) {
         PublicDataSourceType sourceType = sourceConfig.getSourceType();
         Duration requestTimeout = resolveRequestTimeout(sourceConfig);
-        log.info("[HTTP] source={} uri={}", sourceType, maskCredentialQueryParams(requestUri));
+        log.info("[HTTP] source={} uri={}", sourceType, maskCredentialInUri(requestUri, sourceConfig.getServiceKey()));
         return webClient
                 .get()
                 .uri(URI.create(requestUri))
@@ -1313,6 +1313,31 @@ public class PublicDataApiClient {
         }
         Matcher matcher = CREDENTIAL_QUERY_PARAM_PATTERN.matcher(uri);
         return matcher.replaceAll("$1***");
+    }
+
+    private String maskCredentialInUri(String uri, String rawCredential) {
+        String maskedUri = maskCredentialQueryParams(uri);
+        if (maskedUri == null || maskedUri.isBlank() || rawCredential == null || rawCredential.isBlank()) {
+            return maskedUri;
+        }
+
+        Set<String> candidates = new LinkedHashSet<>();
+        String trimmed = rawCredential.trim();
+        candidates.add(trimmed);
+
+        String decoded = decodePercentEscapesSafely(trimmed);
+        if (decoded != null && !decoded.isBlank()) {
+            candidates.add(decoded);
+            candidates.add(URLEncoder.encode(decoded, StandardCharsets.UTF_8));
+        }
+        candidates.add(URLEncoder.encode(trimmed, StandardCharsets.UTF_8));
+
+        for (String candidate : candidates) {
+            if (candidate != null && !candidate.isBlank()) {
+                maskedUri = maskedUri.replace(candidate, "***");
+            }
+        }
+        return maskedUri;
     }
 
     private boolean isRetryableApiException(Throwable throwable) {
