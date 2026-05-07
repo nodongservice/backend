@@ -20,7 +20,7 @@ public class PublicDataSyncScheduler {
         this.publicDataSyncExecutionLockService = publicDataSyncExecutionLockService;
     }
 
-    @Scheduled(cron = "${bridgework.sync.cron}")
+    @Scheduled(cron = "${bridgework.sync.cron}", zone = "${bridgework.sync.cron-zone:Asia/Seoul}")
     public void syncPublicData() {
         // 수동 실행과 스케줄러 실행이 겹치지 않도록 동일 전역 락을 사용한다.
         boolean executed = publicDataSyncExecutionLockService.runSchedulerIfAvailable(

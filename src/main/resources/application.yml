@@ -7,12 +7,17 @@ spring:
     name: bridgework-backend
   profiles:
     default: local
+  datasource:
+    hikari:
+      connection-init-sql: SET TIME ZONE 'UTC'
   jpa:
     open-in-view: false
     hibernate:
       ddl-auto: validate
     properties:
       hibernate:
+        jdbc:
+          time_zone: UTC
         format_sql: true
   flyway:
     enabled: true
@@ -48,6 +53,7 @@ bridgework:
     request-timeout: 20s
   sync:
     cron: "0 0 0 * * *"
+    cron-zone: Asia/Seoul
     request-timeout: 20s
     kric-station-code-file-path: resources/reference/operating_agency_station_codes_2026-02-28.xlsx
     sources:

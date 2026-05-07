@@ -283,7 +283,7 @@ docker run -d \
   -e SPRING_PROFILES_ACTIVE=prod \
   -e SPRING_CONFIG_ADDITIONAL_LOCATION="optional:file:/app/config/" \
   -e SERVER_PORT="$CONTAINER_PORT" \
-  -e TZ="${TZ:-Asia/Seoul}" \
+  -e TZ="${TZ:-UTC}" \
   -p "${TARGET_PORT}:${CONTAINER_PORT}" \
   "$IMAGE_URI" >/dev/null
 
