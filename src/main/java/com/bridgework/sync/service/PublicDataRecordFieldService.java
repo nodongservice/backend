@@ -35,13 +35,15 @@ public class PublicDataRecordFieldService {
     @Transactional
     public void replaceFields(PublicDataRecord record) {
         publicDataRecordFieldRepository.deleteByRecord_Id(record.getId());
+        // 동일 트랜잭션에서 재삽입 전에 삭제 SQL을 먼저 반영해 유니크 충돌을 막는다.
+        publicDataRecordFieldRepository.flush();
 
         List<PublicDataRecordField> fields = new ArrayList<>();
         JsonNode payloadNode = parsePayload(record.getPayloadJson());
         flattenNode(record, payloadNode, "", fields);
 
         if (!fields.isEmpty()) {
-            publicDataRecordFieldRepository.saveAll(fields);
+            publicDataRecordFieldRepository.saveAll(deduplicateByFieldPath(fields));
         }
     }
 
@@ -148,5 +150,13 @@ public class PublicDataRecordFieldService {
         } catch (NoSuchAlgorithmException exception) {
             throw new IllegalStateException("SHA-256 알고리즘을 사용할 수 없습니다.", exception);
         }
+    }
+
+    private List<PublicDataRecordField> deduplicateByFieldPath(List<PublicDataRecordField> fields) {
+        Map<String, PublicDataRecordField> deduplicated = new LinkedHashMap<>();
+        for (PublicDataRecordField field : fields) {
+            deduplicated.put(field.getFieldPath(), field);
+        }
+        return new ArrayList<>(deduplicated.values());
     }
 }
