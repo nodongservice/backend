@@ -168,7 +168,7 @@ public class PublicDataSyncService {
                         logItem.getId(),
                         logItem.getSourceType(),
                         logItem.getRequestSource(),
-                        logItem.getStatus(),
+                        resolveDisplayStatus(logItem),
                         logItem.getProcessedCount(),
                         logItem.getNewCount(),
                         logItem.getUpdatedCount(),
@@ -178,6 +178,13 @@ public class PublicDataSyncService {
                         toSeoulOffset(logItem.getEndedAt())
                 ))
                 .toList();
+    }
+
+    private SyncStatus resolveDisplayStatus(PublicDataSyncLog logItem) {
+        if (logItem.getEndedAt() == null) {
+            return SyncStatus.IN_PROGRESS;
+        }
+        return logItem.getStatus();
     }
 
     private OffsetDateTime toSeoulOffset(OffsetDateTime value) {
@@ -454,7 +461,7 @@ public class PublicDataSyncService {
         PublicDataSyncLog syncLog = new PublicDataSyncLog();
         syncLog.setSourceType(sourceType);
         syncLog.setRequestSource(requestSource);
-        syncLog.setStatus(SyncStatus.SUCCESS);
+        syncLog.setStatus(SyncStatus.IN_PROGRESS);
         return publicDataSyncLogRepository.save(syncLog);
     }
 

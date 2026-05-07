@@ -29,7 +29,7 @@ public class PublicDataSyncLog {
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 32)
-    private SyncStatus status = SyncStatus.SUCCESS;
+    private SyncStatus status = SyncStatus.IN_PROGRESS;
 
     @Column(name = "processed_count", nullable = false)
     private int processedCount;

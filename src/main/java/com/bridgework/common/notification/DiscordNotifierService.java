@@ -5,6 +5,7 @@ import com.bridgework.sync.dto.SourceSyncResultDto;
 import com.bridgework.sync.dto.SyncRunResponseDto;
 import com.bridgework.sync.entity.PublicDataSourceType;
 import com.bridgework.sync.entity.SyncRequestSource;
+import com.bridgework.sync.entity.SyncStatus;
 import java.time.OffsetDateTime;
 import java.time.Duration;
 import java.util.List;
@@ -28,7 +29,8 @@ public class DiscordNotifierService {
     private static final Duration DISCORD_RETRY_BACKOFF = Duration.ofMillis(700);
     private static final Duration DISCORD_REQUEST_TIMEOUT = Duration.ofSeconds(10);
     private static final String HEADER_SYNC_STARTED = "🚀 [공공데이터 동기화 시작 알림]";
-    private static final String HEADER_SYNC_FINISHED = "✅ [공공데이터 동기화 완료 알림]";
+    private static final String HEADER_SYNC_FINISHED_SUCCESS = "✅ [공공데이터 동기화 완료 알림]";
+    private static final String HEADER_SYNC_FINISHED_FAILED = "❌ [공공데이터 동기화 완료 알림]";
     private static final String HEADER_SIGNUP_COMPLETED = "🎉 [회원가입 완료 알림]";
     private static final String HEADER_GENERIC = "ℹ️ [시스템 알림]";
 
@@ -57,12 +59,13 @@ public class DiscordNotifierService {
                 .collect(Collectors.joining(", "));
 
         StringBuilder builder = new StringBuilder();
-        builder.append(HEADER_SYNC_FINISHED).append('\n');
+        builder.append(resolveSyncFinishedHeader(result)).append('\n');
         builder.append("요청 구분: ").append(requestSourceText).append('\n');
         builder.append("대상: ").append(targetText).append('\n');
         builder.append("시작: ").append(result.startedAt()).append('\n');
         builder.append("종료: ").append(result.endedAt()).append('\n');
         builder.append("소요 시간: ").append(formatElapsed(result.startedAt(), result.endedAt())).append('\n');
+        builder.append("결과: ").append(resolveSyncResultLabel(result)).append('\n');
         builder.append("처리: ").append(result.processedCount())
                 .append("건 / 신규: ").append(result.newCount())
                 .append("건 / 수정: ").append(result.updatedCount())
@@ -72,7 +75,7 @@ public class DiscordNotifierService {
         }
         appendFailureDetails(builder, result);
         appendPerSourceDetails(builder, requestedSourceType, result, sourceDurations);
-        builder.append('\n');
+        builder.append('\n').append('\n');
 
         send(builder.toString());
     }
@@ -86,7 +89,8 @@ public class DiscordNotifierService {
         String message = HEADER_SYNC_STARTED + '\n'
                 + "요청 구분: " + requestSourceText + '\n'
                 + "대상: " + targetText + '\n'
-                + "시작 시각: " + startedAt + '\n';
+                + "시작 시각: " + startedAt + '\n'
+                + '\n';
         send(message);
     }
 
@@ -94,7 +98,8 @@ public class DiscordNotifierService {
         String safeEmail = (email == null || email.isBlank()) ? "(이메일 없음)" : email;
         String message = HEADER_SIGNUP_COMPLETED + '\n'
                 + "이메일: " + safeEmail + '\n'
-                + "현재 회원 수: " + totalUserCount + "명\n";
+                + "현재 회원 수: " + totalUserCount + "명\n"
+                + '\n';
         send(message);
     }
 
@@ -130,7 +135,7 @@ public class DiscordNotifierService {
 
     private String truncate(String content) {
         if (content == null || content.isBlank()) {
-            return HEADER_GENERIC + "\n비어 있는 메시지를 감지했습니다.\n";
+            return HEADER_GENERIC + "\n비어 있는 메시지를 감지했습니다.\n\n";
         }
         if (content.length() <= DISCORD_MAX_MESSAGE_LENGTH) {
             return content;
@@ -182,7 +187,7 @@ public class DiscordNotifierService {
             builder.append('\n')
                     .append("- ")
                     .append(sourceResult.sourceType().name())
-                    .append(" | 상태: ").append(sourceResult.status())
+                    .append(" | 상태: ").append(formatStatusWithEmoji(sourceResult.status()))
                     .append(" | 처리: ").append(sourceResult.processedCount()).append("건")
                     .append(" | 신규: ").append(sourceResult.newCount()).append("건")
                     .append(" | 수정: ").append(sourceResult.updatedCount()).append("건")
@@ -224,6 +229,46 @@ public class DiscordNotifierService {
             return normalized;
         }
         return normalized.substring(0, 177) + "...";
+    }
+
+    private String resolveSyncFinishedHeader(SyncRunResponseDto result) {
+        if (hasSyncFailure(result)) {
+            return HEADER_SYNC_FINISHED_FAILED;
+        }
+        return HEADER_SYNC_FINISHED_SUCCESS;
+    }
+
+    private String resolveSyncResultLabel(SyncRunResponseDto result) {
+        if (hasSyncFailure(result)) {
+            return "❌ 실패";
+        }
+        return "✅ 성공";
+    }
+
+    private boolean hasSyncFailure(SyncRunResponseDto result) {
+        if (result.failedCount() > 0) {
+            return true;
+        }
+        if (result.results() == null || result.results().isEmpty()) {
+            return false;
+        }
+        return result.results().stream().anyMatch(sourceResult -> sourceResult.status() != null
+                && (sourceResult.status() == SyncStatus.FAILED
+                || sourceResult.status() == SyncStatus.PARTIAL_SUCCESS));
+    }
+
+    private String formatStatusWithEmoji(SyncStatus status) {
+        if (status == null) {
+            return "⚪ UNKNOWN";
+        }
+
+        return switch (status) {
+            case IN_PROGRESS -> "🔄 IN_PROGRESS";
+            case SUCCESS -> "✅ SUCCESS";
+            case FAILED -> "❌ FAILED";
+            case PARTIAL_SUCCESS -> "⚠️ PARTIAL_SUCCESS";
+            case SKIP -> "⏭️ SKIP";
+        };
     }
 
     private boolean isRetryableDiscordException(Throwable throwable) {
