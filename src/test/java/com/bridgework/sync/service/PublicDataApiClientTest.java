@@ -1,6 +1,7 @@
 package com.bridgework.sync.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.bridgework.sync.config.BridgeWorkSyncProperties;
 import com.bridgework.sync.dto.PublicDataApiPageResponseDto;
@@ -279,6 +280,19 @@ class PublicDataApiClientTest {
                           </body>
                         </html>
                         """));
+        mockWebServer.enqueue(new MockResponse()
+                .setHeader("Content-Type", "text/html")
+                .setBody("""
+                        <html>
+                          <body>
+                            <div id="swagger-container">
+                              2024-10-28
+                              https://api.odcloud.kr/api/15044262/v1/09073736
+                              https://api.odcloud.kr/api/15044262/v1/uddi:54994cec-189c-4158-a0c0-c23bde567cad
+                            </div>
+                          </body>
+                        </html>
+                        """));
 
         BridgeWorkSyncProperties.SourceConfig sourceConfig = new BridgeWorkSyncProperties.SourceConfig();
         sourceConfig.setEnabled(true);
@@ -311,6 +325,19 @@ class PublicDataApiClientTest {
                           </body>
                         </html>
                         """));
+        mockWebServer.enqueue(new MockResponse()
+                .setHeader("Content-Type", "text/html")
+                .setBody("""
+                        <html>
+                          <body>
+                            <div id="swagger-container">
+                              2024-10-28
+                              https://api.odcloud.kr/api/15041686/v1/uddi:4dbe1903-4a2f-4d8b-af48-b07985732550
+                              https://api.odcloud.kr/api/15044262/v1/uddi:54994cec-189c-4158-a0c0-c23bde567cad
+                            </div>
+                          </body>
+                        </html>
+                        """));
 
         BridgeWorkSyncProperties.SourceConfig sourceConfig = new BridgeWorkSyncProperties.SourceConfig();
         sourceConfig.setEnabled(true);
@@ -340,6 +367,19 @@ class PublicDataApiClientTest {
                             <input type="hidden" id="publicDataPk" name="publicDataPk" value="15044262"/>
                             <input type="hidden" id="publicDataDetailPk" name="publicDataDetailPk" value="uddi:54994cec-189c-4158-a0c0-c23bde567cad"/>
                             <a href="https://api.odcloud.kr/api/15044262/v1/uddi:4dbe1903-4a2f-4d8b-af48-b07985732550">stale-endpoint</a>
+                          </body>
+                        </html>
+                        """));
+        mockWebServer.enqueue(new MockResponse()
+                .setHeader("Content-Type", "text/html")
+                .setBody("""
+                        <html>
+                          <body>
+                            <div id="swagger-container">
+                              2024-10-28
+                              https://api.odcloud.kr/api/15044262/v1/uddi:54994cec-189c-4158-a0c0-c23bde567cad
+                              https://api.odcloud.kr/api/15044262/v1/uddi:4dbe1903-4a2f-4d8b-af48-b07985732550
+                            </div>
                           </body>
                         </html>
                         """));
@@ -380,6 +420,19 @@ class PublicDataApiClientTest {
                           </body>
                         </html>
                         """));
+        mockWebServer.enqueue(new MockResponse()
+                .setHeader("Content-Type", "text/html")
+                .setBody("""
+                        <html>
+                          <body>
+                            <div id="swagger-container">
+                              2024-10-28
+                              https://api.odcloud.kr/api/15044262/v1/uddi:54994cec-189c-4158-a0c0-c23bde567cad
+                              https://api.odcloud.kr/api/15041686/v1/uddi:4dbe1903-4a2f-4d8b-af48-b07985732550
+                            </div>
+                          </body>
+                        </html>
+                        """));
 
         BridgeWorkSyncProperties.SourceConfig sourceConfig = new BridgeWorkSyncProperties.SourceConfig();
         sourceConfig.setEnabled(true);
@@ -399,6 +452,88 @@ class PublicDataApiClientTest {
         String detailPk = (String) version.getClass().getMethod("publicDataDetailPk").invoke(version);
         assertThat(publicDataPk).isEqualTo("15044262");
         assertThat(detailPk).isEqualTo("uddi:54994cec-189c-4158-a0c0-c23bde567cad");
+    }
+
+    @Test
+    void resolveLatestDataGoFileDataVersion_whenSwaggerContainerHasEscapedEndpoint_thenUsesLatestSwaggerCandidate() throws Exception {
+        mockWebServer.enqueue(new MockResponse()
+                .setHeader("Content-Type", "text/html")
+                .setBody("""
+                        <html>
+                          <body>
+                            <form id="frmFile" name="frmFile">
+                              <input type="hidden" id="publicDataPk" name="publicDataPk" value="15067528"/>
+                              <input type="hidden" id="publicDataDetailPk" name="publicDataDetailPk" value="uddi:f74b9799-9db1-4754-a5d0-b66e2ae705f3"/>
+                            </form>
+                          </body>
+                        </html>
+                        """));
+        mockWebServer.enqueue(new MockResponse()
+                .setHeader("Content-Type", "text/html")
+                .setBody("""
+                        <html>
+                          <body>
+                            <div id="swagger-container">
+                              2024-10-28
+                              <script>
+                                const endpoint = "https:\\/\\/api.odcloud.kr\\/api\\/15067528\\/v1\\/uddi:ed6d9b4d-96cc-4e2a-85b3-98769395fc87";
+                              </script>
+                            </div>
+                          </body>
+                        </html>
+                        """));
+
+        BridgeWorkSyncProperties.SourceConfig sourceConfig = new BridgeWorkSyncProperties.SourceConfig();
+        sourceConfig.setEnabled(true);
+        sourceConfig.setSourceType(PublicDataSourceType.NATIONWIDE_BUS_STOP);
+        sourceConfig.setBaseUrl(mockWebServer.url("/fileData.do").toString());
+        sourceConfig.setServiceKey("test-key");
+        sourceConfig.setPageSize(1000);
+        sourceConfig.setMaxPages(1);
+
+        Object version = ReflectionTestUtils.invokeMethod(
+                publicDataApiClient,
+                "resolveLatestDataGoFileDataVersion",
+                sourceConfig
+        );
+
+        String detailPk = (String) version.getClass().getMethod("publicDataDetailPk").invoke(version);
+        String revisionKey = (String) version.getClass().getMethod("revisionKey").invoke(version);
+        assertThat(detailPk).isEqualTo("uddi:ed6d9b4d-96cc-4e2a-85b3-98769395fc87");
+        assertThat(revisionKey).startsWith("2024-10-28|15067528|uddi:ed6d9b4d-96cc-4e2a-85b3-98769395fc87");
+    }
+
+    @Test
+    void resolveLatestDataGoFileDataVersion_whenNoApiCandidateAnywhere_thenThrows() {
+        mockWebServer.enqueue(new MockResponse()
+                .setHeader("Content-Type", "text/html")
+                .setBody("""
+                        <html>
+                          <body>
+                            <form id="frmFile" name="frmFile">
+                              <input type="hidden" id="publicDataPk" name="publicDataPk" value="15067528"/>
+                              <input type="hidden" id="publicDataDetailPk" name="publicDataDetailPk" value="uddi:f74b9799-9db1-4754-a5d0-b66e2ae705f3"/>
+                            </form>
+                          </body>
+                        </html>
+                        """));
+        mockWebServer.enqueue(new MockResponse()
+                .setHeader("Content-Type", "text/html")
+                .setBody("<html><body><div id=\"swagger-container\">endpoint 없음</div></body></html>"));
+
+        BridgeWorkSyncProperties.SourceConfig sourceConfig = new BridgeWorkSyncProperties.SourceConfig();
+        sourceConfig.setEnabled(true);
+        sourceConfig.setSourceType(PublicDataSourceType.NATIONWIDE_BUS_STOP);
+        sourceConfig.setBaseUrl(mockWebServer.url("/fileData.do").toString());
+        sourceConfig.setServiceKey("test-key");
+        sourceConfig.setPageSize(1000);
+        sourceConfig.setMaxPages(1);
+
+        assertThatThrownBy(() -> ReflectionTestUtils.invokeMethod(
+                publicDataApiClient,
+                "resolveLatestDataGoFileDataVersion",
+                sourceConfig
+        )).hasMessageContaining("파일데이터 최신 OpenAPI 후보 추출 실패");
     }
 
     private BridgeWorkSyncProperties.SourceConfig sourceConfig(String itemIdField, int pageSize) {

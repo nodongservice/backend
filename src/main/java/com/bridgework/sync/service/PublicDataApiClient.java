@@ -50,6 +50,7 @@ import org.apache.poi.ss.usermodel.WorkbookFactory;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
+import org.jsoup.nodes.Entities;
 import org.jsoup.select.Elements;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -279,46 +280,24 @@ public class PublicDataApiClient {
         String fileDataPageBody = fetchBody(sourceConfig.getBaseUrl(), sourceConfig);
         Document document = Jsoup.parse(fileDataPageBody);
         String fallbackPublicDataPk = extractFileDataField(document, "publicDataPk");
-        String fallbackPublicDataDetailPk = extractFileDataField(document, "publicDataDetailPk");
-        // SEOUL_WHEELCHAIR_LIFT는 추천 데이터셋 마크업이 자주 섞여 잘못된 상세키를 유발하므로
-        // 페이지 hidden input의 식별자를 단일 진실원으로 사용한다.
-        if (sourceConfig.getSourceType() == PublicDataSourceType.SEOUL_WHEELCHAIR_LIFT) {
-            DataGoFileDataCandidate selected = new DataGoFileDataCandidate(
-                    fallbackPublicDataPk,
-                    fallbackPublicDataDetailPk,
-                    null,
-                    "fallback-hidden-input"
-            );
-            log.info("[FILEDATA] source={} selected publicDataPk={} publicDataDetailPk={} modifiedDate={} matchedFrom={}",
-                    sourceConfig.getSourceType(),
-                    selected.publicDataPk(),
-                    selected.publicDataDetailPk(),
-                    selected.modifiedDate(),
-                    selected.contextLabel());
-            return new DataGoFileDataVersion(
-                    selected.publicDataPk(),
-                    selected.publicDataDetailPk(),
-                    "unknown|" + selected.publicDataPk() + "|" + selected.publicDataDetailPk(),
-                    "publicDataDetailPk=" + selected.publicDataDetailPk(),
-                    UNKNOWN_MODIFIED_DATE
-            );
-        }
 
         List<DataGoFileDataCandidate> candidates = new ArrayList<>(resolveDataGoFileDataCandidates(
                 fileDataPageBody,
+                sourceConfig,
                 fallbackPublicDataPk,
                 sourceConfig.getSourceType()
         ).stream()
                 // 상세키는 동일 publicDataPk 범위에서만 신뢰한다.
                 .filter(candidate -> fallbackPublicDataPk.equals(candidate.publicDataPk()))
                 .toList());
-        // hidden input 식별자는 포털이 현재 제공하는 정식 상세키이므로 항상 후보군에 포함한다.
-        candidates.add(new DataGoFileDataCandidate(
-                fallbackPublicDataPk,
-                fallbackPublicDataDetailPk,
-                null,
-                "fallback-hidden-input"
-        ));
+        if (candidates.isEmpty()) {
+            throw new ExternalApiException(
+                    "파일데이터 최신 OpenAPI 후보 추출 실패: source="
+                            + sourceConfig.getSourceType()
+                            + ", baseUrl="
+                            + sourceConfig.getBaseUrl()
+            );
+        }
         DataGoFileDataCandidate selected = candidates.stream()
                 .max(Comparator
                         // 최신 fileData는 uddi 식별자를 사용하므로 숫자형보다 우선 선택한다.
@@ -326,11 +305,8 @@ public class PublicDataApiClient {
                         .thenComparing((DataGoFileDataCandidate candidate) -> candidate.modifiedDate() != null)
                         .thenComparing(candidate -> Optional.ofNullable(candidate.modifiedDate()).orElse(UNKNOWN_MODIFIED_DATE))
                         .thenComparingInt(candidate -> parseIntSafe(candidate.publicDataDetailPk())))
-                .orElse(new DataGoFileDataCandidate(
-                        fallbackPublicDataPk,
-                        fallbackPublicDataDetailPk,
-                        null,
-                        "fallback-hidden-input"
+                .orElseThrow(() -> new ExternalApiException(
+                        "파일데이터 최신 OpenAPI 후보 선택 실패: source=" + sourceConfig.getSourceType()
                 ));
 
         LocalDate modifiedDate = Optional.ofNullable(selected.modifiedDate()).orElse(UNKNOWN_MODIFIED_DATE);
@@ -355,27 +331,17 @@ public class PublicDataApiClient {
     }
 
     private List<DataGoFileDataCandidate> resolveDataGoFileDataCandidates(String htmlBody,
+                                                                          BridgeWorkSyncProperties.SourceConfig sourceConfig,
                                                                           String fallbackPublicDataPk,
                                                                           PublicDataSourceType sourceType) {
         Document document = Jsoup.parse(htmlBody);
         List<DataGoFileDataCandidate> candidates = new ArrayList<>();
 
-        for (Element rowElement : document.select("tr")) {
-            LocalDate modifiedDate = extractFirstDate(rowElement.text()).orElse(null);
-            collectDataGoCandidatesFromText(
-                    rowElement.outerHtml(),
-                    modifiedDate,
-                    "table-row",
-                    candidates
-            );
+        // fileData 원문에서 후보를 찾지 못하는 경우를 대비해 openapi 페이지의 swagger 영역도 함께 탐색한다.
+        String openApiPageBody = fetchOpenApiPageBody(sourceConfig);
+        if (openApiPageBody != null && !openApiPageBody.isBlank()) {
+            collectDataGoCandidatesFromSwaggerPage(openApiPageBody, candidates);
         }
-
-        collectDataGoCandidatesFromText(
-                htmlBody,
-                null,
-                "page-body",
-                candidates
-        );
 
         Map<String, DataGoFileDataCandidate> dedupedCandidates = new LinkedHashMap<>();
         for (DataGoFileDataCandidate candidate : candidates) {
@@ -388,9 +354,101 @@ public class PublicDataApiClient {
         }
 
         if (dedupedCandidates.isEmpty()) {
-            log.warn("[FILEDATA] source={} 최신 API 후보를 찾지 못해 hidden input 식별자를 사용한다.", sourceType);
+            log.warn("[FILEDATA] source={} swagger 영역에서 최신 API 후보를 찾지 못했습니다.", sourceType);
         }
         return new ArrayList<>(dedupedCandidates.values());
+    }
+
+    private void collectDataGoCandidatesFromSwaggerPage(String openApiPageBody,
+                                                        List<DataGoFileDataCandidate> candidates) {
+        Document openApiDocument = Jsoup.parse(openApiPageBody);
+
+        collectDataGoCandidatesFromText(
+                openApiPageBody,
+                extractFirstDate(openApiDocument.text()).orElse(null),
+                "openapi-page-body",
+                candidates
+        );
+        collectDataGoCandidatesFromText(
+                normalizeSwaggerCandidateText(openApiPageBody),
+                extractFirstDate(openApiDocument.text()).orElse(null),
+                "openapi-page-body-normalized",
+                candidates
+        );
+
+        for (Element swaggerElement : openApiDocument.select("#swagger-container, #swagger-ui, [id*=swagger]")) {
+            LocalDate modifiedDate = extractFirstDate(swaggerElement.text()).orElse(null);
+            collectDataGoCandidatesFromText(swaggerElement.outerHtml(), modifiedDate, "swagger-container", candidates);
+            collectDataGoCandidatesFromText(
+                    normalizeSwaggerCandidateText(swaggerElement.outerHtml()),
+                    modifiedDate,
+                    "swagger-container-normalized",
+                    candidates
+            );
+        }
+
+        for (Element scriptElement : openApiDocument.select("script")) {
+            String scriptData = scriptElement.data();
+            if (scriptData == null || scriptData.isBlank()) {
+                continue;
+            }
+            String normalizedScriptData = normalizeSwaggerCandidateText(scriptData);
+            LocalDate modifiedDate = extractFirstDate(normalizedScriptData)
+                    .or(() -> extractFirstDate(scriptData))
+                    .orElse(null);
+
+            collectDataGoCandidatesFromText(scriptData, modifiedDate, "swagger-script", candidates);
+            collectDataGoCandidatesFromText(
+                    normalizedScriptData,
+                    modifiedDate,
+                    "swagger-script-normalized",
+                    candidates
+            );
+        }
+    }
+
+    private String fetchOpenApiPageBody(BridgeWorkSyncProperties.SourceConfig sourceConfig) {
+        String baseUrl = sourceConfig.getBaseUrl();
+        if (baseUrl == null || baseUrl.isBlank()) {
+            return "";
+        }
+
+        String openApiPageUrl = baseUrl.replaceFirst("(?i)/filedata\\.do$", "/openapi.do");
+        if (openApiPageUrl.equals(baseUrl)) {
+            openApiPageUrl = baseUrl.replaceFirst("(?i)/filedata$", "/openapi.do");
+        }
+        if (openApiPageUrl.equals(baseUrl)) {
+            return "";
+        }
+
+        try {
+            return fetchBody(openApiPageUrl, sourceConfig);
+        } catch (Exception exception) {
+            log.warn("[FILEDATA] source={} openapi 페이지 조회 실패 url={} reason={}",
+                    sourceConfig.getSourceType(),
+                    openApiPageUrl,
+                    exception.getMessage());
+            return "";
+        }
+    }
+
+    private String normalizeSwaggerCandidateText(String rawText) {
+        if (rawText == null || rawText.isBlank()) {
+            return "";
+        }
+
+        String normalized = Entities.unescape(rawText);
+        normalized = normalized
+                .replace("\\/", "/")
+                .replace("\\u002F", "/")
+                .replace("\\u003A", ":")
+                .replace("\\u0026", "&");
+
+        String decoded = decodePercentEscapesSafely(normalized);
+        if (decoded != null && !decoded.isBlank()) {
+            return decoded;
+        }
+        return normalized;
     }
 
     private void collectDataGoCandidatesFromText(String text,
