@@ -348,11 +348,7 @@ public class PublicDataSyncService {
             reasonText = exception.getClass().getSimpleName();
         }
 
-        String normalized = reasonText.replace('\n', ' ').replace('\r', ' ').trim();
-        if (normalized.length() > 120) {
-            normalized = normalized.substring(0, 120) + "...";
-        }
-        return normalized;
+        return reasonText.replace('\n', ' ').replace('\r', ' ').trim();
     }
 
     private boolean isGeocodingFailure(Exception exception) {
@@ -479,21 +475,16 @@ public class PublicDataSyncService {
         syncLog.setFailedCount(failedCount);
         syncLog.setErrorMessage((syncStatus == SyncStatus.SUCCESS || syncStatus == SyncStatus.SKIP)
                 ? null
-                : truncateMessage(message));
+                : sanitizeMessage(message));
         syncLog.setEndedAt(OffsetDateTime.now());
         publicDataSyncLogRepository.save(syncLog);
     }
 
-    private String truncateMessage(String message) {
+    private String sanitizeMessage(String message) {
         if (message == null || message.isBlank()) {
             return "오류 메시지가 비어 있습니다.";
         }
-
-        if (message.length() <= 500) {
-            return message;
-        }
-
-        return message.substring(0, 500);
+        return message;
     }
 
     private BridgeWorkSyncProperties.SourceConfig findSourceConfig(PublicDataSourceType sourceType) {

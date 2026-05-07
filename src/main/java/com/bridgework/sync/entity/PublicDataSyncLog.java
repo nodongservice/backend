@@ -43,7 +43,7 @@ public class PublicDataSyncLog {
     @Column(name = "failed_count", nullable = false)
     private int failedCount;
 
-    @Column(name = "error_message", length = 500)
+    @Column(name = "error_message", columnDefinition = "TEXT")
     private String errorMessage;
 
     @Column(name = "started_at", nullable = false, updatable = false)

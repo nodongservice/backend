@@ -109,38 +109,70 @@ public class DiscordNotifierService {
             return;
         }
 
-        String normalizedContent = truncate(content);
-        Map<String, Object> body = new LinkedHashMap<>();
-        body.put("content", normalizedContent);
-        body.put("allowed_mentions", Map.of("parse", new String[0]));
+        for (String chunk : splitContentPreservingAllText(content)) {
+            Map<String, Object> body = new LinkedHashMap<>();
+            body.put("content", chunk);
+            body.put("allowed_mentions", Map.of("parse", new String[0]));
 
-        try {
-            webClient.post()
-                    .uri(webhookUrl)
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .bodyValue(body)
-                    .retrieve()
-                    .toBodilessEntity()
-                    .timeout(DISCORD_REQUEST_TIMEOUT)
-                    .retryWhen(
-                            Retry.backoff(DISCORD_RETRY_COUNT, DISCORD_RETRY_BACKOFF)
-                                    .filter(this::isRetryableDiscordException)
-                    )
-                    .block();
-        } catch (Exception exception) {
-            // 알림 실패가 본 업무 플로우를 막지 않도록 예외를 삼킨다.
-            log.warn("Discord 알림 전송 실패: {}", summarizeFailureReason(exception));
+            try {
+                webClient.post()
+                        .uri(webhookUrl)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .bodyValue(body)
+                        .retrieve()
+                        .toBodilessEntity()
+                        .timeout(DISCORD_REQUEST_TIMEOUT)
+                        .retryWhen(
+                                Retry.backoff(DISCORD_RETRY_COUNT, DISCORD_RETRY_BACKOFF)
+                                        .filter(this::isRetryableDiscordException)
+                        )
+                        .block();
+            } catch (Exception exception) {
+                // 알림 실패가 본 업무 플로우를 막지 않도록 예외를 삼킨다.
+                log.warn("Discord 알림 전송 실패: {}", summarizeFailureReason(exception));
+                return;
+            }
         }
     }
 
-    private String truncate(String content) {
+    private List<String> splitContentPreservingAllText(String content) {
         if (content == null || content.isBlank()) {
-            return HEADER_GENERIC + "\n비어 있는 메시지를 감지했습니다.\n\n";
+            return List.of(HEADER_GENERIC + "\n비어 있는 메시지를 감지했습니다.\n\n");
         }
-        if (content.length() <= DISCORD_MAX_MESSAGE_LENGTH) {
-            return content;
+
+        List<String> chunks = new java.util.ArrayList<>();
+        StringBuilder current = new StringBuilder();
+        String[] lines = content.split("\n", -1);
+
+        for (String line : lines) {
+            String lineWithNewline = line + "\n";
+            if (lineWithNewline.length() > DISCORD_MAX_MESSAGE_LENGTH) {
+                if (!current.isEmpty()) {
+                    chunks.add(current.toString());
+                    current.setLength(0);
+                }
+                // 단일 라인이 제한보다 길면 순서 보존을 위해 고정 길이로 연속 분할한다.
+                int start = 0;
+                while (start < lineWithNewline.length()) {
+                    int end = Math.min(start + DISCORD_MAX_MESSAGE_LENGTH, lineWithNewline.length());
+                    chunks.add(lineWithNewline.substring(start, end));
+                    start = end;
+                }
+                continue;
+            }
+
+            if (current.length() + lineWithNewline.length() > DISCORD_MAX_MESSAGE_LENGTH) {
+                chunks.add(current.toString());
+                current.setLength(0);
+            }
+            current.append(lineWithNewline);
         }
-        return content.substring(0, DISCORD_MAX_MESSAGE_LENGTH - 3) + "...";
+
+        if (!current.isEmpty()) {
+            chunks.add(current.toString());
+        }
+
+        return chunks;
     }
 
     private String formatElapsed(OffsetDateTime startedAt, OffsetDateTime endedAt) {
@@ -204,7 +236,7 @@ public class DiscordNotifierService {
                     if (message == null || message.isBlank()) {
                         message = "오류 메시지 없음";
                     }
-                    return sourceResult.sourceType().name() + ": " + truncateFailureMessage(message);
+                    return sourceResult.sourceType().name() + ": " + normalizeFailureMessage(message);
                 })
                 .toList();
         if (failureLines.isEmpty()) {
@@ -212,23 +244,13 @@ public class DiscordNotifierService {
         }
 
         builder.append('\n').append("실패 상세:");
-        int maxLines = Math.min(5, failureLines.size());
-        for (int index = 0; index < maxLines; index++) {
-            builder.append('\n').append("- ").append(failureLines.get(index));
-        }
-        if (failureLines.size() > maxLines) {
-            builder.append('\n').append("- ... 외 ")
-                    .append(failureLines.size() - maxLines)
-                    .append("개 소스");
+        for (String failureLine : failureLines) {
+            builder.append('\n').append("- ").append(failureLine);
         }
     }
 
-    private String truncateFailureMessage(String message) {
-        String normalized = message.replace('\n', ' ').replace('\r', ' ').trim();
-        if (normalized.length() <= 180) {
-            return normalized;
-        }
-        return normalized.substring(0, 177) + "...";
+    private String normalizeFailureMessage(String message) {
+        return message.replace('\n', ' ').replace('\r', ' ').trim();
     }
 
     private String resolveSyncFinishedHeader(SyncRunResponseDto result) {
