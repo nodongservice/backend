@@ -65,29 +65,32 @@ class RecommendGatewayServiceTest {
     void recommendMap_whenAiEnabledAndProfileIdMissing_thenUsesDefaultProfileAndCallsFastApi() {
         UserProfileResponseDto defaultProfile = profile(11L, true);
         Map<String, Object> aiResponse = Map.of(
-                "results",
-                List.of(Map.of(
-                        "job",
-                        Map.ofEntries(
-                                Map.entry("external_id", "ext-1"),
-                                Map.entry("company_name", "사업장"),
-                                Map.entry("job_title", "사무보조"),
-                                Map.entry("work_address", "서울"),
-                                Map.entry("employment_type", "정규직"),
-                                Map.entry("enter_type", "신입"),
-                                Map.entry("salary_type", "월급"),
-                                Map.entry("salary", "300만원"),
-                                Map.entry("term_date", "20261231"),
-                                Map.entry("registered_at", "20260504"),
-                                Map.entry("required_career", "무관"),
-                                Map.entry("required_education", "고졸"),
-                                Map.entry("required_major", "무관"),
-                                Map.entry("required_licenses", "무관"),
-                                Map.entry("work_lat", 37.5),
-                                Map.entry("work_lng", 127.0)
-                        ),
-                        "total_score", 88
-                ))
+                "code", "SUCCESS",
+                "message", "요청이 성공했습니다.",
+                "result", Map.of(
+                        "results", List.of(Map.of(
+                                "job",
+                                Map.ofEntries(
+                                        Map.entry("external_id", "ext-1"),
+                                        Map.entry("company_name", "사업장"),
+                                        Map.entry("job_title", "사무보조"),
+                                        Map.entry("work_address", "서울"),
+                                        Map.entry("employment_type", "정규직"),
+                                        Map.entry("enter_type", "신입"),
+                                        Map.entry("salary_type", "월급"),
+                                        Map.entry("salary", "300만원"),
+                                        Map.entry("term_date", "20261231"),
+                                        Map.entry("registered_at", "20260504"),
+                                        Map.entry("required_career", "무관"),
+                                        Map.entry("required_education", "고졸"),
+                                        Map.entry("required_major", "무관"),
+                                        Map.entry("required_licenses", "무관"),
+                                        Map.entry("work_lat", 37.5),
+                                        Map.entry("work_lng", 127.0)
+                                ),
+                                "total_score", 88
+                        ))
+                )
         );
 
         when(userProfileService.getProfiles(1L)).thenReturn(List.of(defaultProfile));

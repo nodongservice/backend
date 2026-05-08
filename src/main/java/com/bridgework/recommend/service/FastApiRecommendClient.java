@@ -65,6 +65,13 @@ public class FastApiRecommendClient {
                         "FastAPI 응답이 비어 있습니다."
                 );
             }
+            if (!isSupportedResponseShape(response)) {
+                throw new RecommendDomainException(
+                        "FASTAPI_INVALID_RESPONSE",
+                        HttpStatus.BAD_GATEWAY,
+                        "FastAPI 응답 형식이 예상과 다릅니다. (code/message/result 또는 results 필요)"
+                );
+            }
             return response;
         } catch (WebClientResponseException exception) {
             String responseBody = sanitizeErrorBody(exception.getResponseBodyAsString());
@@ -234,6 +241,12 @@ public class FastApiRecommendClient {
             return compact;
         }
         return compact.substring(0, maxLength) + "...";
+    }
+
+    private boolean isSupportedResponseShape(Map<String, Object> response) {
+        boolean hasWrapped = response.containsKey("code") && response.containsKey("message") && response.containsKey("result");
+        boolean hasLegacy = response.containsKey("results");
+        return hasWrapped || hasLegacy;
     }
 }
 
