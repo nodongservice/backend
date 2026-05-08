@@ -11,8 +11,11 @@ import com.bridgework.admin.dummy.exception.AdminDummyAuthException;
 import com.bridgework.admin.dummy.repository.AdminDummyLoginAuditRepository;
 import com.bridgework.admin.dummy.repository.AdminDummyProfileRepository;
 import com.bridgework.admin.dummy.repository.AdminDummyUserRepository;
+import com.bridgework.auth.config.BridgeWorkAuthProperties;
 import com.bridgework.auth.entity.UserRole;
 import com.bridgework.auth.security.JwtTokenProvider;
+import com.bridgework.auth.service.JwtTokenPair;
+import com.bridgework.auth.service.RefreshTokenStoreService;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
@@ -29,15 +32,21 @@ public class AdminDummyAuthService {
     private final AdminDummyProfileRepository adminDummyProfileRepository;
     private final AdminDummyLoginAuditRepository adminDummyLoginAuditRepository;
     private final JwtTokenProvider jwtTokenProvider;
+    private final RefreshTokenStoreService refreshTokenStoreService;
+    private final BridgeWorkAuthProperties authProperties;
 
     public AdminDummyAuthService(AdminDummyUserRepository adminDummyUserRepository,
                                  AdminDummyProfileRepository adminDummyProfileRepository,
                                  AdminDummyLoginAuditRepository adminDummyLoginAuditRepository,
-                                 JwtTokenProvider jwtTokenProvider) {
+                                 JwtTokenProvider jwtTokenProvider,
+                                 RefreshTokenStoreService refreshTokenStoreService,
+                                 BridgeWorkAuthProperties authProperties) {
         this.adminDummyUserRepository = adminDummyUserRepository;
         this.adminDummyProfileRepository = adminDummyProfileRepository;
         this.adminDummyLoginAuditRepository = adminDummyLoginAuditRepository;
         this.jwtTokenProvider = jwtTokenProvider;
+        this.refreshTokenStoreService = refreshTokenStoreService;
+        this.authProperties = authProperties;
     }
 
     @Transactional(readOnly = true)
@@ -89,9 +98,15 @@ public class AdminDummyAuthService {
             );
         }
 
-        JwtTokenProvider.IssuedAccessToken issuedAccessToken = jwtTokenProvider.issueAccessToken(
+        JwtTokenPair tokenPair = jwtTokenProvider.issueTokenPair(
                 dummyUser.getAppUser().getId(),
                 UserRole.USER
+        );
+        refreshTokenStoreService.save(
+                dummyUser.getAppUser().getId(),
+                tokenPair.refreshTokenId(),
+                tokenPair.refreshToken(),
+                authProperties.getJwt().getRefreshTokenValidity()
         );
 
         AdminDummyLoginAudit loginAudit = new AdminDummyLoginAudit();
@@ -103,9 +118,11 @@ public class AdminDummyAuthService {
         adminDummyLoginAuditRepository.save(loginAudit);
 
         return new AdminDummyLoginResponseDto(
-                issuedAccessToken.token(),
+                tokenPair.accessToken(),
+                tokenPair.refreshToken(),
                 "Bearer",
-                issuedAccessToken.expiresAt().withOffsetSameInstant(ZoneOffset.UTC),
+                tokenPair.accessTokenExpiresAt().withOffsetSameInstant(ZoneOffset.UTC),
+                tokenPair.refreshTokenExpiresAt().withOffsetSameInstant(ZoneOffset.UTC),
                 dummyUser.getAppUser().getId(),
                 dummyUser.getDummyKey(),
                 profiles
@@ -146,4 +163,3 @@ public class AdminDummyAuthService {
         return value.trim();
     }
 }
-
