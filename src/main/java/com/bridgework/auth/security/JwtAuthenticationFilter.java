@@ -1,14 +1,13 @@
 package com.bridgework.auth.security;
 
 import com.bridgework.auth.exception.InvalidJwtException;
-import com.bridgework.common.dto.ApiErrorResponse;
+import com.bridgework.common.dto.ApiResponse;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
-import java.time.OffsetDateTime;
 import java.util.List;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -72,6 +71,6 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         response.setStatus(HttpStatus.UNAUTHORIZED.value());
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
         response.setCharacterEncoding("UTF-8");
-        objectMapper.writeValue(response.getWriter(), new ApiErrorResponse(code, message, OffsetDateTime.now()));
+        objectMapper.writeValue(response.getWriter(), ApiResponse.error(code, message));
     }
 }

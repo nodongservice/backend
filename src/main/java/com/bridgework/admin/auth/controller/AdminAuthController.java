@@ -34,9 +34,9 @@ public class AdminAuthController {
     )
     @ApiResponse(responseCode = "200", description = "로그인 성공",
             content = @Content(examples = @ExampleObject(
-                    value = "{\"accessToken\":\"<ADMIN_ACCESS_TOKEN>\",\"tokenType\":\"Bearer\",\"accessTokenExpiresAt\":\"2026-05-08T08:00:00Z\"}"
+                    value = "{\"code\":\"SUCCESS\",\"message\":\"요청이 성공했습니다.\",\"result\":{\"accessToken\":\"<ADMIN_ACCESS_TOKEN>\",\"tokenType\":\"Bearer\",\"accessTokenExpiresAt\":\"2026-05-08T08:00:00Z\"}}"
             )))
-    public ResponseEntity<AdminLoginResponseDto> login(@Valid @RequestBody AdminLoginRequestDto request) {
-        return ResponseEntity.ok(adminAuthService.login(request));
+    public ResponseEntity<com.bridgework.common.dto.ApiResponse<AdminLoginResponseDto>> login(@Valid @RequestBody AdminLoginRequestDto request) {
+        return ResponseEntity.ok(com.bridgework.common.dto.ApiResponse.success(adminAuthService.login(request)));
     }
 }

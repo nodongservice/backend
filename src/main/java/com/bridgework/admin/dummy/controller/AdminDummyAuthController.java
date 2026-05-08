@@ -39,10 +39,10 @@ public class AdminDummyAuthController {
     @Operation(summary = "더미 사용자 케이스 목록 조회", description = "추천 게이트웨이 테스트용 더미 사용자/프로필 케이스 목록을 조회한다.")
     @ApiResponse(responseCode = "200", description = "조회 성공",
             content = @Content(examples = @ExampleObject(
-                    value = "[{\"dummyKey\":\"case-office-rookie\",\"displayName\":\"사무지원 신입형\",\"scenarioSummary\":\"필수 중심 입력 케이스\",\"profiles\":[{\"profileId\":1,\"profileKey\":\"office-default\",\"profileLabel\":\"사무신입 기본형\",\"scenarioSummary\":\"필수 입력 위주\",\"isDefault\":true}]}]"
+                    value = "{\"code\":\"SUCCESS\",\"message\":\"요청이 성공했습니다.\",\"result\":[{\"dummyKey\":\"case-office-rookie\",\"displayName\":\"사무지원 신입형\",\"scenarioSummary\":\"필수 중심 입력 케이스\",\"profiles\":[{\"profileId\":1,\"profileKey\":\"office-default\",\"profileLabel\":\"사무신입 기본형\",\"scenarioSummary\":\"필수 입력 위주\",\"isDefault\":true}]}]}"
             )))
-    public ResponseEntity<List<AdminDummyCaseResponseDto>> getCases() {
-        return ResponseEntity.ok(adminDummyAuthService.getActiveCases());
+    public ResponseEntity<com.bridgework.common.dto.ApiResponse<List<AdminDummyCaseResponseDto>>> getCases() {
+        return ResponseEntity.ok(com.bridgework.common.dto.ApiResponse.success(adminDummyAuthService.getActiveCases()));
     }
 
     @PostMapping("/login")
@@ -53,16 +53,18 @@ public class AdminDummyAuthController {
     )
     @ApiResponse(responseCode = "200", description = "로그인 성공",
             content = @Content(examples = @ExampleObject(
-                    value = "{\"accessToken\":\"<DUMMY_USER_ACCESS_TOKEN>\",\"refreshToken\":\"<DUMMY_USER_REFRESH_TOKEN>\",\"tokenType\":\"Bearer\",\"accessTokenExpiresAt\":\"2026-05-08T08:00:00Z\",\"refreshTokenExpiresAt\":\"2026-05-22T08:00:00Z\",\"userId\":6,\"dummyKey\":\"case-office-rookie\",\"profiles\":[{\"profileId\":3,\"profileKey\":\"office-default\",\"profileLabel\":\"사무신입 기본형\",\"scenarioSummary\":\"필수 입력 위주 기본 프로필\",\"isDefault\":true}]}"
+                    value = "{\"code\":\"SUCCESS\",\"message\":\"요청이 성공했습니다.\",\"result\":{\"accessToken\":\"<DUMMY_USER_ACCESS_TOKEN>\",\"refreshToken\":\"<DUMMY_USER_REFRESH_TOKEN>\",\"tokenType\":\"Bearer\",\"accessTokenExpiresAt\":\"2026-05-08T08:00:00Z\",\"refreshTokenExpiresAt\":\"2026-05-22T08:00:00Z\",\"userId\":6,\"dummyKey\":\"case-office-rookie\",\"profiles\":[{\"profileId\":3,\"profileKey\":\"office-default\",\"profileLabel\":\"사무신입 기본형\",\"scenarioSummary\":\"필수 입력 위주 기본 프로필\",\"isDefault\":true}]}}"
             )))
-    public ResponseEntity<AdminDummyLoginResponseDto> loginAsDummyUser(
+    public ResponseEntity<com.bridgework.common.dto.ApiResponse<AdminDummyLoginResponseDto>> loginAsDummyUser(
             Authentication authentication,
             HttpServletRequest httpServletRequest,
             @Valid @RequestBody AdminDummyLoginRequestDto request
     ) {
         Long adminUserId = currentUserId(authentication);
         String requestIp = resolveRequestIp(httpServletRequest);
-        return ResponseEntity.ok(adminDummyAuthService.loginAsDummyUser(adminUserId, requestIp, request));
+        return ResponseEntity.ok(com.bridgework.common.dto.ApiResponse.success(
+                adminDummyAuthService.loginAsDummyUser(adminUserId, requestIp, request)
+        ));
     }
 
     private Long currentUserId(Authentication authentication) {

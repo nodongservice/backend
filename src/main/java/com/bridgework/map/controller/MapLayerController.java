@@ -28,9 +28,9 @@ public class MapLayerController {
     @Operation(summary = "근로지원인 수행기관 마커 조회", description = "지오코딩된 근로지원인 수행기관 데이터를 지도 마커 용도로 조회한다.")
     @ApiResponse(responseCode = "200", description = "조회 성공",
             content = @Content(examples = @ExampleObject(
-                    value = "[{\"externalId\":\"S001\",\"institutionCode\":\"IC001\",\"institutionName\":\"서울장애인근로지원센터\",\"address\":\"서울특별시 중구 세종대로\",\"telephone\":\"02-1234-5678\",\"latitude\":37.5665,\"longitude\":126.9780}]"
+                    value = "{\"code\":\"SUCCESS\",\"message\":\"요청이 성공했습니다.\",\"result\":[{\"externalId\":\"S001\",\"institutionCode\":\"IC001\",\"institutionName\":\"서울장애인근로지원센터\",\"address\":\"서울특별시 중구 세종대로\",\"telephone\":\"02-1234-5678\",\"latitude\":37.5665,\"longitude\":126.9780}]}"
             )))
-    public ResponseEntity<List<SupportAgencyMarkerDto>> getSupportAgencies() {
-        return ResponseEntity.ok(mapLayerQueryService.getSupportAgencies());
+    public ResponseEntity<com.bridgework.common.dto.ApiResponse<List<SupportAgencyMarkerDto>>> getSupportAgencies() {
+        return ResponseEntity.ok(com.bridgework.common.dto.ApiResponse.success(mapLayerQueryService.getSupportAgencies()));
     }
 }

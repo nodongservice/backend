@@ -1,9 +1,8 @@
 package com.bridgework.common.exception;
 
-import com.bridgework.common.dto.ApiErrorResponse;
+import com.bridgework.common.dto.ApiResponse;
 import com.bridgework.sync.exception.SyncDomainException;
 import jakarta.validation.ConstraintViolationException;
-import java.time.OffsetDateTime;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -20,29 +19,21 @@ public class GlobalExceptionHandler {
     private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
     @ExceptionHandler(SyncDomainException.class)
-    public ResponseEntity<ApiErrorResponse> handleSyncDomainException(SyncDomainException exception) {
+    public ResponseEntity<ApiResponse<Object>> handleSyncDomainException(SyncDomainException exception) {
         return ResponseEntity
                 .status(exception.getHttpStatus())
-                .body(new ApiErrorResponse(
-                        exception.getErrorCode(),
-                        exception.getMessage(),
-                        OffsetDateTime.now()
-                ));
+                .body(ApiResponse.error(exception.getErrorCode(), exception.getMessage()));
     }
 
     @ExceptionHandler(BridgeWorkDomainException.class)
-    public ResponseEntity<ApiErrorResponse> handleBridgeWorkDomainException(BridgeWorkDomainException exception) {
+    public ResponseEntity<ApiResponse<Object>> handleBridgeWorkDomainException(BridgeWorkDomainException exception) {
         return ResponseEntity
                 .status(exception.getHttpStatus())
-                .body(new ApiErrorResponse(
-                        exception.getErrorCode(),
-                        exception.getMessage(),
-                        OffsetDateTime.now()
-                ));
+                .body(ApiResponse.error(exception.getErrorCode(), exception.getMessage()));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
-    public ResponseEntity<ApiErrorResponse> handleMethodArgumentNotValidException(MethodArgumentNotValidException exception) {
+    public ResponseEntity<ApiResponse<Object>> handleMethodArgumentNotValidException(MethodArgumentNotValidException exception) {
         String message = exception.getBindingResult()
                 .getFieldErrors()
                 .stream()
@@ -53,40 +44,24 @@ public class GlobalExceptionHandler {
             message = "요청 데이터가 유효하지 않습니다.";
         }
 
-        return ResponseEntity.badRequest().body(new ApiErrorResponse(
-                "VALIDATION_ERROR",
-                message,
-                OffsetDateTime.now()
-        ));
+        return ResponseEntity.badRequest().body(ApiResponse.error("VALIDATION_ERROR", message));
     }
 
     @ExceptionHandler(ConstraintViolationException.class)
-    public ResponseEntity<ApiErrorResponse> handleConstraintViolationException(ConstraintViolationException exception) {
-        return ResponseEntity.badRequest().body(new ApiErrorResponse(
-                "VALIDATION_ERROR",
-                exception.getMessage(),
-                OffsetDateTime.now()
-        ));
+    public ResponseEntity<ApiResponse<Object>> handleConstraintViolationException(ConstraintViolationException exception) {
+        return ResponseEntity.badRequest().body(ApiResponse.error("VALIDATION_ERROR", exception.getMessage()));
     }
 
     @ExceptionHandler(HttpMessageNotReadableException.class)
-    public ResponseEntity<ApiErrorResponse> handleHttpMessageNotReadableException(HttpMessageNotReadableException exception) {
+    public ResponseEntity<ApiResponse<Object>> handleHttpMessageNotReadableException(HttpMessageNotReadableException exception) {
         log.warn("요청 본문 파싱 실패", exception);
-        return ResponseEntity.badRequest().body(new ApiErrorResponse(
-                "VALIDATION_ERROR",
-                "요청 본문 JSON 형식이 올바르지 않습니다.",
-                OffsetDateTime.now()
-        ));
+        return ResponseEntity.badRequest().body(ApiResponse.error("VALIDATION_ERROR", "요청 본문 JSON 형식이 올바르지 않습니다."));
     }
 
     @ExceptionHandler(Exception.class)
-    public ResponseEntity<ApiErrorResponse> handleUnexpectedException(Exception exception) {
+    public ResponseEntity<ApiResponse<Object>> handleUnexpectedException(Exception exception) {
         log.error("처리되지 않은 예외 발생", exception);
-        return ResponseEntity.internalServerError().body(new ApiErrorResponse(
-                "INTERNAL_SERVER_ERROR",
-                "내부 서버 오류가 발생했습니다.",
-                OffsetDateTime.now()
-        ));
+        return ResponseEntity.internalServerError().body(ApiResponse.error("INTERNAL_SERVER_ERROR", "내부 서버 오류가 발생했습니다."));
     }
 
     private String toFieldMessage(FieldError fieldError) {

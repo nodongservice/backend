@@ -50,11 +50,11 @@ public class AuthController {
             @ApiResponse(responseCode = "200", description = "로그인 성공",
                     content = @Content(examples = @ExampleObject(
                             name = "기존 회원 응답 예시",
-                            value = "{\"signupRequired\":false,\"signupToken\":null,\"provider\":\"KAKAO\",\"email\":\"user@example.com\",\"name\":\"홍길동\",\"tokenPair\":{\"accessToken\":\"<ACCESS_TOKEN>\",\"refreshToken\":\"<REFRESH_TOKEN>\",\"tokenType\":\"Bearer\",\"accessTokenExpiresAt\":\"2026-05-08T08:00:00Z\",\"refreshTokenExpiresAt\":\"2026-05-22T08:00:00Z\"}}"
+                            value = "{\"code\":\"SUCCESS\",\"message\":\"요청이 성공했습니다.\",\"result\":{\"signupRequired\":false,\"signupToken\":null,\"provider\":\"KAKAO\",\"email\":\"user@example.com\",\"name\":\"홍길동\",\"tokenPair\":{\"accessToken\":\"<ACCESS_TOKEN>\",\"refreshToken\":\"<REFRESH_TOKEN>\",\"tokenType\":\"Bearer\",\"accessTokenExpiresAt\":\"2026-05-08T08:00:00Z\",\"refreshTokenExpiresAt\":\"2026-05-22T08:00:00Z\"}}}"
                     )))
     })
-    public ResponseEntity<SocialLoginResponseDto> socialLogin(@Valid @RequestBody SocialLoginRequestDto request) {
-        return ResponseEntity.ok(authService.socialLogin(request));
+    public ResponseEntity<com.bridgework.common.dto.ApiResponse<SocialLoginResponseDto>> socialLogin(@Valid @RequestBody SocialLoginRequestDto request) {
+        return ResponseEntity.ok(com.bridgework.common.dto.ApiResponse.success(authService.socialLogin(request)));
     }
 
     @PostMapping("/social/signup/complete")
@@ -68,10 +68,10 @@ public class AuthController {
     )
     @ApiResponse(responseCode = "200", description = "가입 완료 및 토큰 발급",
             content = @Content(examples = @ExampleObject(
-                    value = "{\"accessToken\":\"<ACCESS_TOKEN>\",\"refreshToken\":\"<REFRESH_TOKEN>\",\"tokenType\":\"Bearer\",\"accessTokenExpiresAt\":\"2026-05-08T08:00:00Z\",\"refreshTokenExpiresAt\":\"2026-05-22T08:00:00Z\"}"
+                    value = "{\"code\":\"SUCCESS\",\"message\":\"요청이 성공했습니다.\",\"result\":{\"accessToken\":\"<ACCESS_TOKEN>\",\"refreshToken\":\"<REFRESH_TOKEN>\",\"tokenType\":\"Bearer\",\"accessTokenExpiresAt\":\"2026-05-08T08:00:00Z\",\"refreshTokenExpiresAt\":\"2026-05-22T08:00:00Z\"}}"
             )))
-    public ResponseEntity<TokenPairResponseDto> completeSignup(@Valid @RequestBody SignupCompleteRequestDto request) {
-        return ResponseEntity.ok(authService.completeSignup(request));
+    public ResponseEntity<com.bridgework.common.dto.ApiResponse<TokenPairResponseDto>> completeSignup(@Valid @RequestBody SignupCompleteRequestDto request) {
+        return ResponseEntity.ok(com.bridgework.common.dto.ApiResponse.success(authService.completeSignup(request)));
     }
 
     @PostMapping("/token/refresh")
@@ -82,10 +82,10 @@ public class AuthController {
     )
     @ApiResponse(responseCode = "200", description = "토큰 재발급 성공",
             content = @Content(examples = @ExampleObject(
-                    value = "{\"accessToken\":\"<NEW_ACCESS_TOKEN>\",\"refreshToken\":\"<NEW_REFRESH_TOKEN>\",\"tokenType\":\"Bearer\",\"accessTokenExpiresAt\":\"2026-05-08T08:15:00Z\",\"refreshTokenExpiresAt\":\"2026-05-22T08:15:00Z\"}"
+                    value = "{\"code\":\"SUCCESS\",\"message\":\"요청이 성공했습니다.\",\"result\":{\"accessToken\":\"<NEW_ACCESS_TOKEN>\",\"refreshToken\":\"<NEW_REFRESH_TOKEN>\",\"tokenType\":\"Bearer\",\"accessTokenExpiresAt\":\"2026-05-08T08:15:00Z\",\"refreshTokenExpiresAt\":\"2026-05-22T08:15:00Z\"}}"
             )))
-    public ResponseEntity<TokenPairResponseDto> refreshToken(@Valid @RequestBody TokenRefreshRequestDto request) {
-        return ResponseEntity.ok(authService.refreshToken(request.refreshToken()));
+    public ResponseEntity<com.bridgework.common.dto.ApiResponse<TokenPairResponseDto>> refreshToken(@Valid @RequestBody TokenRefreshRequestDto request) {
+        return ResponseEntity.ok(com.bridgework.common.dto.ApiResponse.success(authService.refreshToken(request.refreshToken())));
     }
 
     @PostMapping("/logout")
@@ -95,12 +95,12 @@ public class AuthController {
             required = false,
             content = @Content(examples = @ExampleObject(value = "{\"refreshToken\":\"<REFRESH_TOKEN>\"}"))
     )
-    @ApiResponse(responseCode = "204", description = "로그아웃 성공")
-    public ResponseEntity<Void> logout(Authentication authentication, @RequestBody(required = false) LogoutRequestDto request) {
+    @ApiResponse(responseCode = "200", description = "로그아웃 성공")
+    public ResponseEntity<com.bridgework.common.dto.ApiResponse<Void>> logout(Authentication authentication, @RequestBody(required = false) LogoutRequestDto request) {
         Long userId = currentUserId(authentication);
         String refreshToken = request == null ? null : request.refreshToken();
         authService.logout(userId, refreshToken);
-        return ResponseEntity.noContent().build();
+        return ResponseEntity.ok(com.bridgework.common.dto.ApiResponse.success(null));
     }
 
     @GetMapping("/me")
@@ -108,11 +108,11 @@ public class AuthController {
     @Operation(summary = "내 정보 조회", description = "현재 로그인한 사용자의 기본 정보를 조회한다.")
     @ApiResponse(responseCode = "200", description = "조회 성공",
             content = @Content(examples = @ExampleObject(
-                    value = "{\"userId\":6,\"provider\":\"KAKAO\",\"email\":\"dummy.service.1@bridgework.local\",\"role\":\"USER\",\"signupCompleted\":true}"
+                    value = "{\"code\":\"SUCCESS\",\"message\":\"요청이 성공했습니다.\",\"result\":{\"userId\":6,\"provider\":\"KAKAO\",\"email\":\"dummy.service.1@bridgework.local\",\"role\":\"USER\",\"signupCompleted\":true}}"
             )))
-    public ResponseEntity<AuthMeResponseDto> me(Authentication authentication) {
+    public ResponseEntity<com.bridgework.common.dto.ApiResponse<AuthMeResponseDto>> me(Authentication authentication) {
         Long userId = currentUserId(authentication);
-        return ResponseEntity.ok(authService.getMe(userId));
+        return ResponseEntity.ok(com.bridgework.common.dto.ApiResponse.success(authService.getMe(userId)));
     }
 
     private Long currentUserId(Authentication authentication) {
