@@ -45,7 +45,6 @@ public class DiscordWebhookAppender extends AppenderBase<ILoggingEvent> {
         });
         this.httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(3))
-                .executor(executorService)
                 .build();
         super.start();
     }
@@ -78,9 +77,17 @@ public class DiscordWebhookAppender extends AppenderBase<ILoggingEvent> {
                         .header("Content-Type", "application/json; charset=utf-8")
                         .POST(HttpRequest.BodyPublishers.ofString(payload, StandardCharsets.UTF_8))
                         .build();
-                httpClient.send(request, HttpResponse.BodyHandlers.discarding());
+                HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+                int statusCode = response.statusCode();
+                if (statusCode < 200 || statusCode >= 300) {
+                    String responseBody = response.body();
+                    if (responseBody == null || responseBody.isBlank()) {
+                        responseBody = "(본문 없음)";
+                    }
+                    addError("Discord 로그 알림 전송 실패: status=" + statusCode + ", body=" + truncate(responseBody, 300));
+                }
             } catch (Exception exception) {
-                addWarn("Discord 로그 알림 전송 실패: " + exception.getMessage());
+                addError("Discord 로그 알림 전송 실패: " + exception.getMessage(), exception);
             }
         });
     }
@@ -143,5 +150,16 @@ public class DiscordWebhookAppender extends AppenderBase<ILoggingEvent> {
             }
         }
         return builder.toString();
+    }
+
+    private String truncate(String text, int maxLength) {
+        if (text == null) {
+            return "";
+        }
+        String compact = text.replace("\r", " ").replace("\n", " ").trim();
+        if (compact.length() <= maxLength) {
+            return compact;
+        }
+        return compact.substring(0, maxLength) + "...";
     }
 }

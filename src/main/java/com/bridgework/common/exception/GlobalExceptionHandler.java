@@ -1,7 +1,9 @@
 package com.bridgework.common.exception;
 
 import com.bridgework.common.dto.ApiResponse;
+import com.bridgework.common.notification.DiscordNotifierService;
 import com.bridgework.sync.exception.SyncDomainException;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
@@ -17,6 +19,11 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 public class GlobalExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
+    private final DiscordNotifierService discordNotifierService;
+
+    public GlobalExceptionHandler(DiscordNotifierService discordNotifierService) {
+        this.discordNotifierService = discordNotifierService;
+    }
 
     @ExceptionHandler(SyncDomainException.class)
     public ResponseEntity<ApiResponse<Object>> handleSyncDomainException(SyncDomainException exception) {
@@ -59,8 +66,19 @@ public class GlobalExceptionHandler {
     }
 
     @ExceptionHandler(Exception.class)
-    public ResponseEntity<ApiResponse<Object>> handleUnexpectedException(Exception exception) {
+    public ResponseEntity<ApiResponse<Object>> handleUnexpectedException(Exception exception, HttpServletRequest request) {
         log.error("처리되지 않은 예외 발생", exception);
+        try {
+            String requestUri = request == null ? null : request.getRequestURI();
+            discordNotifierService.notifyUnhandledException(
+                    requestUri,
+                    "INTERNAL_SERVER_ERROR",
+                    "처리되지 않은 예외가 발생했습니다.",
+                    exception
+            );
+        } catch (Exception notifyException) {
+            log.warn("예외 알림 전송 실패", notifyException);
+        }
         return ResponseEntity.internalServerError().body(ApiResponse.error("INTERNAL_SERVER_ERROR", "내부 서버 오류가 발생했습니다."));
     }
 
