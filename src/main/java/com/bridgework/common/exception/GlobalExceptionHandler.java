@@ -8,6 +8,7 @@ import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -64,6 +65,16 @@ public class GlobalExceptionHandler {
         return ResponseEntity.badRequest().body(new ApiErrorResponse(
                 "VALIDATION_ERROR",
                 exception.getMessage(),
+                OffsetDateTime.now()
+        ));
+    }
+
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ApiErrorResponse> handleHttpMessageNotReadableException(HttpMessageNotReadableException exception) {
+        log.warn("요청 본문 파싱 실패", exception);
+        return ResponseEntity.badRequest().body(new ApiErrorResponse(
+                "VALIDATION_ERROR",
+                "요청 본문 JSON 형식이 올바르지 않습니다.",
                 OffsetDateTime.now()
         ));
     }

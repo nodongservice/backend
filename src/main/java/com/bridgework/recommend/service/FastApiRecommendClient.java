@@ -67,10 +67,12 @@ public class FastApiRecommendClient {
             }
             return response;
         } catch (WebClientResponseException exception) {
+            String responseBody = sanitizeErrorBody(exception.getResponseBodyAsString());
             throw new RecommendDomainException(
                     "FASTAPI_HTTP_ERROR",
                     HttpStatus.BAD_GATEWAY,
-                    "FastAPI 호출 실패: status=" + exception.getStatusCode().value(),
+                    "FastAPI 호출 실패: status=" + exception.getStatusCode().value()
+                            + (responseBody == null ? "" : ", body=" + responseBody),
                     exception
             );
         } catch (RecommendDomainException exception) {
@@ -217,6 +219,21 @@ public class FastApiRecommendClient {
             return "";
         }
         return path.startsWith("/") ? path : "/" + path;
+    }
+
+    private String sanitizeErrorBody(String raw) {
+        if (raw == null) {
+            return null;
+        }
+        String compact = raw.replaceAll("\\s+", " ").trim();
+        if (compact.isEmpty()) {
+            return null;
+        }
+        int maxLength = 300;
+        if (compact.length() <= maxLength) {
+            return compact;
+        }
+        return compact.substring(0, maxLength) + "...";
     }
 }
 
