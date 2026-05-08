@@ -14,7 +14,7 @@ public record RecommendResponseDto(
         List<RecommendJobResponseDto> jobs,
         @Schema(
                 description = "FastAPI 원본 응답. aiEnabled=true일 때만 포함된다.",
-                example = "{\"results\":[{\"job\":{\"external_id\":\"KEPAD-20260508-0001\",\"company_name\":\"브릿지웍스\",\"job_title\":\"사무보조\"},\"total_score\":85,\"score_detail\":{\"job_fit_score\":90}}]}"
+                example = "{\"code\":\"SUCCESS\",\"message\":\"요청이 성공했습니다.\",\"result\":{\"results\":[{\"job\":{\"external_id\":\"KEPAD-20260508-0001\",\"company_name\":\"브릿지웍스\",\"job_title\":\"사무보조\"},\"total_score\":85,\"score_detail\":{\"job_fit_score\":90}}]}}"
         )
         Map<String, Object> aiResponse
 ) {
@@ -28,11 +28,8 @@ public record RecommendResponseDto(
     }
 
     private static List<RecommendJobResponseDto> extractJobs(Map<String, Object> aiResponse) {
-        if (aiResponse == null) {
-            return List.of();
-        }
-        Object resultsValue = aiResponse.get("results");
-        if (!(resultsValue instanceof List<?> results)) {
+        List<?> results = resolveResults(aiResponse);
+        if (results.isEmpty()) {
             return List.of();
         }
 
@@ -44,6 +41,29 @@ public record RecommendResponseDto(
                 .map(Map.class::cast)
                 .map(RecommendResponseDto::toRecommendJob)
                 .toList();
+    }
+
+    private static List<?> resolveResults(Map<String, Object> aiResponse) {
+        if (aiResponse == null) {
+            return List.of();
+        }
+
+        // 현재 FastAPI 표준 응답: { "code": "...", "message": "...", "result": { "results": [...] } }
+        Object resultValue = aiResponse.get("result");
+        if (resultValue instanceof Map<?, ?> resultMap) {
+            Object nestedResults = resultMap.get("results");
+            if (nestedResults instanceof List<?> nestedList) {
+                return nestedList;
+            }
+        }
+
+        // 하위 호환: 기존 포맷 { "results": [...] }도 허용
+        Object resultsValue = aiResponse.get("results");
+        if (resultsValue instanceof List<?> results) {
+            return results;
+        }
+
+        return List.of();
     }
 
     private static RecommendJobResponseDto toRecommendJob(Map<?, ?> job) {
