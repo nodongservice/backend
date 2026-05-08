@@ -5,6 +5,7 @@ import com.bridgework.sync.dto.PublicDataRecordResponseDto;
 import com.bridgework.sync.entity.PublicDataSourceType;
 import com.bridgework.sync.service.PublicDataRecordQueryService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
@@ -20,6 +21,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/v1/admin/public-data/records")
 @Tag(name = "PublicDataRecord", description = "공공데이터 원본 저장 레코드 조회 API (관리자 전용)")
+@SecurityRequirement(name = "bearerAuth")
 public class PublicDataRecordController {
 
     private final PublicDataRecordQueryService publicDataRecordQueryService;

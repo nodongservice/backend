@@ -10,6 +10,7 @@ import com.bridgework.sync.entity.SyncRequestSource;
 import com.bridgework.sync.service.PublicDataSyncExecutionLockService;
 import com.bridgework.sync.service.PublicDataSyncService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
@@ -27,6 +28,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/v1/admin/sync/public-data")
 @Tag(name = "PublicDataSync", description = "공공데이터 동기화 실행/로그/설정 조회 API (관리자 전용)")
+@SecurityRequirement(name = "bearerAuth")
 public class PublicDataSyncController {
 
     private static final ZoneId SEOUL_ZONE_ID = ZoneId.of("Asia/Seoul");
