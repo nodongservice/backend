@@ -29,8 +29,8 @@ Spring/FastAPI 개발자가 같은 기준으로 라우팅을 유지하도록 작
 
 | 외부 경로 | 내부 대상 |
 |---|---|
-| `/api/java/v1/*` | Spring `bridgework_backend`의 `/api/v1/*` |
-| `/api/py/v1/*` | FastAPI `bridgework_fastapi_backend`의 `/api/v1/*` |
+| `/api/java/api/v1/*` | Spring `bridgework_backend`의 `/api/v1/*` |
+| `/api/py/api/v1/*` | FastAPI `bridgework_fastapi_backend`의 `/api/v1/*` |
 
 ### 3.2 Swagger 라우팅
 
@@ -88,7 +88,7 @@ FastAPI 코드에 `api/py` prefix를 직접 넣지 마세요.
 |---|---|
 | `docs_url` 변경 | `/api/py/docs` 라우팅 |
 | `openapi_url` 변경 | `/api/py/openapi.json` 라우팅 및 `sub_filter` |
-| API prefix 변경 | `/api/py/v1/` 라우팅 대상 |
+| API prefix 변경 | `/api/py/api/v1/` 라우팅 대상 |
 | 내부 포트 변경(8000 외) | `bridgework_fastapi_backend` 업스트림 포트 |
 
 ## 6) 운영 체크 명령

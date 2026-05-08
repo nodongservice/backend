@@ -44,12 +44,14 @@ springdoc:
     tags-sorter: alpha
 
 bridgework:
+  openapi:
+    server-url: /
   discord:
     webhook-url: ""
   recommend:
     fastapi-base-url: http://localhost:8000
-    quick-path: /ai/v1/score/quick
-    map-path: /ai/v1/score/map
+    quick-path: /api/v1/score/quick
+    map-path: /api/v1/score/map
     request-timeout: 20s
   sync:
     cron: "0 0 0 * * *"

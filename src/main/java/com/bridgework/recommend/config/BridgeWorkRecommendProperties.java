@@ -14,10 +14,10 @@ public class BridgeWorkRecommendProperties {
     private String fastapiBaseUrl = "http://localhost:8000";
 
     @NotBlank
-    private String quickPath = "/ai/v1/score/quick";
+    private String quickPath = "/api/v1/score/quick";
 
     @NotBlank
-    private String mapPath = "/ai/v1/score/map";
+    private String mapPath = "/api/v1/score/map";
 
     @NotNull
     private Duration requestTimeout = Duration.ofSeconds(20);

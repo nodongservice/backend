@@ -90,7 +90,7 @@
 
 ### 실행 예시
 - 로컬: `SPRING_PROFILES_ACTIVE=local`
-- 로컬 FastAPI 주소 변경(선택): `BRIDGEWORK_RECOMMEND_FASTAPI_BASE_URL=http://localhost:19000`
+- 로컬 FastAPI 주소 변경(선택): `BRIDGEWORK_RECOMMEND_FASTAPI_BASE_URL=http://localhost:8000`
 - 운영: `SPRING_PROFILES_ACTIVE=prod`
 
 ## CI/CD (main -> EC2 무중단 배포)

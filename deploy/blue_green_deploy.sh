@@ -278,6 +278,7 @@ docker run -d \
   --name "$TARGET_CONTAINER" \
   --restart no \
   --network "$DOCKER_NETWORK" \
+  --add-host host.docker.internal:host-gateway \
   --user "$APP_CONTAINER_USER" \
   -v "${CONFIG_FILE}:/app/config/application-prod.yml:ro" \
   -e SPRING_PROFILES_ACTIVE=prod \

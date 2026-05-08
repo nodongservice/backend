@@ -64,7 +64,31 @@ class RecommendGatewayServiceTest {
     @Test
     void recommendMap_whenAiEnabledAndProfileIdMissing_thenUsesDefaultProfileAndCallsFastApi() {
         UserProfileResponseDto defaultProfile = profile(11L, true);
-        Map<String, Object> aiResponse = Map.of("jobs", List.of(Map.of("externalId", "ext-1", "totalScore", 88.5)));
+        Map<String, Object> aiResponse = Map.of(
+                "results",
+                List.of(Map.of(
+                        "job",
+                        Map.ofEntries(
+                                Map.entry("external_id", "ext-1"),
+                                Map.entry("company_name", "사업장"),
+                                Map.entry("job_title", "사무보조"),
+                                Map.entry("work_address", "서울"),
+                                Map.entry("employment_type", "정규직"),
+                                Map.entry("enter_type", "신입"),
+                                Map.entry("salary_type", "월급"),
+                                Map.entry("salary", "300만원"),
+                                Map.entry("term_date", "20261231"),
+                                Map.entry("registered_at", "20260504"),
+                                Map.entry("required_career", "무관"),
+                                Map.entry("required_education", "고졸"),
+                                Map.entry("required_major", "무관"),
+                                Map.entry("required_licenses", "무관"),
+                                Map.entry("work_lat", 37.5),
+                                Map.entry("work_lng", 127.0)
+                        ),
+                        "total_score", 88
+                ))
+        );
 
         when(userProfileService.getProfiles(1L)).thenReturn(List.of(defaultProfile));
         when(fastApiRecommendClient.requestMapScore(defaultProfile)).thenReturn(aiResponse);
@@ -77,7 +101,10 @@ class RecommendGatewayServiceTest {
         assertThat(response.aiEnabled()).isTrue();
         assertThat(response.profileId()).isEqualTo(11L);
         assertThat(response.aiResponse()).isEqualTo(aiResponse);
-        assertThat(response.jobs()).isEmpty();
+        assertThat(response.jobs()).hasSize(1);
+        assertThat(response.jobs().get(0).externalId()).isEqualTo("ext-1");
+        assertThat(response.jobs().get(0).busplaName()).isEqualTo("사업장");
+        assertThat(response.jobs().get(0).jobNm()).isEqualTo("사무보조");
     }
 
     private UserProfileResponseDto profile(Long profileId, boolean isDefault) {
