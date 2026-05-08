@@ -776,6 +776,9 @@
 - 정규화 테이블 건수(관리자): `GET /api/v1/admin/sync/public-data/normalized-counts`
 - 저장 레코드 목록(관리자): `GET /api/v1/admin/public-data/records?sourceType=KEPAD_RECRUITMENT&page=0&size=20&includePayload=false`
 - 저장 레코드 상세(관리자): `GET /api/v1/admin/public-data/records/{recordId}?includePayload=true`
+- 더미 사용자 케이스 목록(관리자): `GET /api/v1/admin/dummy-auth/cases`
+- 더미 사용자 Access 토큰 발급(관리자): `POST /api/v1/admin/dummy-auth/login`
+  - 요청 바디: `{"dummyKey":"case-office-rookie"}`
 
 ### 관리자 계정 등록 예시
 ```sql
