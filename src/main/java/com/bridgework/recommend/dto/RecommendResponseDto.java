@@ -1,12 +1,21 @@
 package com.bridgework.recommend.dto;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import java.util.List;
 import java.util.Map;
 
+@Schema(description = "추천 게이트웨이 응답 DTO")
 public record RecommendResponseDto(
+        @Schema(description = "AI 추천 사용 여부", example = "true")
         boolean aiEnabled,
+        @Schema(description = "선택 프로필 ID(onboarding_profile.id)", example = "3")
         Long profileId,
+        @Schema(description = "추천 공고 목록")
         List<RecommendJobResponseDto> jobs,
+        @Schema(
+                description = "FastAPI 원본 응답. aiEnabled=true일 때만 포함된다.",
+                example = "{\"results\":[{\"job\":{\"external_id\":\"KEPAD-20260508-0001\",\"company_name\":\"브릿지웍스\",\"job_title\":\"사무보조\"},\"total_score\":85,\"score_detail\":{\"job_fit_score\":90}}]}"
+        )
         Map<String, Object> aiResponse
 ) {
 

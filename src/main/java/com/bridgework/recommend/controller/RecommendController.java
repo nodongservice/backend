@@ -5,7 +5,10 @@ import com.bridgework.auth.security.UserPrincipal;
 import com.bridgework.recommend.dto.RecommendRequestDto;
 import com.bridgework.recommend.dto.RecommendResponseDto;
 import com.bridgework.recommend.service.RecommendGatewayService;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.ExampleObject;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.ResponseEntity;
@@ -32,6 +35,17 @@ public class RecommendController {
             summary = "기능2 퀵 맞춤 일자리 추천",
             description = "aiEnabled=true면 선택 프로필만 FastAPI로 전달하고 응답을 반환한다. aiEnabled=false면 Spring이 DB 공고를 최신순으로 반환한다."
     )
+    @io.swagger.v3.oas.annotations.parameters.RequestBody(
+            required = false,
+            content = @Content(examples = {
+                    @ExampleObject(name = "AI ON", value = "{\"aiEnabled\":true,\"profileId\":3}"),
+                    @ExampleObject(name = "AI OFF", value = "{\"aiEnabled\":false}")
+            })
+    )
+    @ApiResponse(responseCode = "200", description = "추천 결과",
+            content = @Content(examples = @ExampleObject(
+                    value = "{\"aiEnabled\":true,\"profileId\":3,\"jobs\":[{\"externalId\":\"KEPAD-20260508-0001\",\"busplaName\":\"브릿지웍스\",\"jobNm\":\"사무보조\",\"compAddr\":\"서울\",\"empType\":\"정규직\",\"enterType\":\"신입\",\"salaryType\":\"월급\",\"salary\":\"3200만원\",\"termDate\":\"20261231\",\"offerregDt\":\"20260508\",\"regDt\":\"20260508\",\"reqCareer\":\"무관\",\"reqEduc\":\"고졸\",\"reqMajor\":\"무관\",\"reqLicens\":\"무관\",\"geoLatitude\":37.498095,\"geoLongitude\":127.027610}],\"aiResponse\":{\"results\":[{\"job_fit_score\":86}]}}"
+            )))
     public ResponseEntity<RecommendResponseDto> recommendQuick(
             Authentication authentication,
             @RequestBody(required = false) RecommendRequestDto request
@@ -45,6 +59,17 @@ public class RecommendController {
             summary = "기능3 지역 접근성 지도 추천",
             description = "aiEnabled=true면 선택 프로필만 FastAPI로 전달하고 응답을 반환한다. aiEnabled=false면 Spring이 DB 공고를 반환한다."
     )
+    @io.swagger.v3.oas.annotations.parameters.RequestBody(
+            required = false,
+            content = @Content(examples = {
+                    @ExampleObject(name = "AI ON", value = "{\"aiEnabled\":true,\"profileId\":3}"),
+                    @ExampleObject(name = "AI OFF", value = "{\"aiEnabled\":false}")
+            })
+    )
+    @ApiResponse(responseCode = "200", description = "추천 결과",
+            content = @Content(examples = @ExampleObject(
+                    value = "{\"aiEnabled\":true,\"profileId\":3,\"jobs\":[{\"externalId\":\"KEPAD-20260508-0001\",\"busplaName\":\"브릿지웍스\",\"jobNm\":\"사무보조\",\"compAddr\":\"서울\",\"empType\":\"정규직\",\"enterType\":\"신입\",\"salaryType\":\"월급\",\"salary\":\"3200만원\",\"termDate\":\"20261231\",\"offerregDt\":\"20260508\",\"regDt\":\"20260508\",\"reqCareer\":\"무관\",\"reqEduc\":\"고졸\",\"reqMajor\":\"무관\",\"reqLicens\":\"무관\",\"geoLatitude\":37.498095,\"geoLongitude\":127.027610}],\"aiResponse\":{\"results\":[{\"total_score\":84,\"score_detail\":{\"job_fit_score\":86,\"work_condition_score\":80,\"disability_support_score\":82,\"work_environment_score\":85,\"company_stability_score\":83,\"accessibility_score\":88}}]}}"
+            )))
     public ResponseEntity<RecommendResponseDto> recommendMap(
             Authentication authentication,
             @RequestBody(required = false) RecommendRequestDto request

@@ -6,7 +6,10 @@ import com.bridgework.admin.dummy.dto.AdminDummyLoginResponseDto;
 import com.bridgework.admin.dummy.service.AdminDummyAuthService;
 import com.bridgework.auth.exception.UnauthorizedException;
 import com.bridgework.auth.security.UserPrincipal;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.ExampleObject;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
@@ -34,12 +37,24 @@ public class AdminDummyAuthController {
 
     @GetMapping("/cases")
     @Operation(summary = "더미 사용자 케이스 목록 조회", description = "추천 게이트웨이 테스트용 더미 사용자/프로필 케이스 목록을 조회한다.")
+    @ApiResponse(responseCode = "200", description = "조회 성공",
+            content = @Content(examples = @ExampleObject(
+                    value = "[{\"dummyKey\":\"case-office-rookie\",\"displayName\":\"사무지원 신입형\",\"scenarioSummary\":\"필수 중심 입력 케이스\",\"profiles\":[{\"profileId\":1,\"profileKey\":\"office-default\",\"profileLabel\":\"사무신입 기본형\",\"scenarioSummary\":\"필수 입력 위주\",\"isDefault\":true}]}]"
+            )))
     public ResponseEntity<List<AdminDummyCaseResponseDto>> getCases() {
         return ResponseEntity.ok(adminDummyAuthService.getActiveCases());
     }
 
     @PostMapping("/login")
     @Operation(summary = "더미 사용자 로그인", description = "관리자 권한으로 선택한 더미 사용자의 Access 토큰을 발급한다.")
+    @io.swagger.v3.oas.annotations.parameters.RequestBody(
+            required = true,
+            content = @Content(examples = @ExampleObject(value = "{\"dummyKey\":\"case-office-rookie\"}"))
+    )
+    @ApiResponse(responseCode = "200", description = "로그인 성공",
+            content = @Content(examples = @ExampleObject(
+                    value = "{\"accessToken\":\"<DUMMY_USER_ACCESS_TOKEN>\",\"refreshToken\":\"<DUMMY_USER_REFRESH_TOKEN>\",\"tokenType\":\"Bearer\",\"accessTokenExpiresAt\":\"2026-05-08T08:00:00Z\",\"refreshTokenExpiresAt\":\"2026-05-22T08:00:00Z\",\"userId\":6,\"dummyKey\":\"case-office-rookie\",\"profiles\":[{\"profileId\":3,\"profileKey\":\"office-default\",\"profileLabel\":\"사무신입 기본형\",\"scenarioSummary\":\"필수 입력 위주 기본 프로필\",\"isDefault\":true}]}"
+            )))
     public ResponseEntity<AdminDummyLoginResponseDto> loginAsDummyUser(
             Authentication authentication,
             HttpServletRequest httpServletRequest,
@@ -68,4 +83,3 @@ public class AdminDummyAuthController {
         return request.getRemoteAddr();
     }
 }
-
