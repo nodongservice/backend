@@ -1,5 +1,6 @@
 package com.bridgework.profile.dto;
 
+import com.bridgework.auth.entity.GenderType;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
@@ -30,6 +31,8 @@ public record UserProfileUpsertRequestDto(
         String contactEmail,
         @NotNull(message = "생년월일은 필수입니다.")
         LocalDate birthDate,
+        @NotNull(message = "성별은 필수입니다.")
+        GenderType genderType,
         String ageGroup,
         @NotBlank(message = "거주 지역은 필수입니다.")
         String residenceRegion,
