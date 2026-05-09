@@ -2,6 +2,8 @@ package com.bridgework.recommend.controller;
 
 import com.bridgework.auth.exception.UnauthorizedException;
 import com.bridgework.auth.security.UserPrincipal;
+import com.bridgework.recommend.dto.RecommendExplainRequestDto;
+import com.bridgework.recommend.dto.RecommendExplainResponseDto;
 import com.bridgework.recommend.dto.RecommendRequestDto;
 import com.bridgework.recommend.dto.RecommendResponseDto;
 import com.bridgework.recommend.service.RecommendGatewayService;
@@ -11,6 +13,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -90,6 +93,37 @@ public class RecommendController {
     ) {
         Long userId = currentUserId(authentication);
         return ResponseEntity.ok(com.bridgework.common.dto.ApiResponse.success(recommendGatewayService.recommendMap(userId, request)));
+    }
+
+    @PostMapping("/explain")
+    @Operation(
+            summary = "추천 설명 생성",
+            description = "선택 프로필과 공고/점수 정보를 FastAPI 설명 생성 API로 전달해 추천 사유, 주의사항, 체크리스트를 반환한다."
+    )
+    @io.swagger.v3.oas.annotations.parameters.RequestBody(
+            required = true,
+            content = @Content(examples = {
+                    @ExampleObject(
+                            name = "퀵 추천 설명 생성",
+                            value = "{\"profileId\":3,\"job\":{\"jobPostId\":12345,\"companyName\":\"브릿지웍스\",\"jobTitle\":\"사무보조\",\"workAddress\":\"서울특별시 강남구 테헤란로 123\",\"workLat\":37.498095,\"workLng\":127.027610,\"employmentType\":\"정규직\",\"enterType\":\"신입\",\"salaryType\":\"월급\",\"salary\":\"3200만원\",\"termDate\":\"20261231\",\"requiredCareer\":\"무관\",\"requiredEducation\":\"고졸\",\"requiredMajor\":\"무관\",\"requiredLicenses\":\"컴퓨터활용능력\",\"registeredAt\":\"20260508\",\"sourceTable\":\"pd_kepad_recruitment\",\"sourceId\":98765,\"externalId\":\"KEPAD-20260508-0001\"},\"jobFitScore\":86,\"reasons\":[\"지원 직무와 요구 역량이 유사합니다.\"],\"riskFactors\":[\"출퇴근 시간대 혼잡 가능성\"],\"evidenceItems\":[{\"sourceType\":\"BUS_STOP\",\"sourceName\":\"역삼역 버스정류장\",\"description\":\"근무지에서 320m 거리\",\"distanceMeters\":320.5,\"sourceTable\":\"pd_nationwide_bus_stop\",\"recordId\":123}]}"
+                    )
+            })
+    )
+    @ApiResponse(responseCode = "200", description = "설명 생성 결과",
+            content = @Content(examples = {
+                    @ExampleObject(
+                            name = "성공 응답 예시",
+                            value = "{\"code\":\"SUCCESS\",\"message\":\"요청이 성공했습니다.\",\"result\":{\"profileId\":3,\"shortSummary\":\"직무 적합도와 접근성이 균형 잡힌 공고입니다.\",\"recommendationReasons\":[\"지원 직무와 요구 역량이 유사합니다.\"],\"cautionPoints\":[\"출퇴근 시간대 혼잡 가능성을 확인하세요.\"],\"checklist\":[\"면접 전 근무지 접근 경로를 확인하세요.\"],\"usedLlm\":false,\"aiResponse\":{\"code\":\"SUCCESS\",\"message\":\"요청이 성공했습니다.\",\"result\":{\"short_summary\":\"직무 적합도와 접근성이 균형 잡힌 공고입니다.\",\"recommendation_reasons\":[\"지원 직무와 요구 역량이 유사합니다.\"],\"caution_points\":[\"출퇴근 시간대 혼잡 가능성을 확인하세요.\"],\"checklist\":[\"면접 전 근무지 접근 경로를 확인하세요.\"],\"used_llm\":false}}}}"
+                    )
+            }))
+    public ResponseEntity<com.bridgework.common.dto.ApiResponse<RecommendExplainResponseDto>> explainRecommendation(
+            Authentication authentication,
+            @Valid @RequestBody RecommendExplainRequestDto request
+    ) {
+        Long userId = currentUserId(authentication);
+        return ResponseEntity.ok(com.bridgework.common.dto.ApiResponse.success(
+                recommendGatewayService.explainRecommendation(userId, request)
+        ));
     }
 
     private Long currentUserId(Authentication authentication) {

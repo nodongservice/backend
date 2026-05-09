@@ -6,6 +6,9 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.bridgework.auth.entity.GenderType;
+import com.bridgework.recommend.dto.RecommendExplainJobDto;
+import com.bridgework.recommend.dto.RecommendExplainRequestDto;
+import com.bridgework.recommend.dto.RecommendExplainResponseDto;
 import com.bridgework.profile.dto.UserProfileResponseDto;
 import com.bridgework.profile.service.UserProfileService;
 import com.bridgework.recommend.dto.RecommendJobResponseDto;
@@ -109,6 +112,67 @@ class RecommendGatewayServiceTest {
         assertThat(response.jobs().get(0).externalId()).isEqualTo("ext-1");
         assertThat(response.jobs().get(0).busplaName()).isEqualTo("사업장");
         assertThat(response.jobs().get(0).jobNm()).isEqualTo("사무보조");
+    }
+
+    @Test
+    void explainRecommendation_whenCalled_thenReturnsParsedExplainResult() {
+        UserProfileResponseDto profile = profile(11L, true);
+        RecommendExplainRequestDto request = new RecommendExplainRequestDto(
+                11L,
+                new RecommendExplainJobDto(
+                        12345L,
+                        "브릿지웍스",
+                        "사무보조",
+                        "서울",
+                        37.5,
+                        127.0,
+                        "정규직",
+                        "신입",
+                        "월급",
+                        "300만원",
+                        "20261231",
+                        "무관",
+                        "고졸",
+                        "무관",
+                        "무관",
+                        null,
+                        "20260504",
+                        "pd_kepad_recruitment",
+                        99L,
+                        "ext-1"
+                ),
+                null,
+                null,
+                86,
+                List.of("직무 유사도 높음"),
+                List.of("출퇴근 시간 혼잡 가능"),
+                List.of()
+        );
+
+        Map<String, Object> aiResponse = Map.of(
+                "code", "SUCCESS",
+                "message", "요청이 성공했습니다.",
+                "result", Map.of(
+                        "short_summary", "직무 적합도와 접근성이 균형 잡힌 공고입니다.",
+                        "recommendation_reasons", List.of("직무 유사도 높음"),
+                        "caution_points", List.of("출퇴근 시간 혼잡 가능"),
+                        "checklist", List.of("면접 전 근무지 동선을 확인하세요."),
+                        "used_llm", false
+                )
+        );
+
+        when(userProfileService.getProfile(1L, 11L)).thenReturn(profile);
+        when(fastApiRecommendClient.requestRecommendationExplain(profile, request)).thenReturn(aiResponse);
+
+        RecommendExplainResponseDto response = recommendGatewayService.explainRecommendation(1L, request);
+
+        assertThat(response.profileId()).isEqualTo(11L);
+        assertThat(response.shortSummary()).isEqualTo("직무 적합도와 접근성이 균형 잡힌 공고입니다.");
+        assertThat(response.recommendationReasons()).containsExactly("직무 유사도 높음");
+        assertThat(response.cautionPoints()).containsExactly("출퇴근 시간 혼잡 가능");
+        assertThat(response.checklist()).containsExactly("면접 전 근무지 동선을 확인하세요.");
+        assertThat(response.usedLlm()).isFalse();
+        assertThat(response.aiResponse()).isEqualTo(aiResponse);
     }
 
     private UserProfileResponseDto profile(Long profileId, boolean isDefault) {

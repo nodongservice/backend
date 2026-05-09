@@ -28,6 +28,7 @@ bridgework:
     fastapi-base-url: ${BRIDGEWORK_RECOMMEND_FASTAPI_BASE_URL:http://host.docker.internal/api/py}
     quick-path: /api/v1/score/quick
     map-path: /api/v1/score/map
+    explain-path: /api/v1/explain/recommendation
   sync:
     kric-station-code-file-path: /app/resources/reference/operating_agency_station_codes_2026-02-28.xlsx
     data-go-kr-service-key: ${DATA_GO_KR_SERVICE_KEY}
