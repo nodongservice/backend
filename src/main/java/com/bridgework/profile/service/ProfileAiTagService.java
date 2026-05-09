@@ -2,6 +2,7 @@ package com.bridgework.profile.service;
 
 import com.bridgework.profile.dto.UserProfileUpsertRequestDto;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -13,7 +14,7 @@ public class ProfileAiTagService {
 
     public ProfileAiTags buildTags(UserProfileUpsertRequestDto request) {
         List<String> jobTags = mergeUnique(
-                List.of(request.desiredJob(), request.targetJob(), request.careerSummary(), request.educationSummary()),
+                nullableValues(request.desiredJob(), request.targetJob(), request.careerSummary(), request.educationSummary()),
                 request.skills(),
                 request.certifications()
         );
@@ -21,15 +22,22 @@ public class ProfileAiTagService {
         List<String> environmentTags = mergeUnique(
                 request.preferredWorkEnvironments(),
                 request.avoidedWorkEnvironments(),
-                List.of(request.workAvailability(), request.disabilitySeverity(), request.commuteRange())
+                nullableValues(request.workAvailability(), request.disabilitySeverity(), request.commuteRange())
         );
 
         List<String> supportTags = mergeUnique(
                 request.requiredSupports(),
-                List.of(request.disabilityType(), request.workSupportRequirements(), request.assistiveDevices())
+                nullableValues(request.disabilityType(), request.workSupportRequirements(), request.assistiveDevices())
         );
 
         return new ProfileAiTags(jobTags, environmentTags, supportTags);
+    }
+
+    private List<String> nullableValues(String... values) {
+        if (values == null || values.length == 0) {
+            return List.of();
+        }
+        return new ArrayList<>(Arrays.asList(values));
     }
 
     @SafeVarargs
