@@ -24,6 +24,10 @@ spring:
     baseline-on-migrate: true
   lifecycle:
     timeout-per-shutdown-phase: 20s
+  mvc:
+    async:
+      # 대용량 응답/외부 연동 처리 시 응답 스트림이 조기 종료되지 않도록 요청 타임아웃을 상향한다.
+      request-timeout: 300s
   data:
     redis:
       host: localhost
@@ -63,7 +67,8 @@ bridgework:
     quick-path: /api/v1/score/quick
     map-path: /api/v1/score/map
     explain-path: /api/v1/explain/recommendation
-    request-timeout: 20s
+    # FastAPI 스코어링/설명 생성 지연을 감안해 클라이언트 타임아웃을 상향한다.
+    request-timeout: 120s
   sync:
     cron: "0 0 0 * * *"
     cron-zone: Asia/Seoul
