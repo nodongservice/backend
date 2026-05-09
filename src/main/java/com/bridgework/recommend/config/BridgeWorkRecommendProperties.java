@@ -19,6 +19,9 @@ public class BridgeWorkRecommendProperties {
     @NotBlank
     private String mapPath = "/api/v1/score/map";
 
+    @NotBlank
+    private String explainPath = "/api/v1/explain/recommendation";
+
     @NotNull
     private Duration requestTimeout = Duration.ofSeconds(20);
 
@@ -46,6 +49,14 @@ public class BridgeWorkRecommendProperties {
         this.mapPath = mapPath;
     }
 
+    public String getExplainPath() {
+        return explainPath;
+    }
+
+    public void setExplainPath(String explainPath) {
+        this.explainPath = explainPath;
+    }
+
     public Duration getRequestTimeout() {
         return requestTimeout;
     }
@@ -54,4 +65,3 @@ public class BridgeWorkRecommendProperties {
         this.requestTimeout = requestTimeout;
     }
 }
-
