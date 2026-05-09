@@ -37,12 +37,12 @@ is_container_running() {
 }
 
 APP_NAME="${APP_NAME:-bridgework-backend}"
-APP_ROOT="${APP_ROOT:-$HOME/bridgework}"
+APP_ROOT="${APP_ROOT:-$HOME/bridgework/backend}"
 CONFIG_FILE="${CONFIG_FILE:-$APP_ROOT/application-prod.yml}"
 STATE_DIR="${STATE_DIR:-$APP_ROOT/state}"
 ACTIVE_SLOT_FILE="${ACTIVE_SLOT_FILE:-$STATE_DIR/active_slot}"
 DOCKER_NETWORK="${DOCKER_NETWORK:-bridgework-network}"
-리UPSTREAM_SWITCH_SCRIPT="${UPSTREAM_SWITCH_SCRIPT:-$HOME/bridgework-infra/deploy/spring_blue_green_switch.sh}"
+UPSTREAM_SWITCH_SCRIPT="${UPSTREAM_SWITCH_SCRIPT:-$HOME/bridgework-infra/deploy/spring_blue_green_switch.sh}"
 REDIS_CONTAINER_NAME="${REDIS_CONTAINER_NAME:-bridgework-redis}"
 REDIS_IMAGE="${REDIS_IMAGE:-redis:7.2-alpine}"
 REDIS_VOLUME="${REDIS_VOLUME:-bridgework-redis-data}"
@@ -297,7 +297,7 @@ if [[ ! -f "$UPSTREAM_SWITCH_SCRIPT" ]]; then
 fi
 
 log "공통 인프라 전환 스크립트 실행: ${UPSTREAM_SWITCH_SCRIPT} ${TARGET_SLOT}"
-if ! bash "$UPSTREAM_SWITCH_SCRIPT" "$TARGET_SLOT"; then
+if ! SPRING_STATE_DIR="$STATE_DIR" bash "$UPSTREAM_SWITCH_SCRIPT" "$TARGET_SLOT"; then
   log "공통 인프라 전환 스크립트 실행 실패"
   docker rm -f "$TARGET_CONTAINER" >/dev/null 2>&1 || true
   exit 1
