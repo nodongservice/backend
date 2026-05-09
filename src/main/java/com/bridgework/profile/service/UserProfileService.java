@@ -220,7 +220,6 @@ public class UserProfileService {
                 profile.getAwards(),
                 profile.getTrainings(),
 
-                profile.getDisabilityYn(),
                 profile.getDisabilitySeverity(),
                 profile.getDisabilityRegisteredYn(),
                 profile.getDisabilityDescription(),

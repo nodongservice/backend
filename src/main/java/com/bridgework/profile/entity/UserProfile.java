@@ -128,9 +128,6 @@ public class UserProfile {
     @Column(name = "trainings", columnDefinition = "TEXT")
     private String trainings;
 
-    @Column(name = "disability_yn", nullable = false)
-    private Boolean disabilityYn;
-
     @Column(name = "disability_severity", nullable = false, length = 80)
     private String disabilitySeverity;
 
@@ -264,7 +261,6 @@ public class UserProfile {
         this.awards = request.awards();
         this.trainings = request.trainings();
 
-        this.disabilityYn = request.disabilityYn();
         this.disabilitySeverity = request.disabilitySeverity();
         this.disabilityRegisteredYn = request.disabilityRegisteredYn();
         this.disabilityDescription = request.disabilityDescription();
@@ -436,10 +432,6 @@ public class UserProfile {
 
     public String getTrainings() {
         return trainings;
-    }
-
-    public Boolean getDisabilityYn() {
-        return disabilityYn;
     }
 
     public String getDisabilitySeverity() {
