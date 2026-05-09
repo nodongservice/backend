@@ -1,5 +1,6 @@
 package com.bridgework.profile.dto;
 
+import com.bridgework.auth.entity.GenderType;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.List;
@@ -22,6 +23,7 @@ public record UserProfileResponseDto(
         String contactPhone,
         String contactEmail,
         LocalDate birthDate,
+        GenderType genderType,
         String ageGroup,
         String residenceRegion,
         String detailAddress,

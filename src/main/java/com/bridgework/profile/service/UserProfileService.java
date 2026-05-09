@@ -199,6 +199,7 @@ public class UserProfileService {
                 profile.getContactPhone(),
                 profile.getContactEmail(),
                 profile.getBirthDate(),
+                profile.getGenderType(),
                 profile.getAgeGroup(),
                 profile.getResidenceRegion(),
                 profile.getDetailAddress(),

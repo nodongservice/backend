@@ -7,6 +7,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.bridgework.auth.entity.AppUser;
+import com.bridgework.auth.entity.GenderType;
 import com.bridgework.auth.repository.AppUserRepository;
 import com.bridgework.common.exception.BridgeWorkDomainException;
 import com.bridgework.profile.dto.UserProfileResponseDto;
@@ -176,6 +177,7 @@ class UserProfileServiceTest {
                 "010-1111-2222",
                 "hong@example.com",
                 birthDate,
+                GenderType.MALE,
                 ageGroup,
                 "서울",
                 "강남구",

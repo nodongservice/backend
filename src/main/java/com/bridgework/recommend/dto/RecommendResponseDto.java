@@ -8,7 +8,7 @@ import java.util.Map;
 public record RecommendResponseDto(
         @Schema(description = "AI 추천 사용 여부", example = "true")
         boolean aiEnabled,
-        @Schema(description = "선택 프로필 ID(onboarding_profile.id)", example = "3")
+        @Schema(description = "선택 프로필 ID(user_profile.id)", example = "3")
         Long profileId,
         @Schema(description = "추천 공고 목록")
         List<RecommendJobResponseDto> jobs,
@@ -110,4 +110,3 @@ public record RecommendResponseDto(
         }
     }
 }
-
