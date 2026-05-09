@@ -70,7 +70,7 @@ jobs:
           DB_USERNAME: ${{ secrets.DB_USERNAME }}
           DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
           REDIS_PASSWORD: ${{ secrets.REDIS_PASSWORD }}
-          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          SPRING_BOT_DISCORD_WEBHOOK_URL: ${{ secrets.SPRING_BOT_DISCORD_WEBHOOK_URL }}
           DATA_GO_KR_SERVICE_KEY: ${{ secrets.DATA_GO_KR_SERVICE_KEY }}
           KRIC_SERVICE_KEY: ${{ secrets.KRIC_SERVICE_KEY }}
           WORK24_VOCATIONAL_TRAINING_AUTH_KEY: ${{ secrets.WORK24_VOCATIONAL_TRAINING_AUTH_KEY }}
@@ -92,7 +92,7 @@ jobs:
               "DB_USERNAME",
               "DB_PASSWORD",
               "REDIS_PASSWORD",
-              "DISCORD_WEBHOOK_URL",
+              "SPRING_BOT_DISCORD_WEBHOOK_URL",
               "DATA_GO_KR_SERVICE_KEY",
               "KRIC_SERVICE_KEY",
               "WORK24_VOCATIONAL_TRAINING_AUTH_KEY",
@@ -138,7 +138,7 @@ jobs:
               "",
               "bridgework:",
               "  discord:",
-              f"    webhook-url: {q(val('DISCORD_WEBHOOK_URL'))}",
+              f"    spring-bot-webhook-url: {q(val('SPRING_BOT_DISCORD_WEBHOOK_URL'))}",
               "  recommend:",
               "    fastapi-base-url: 'https://api.bridgework.cloud/api/py'",
               "  sync:",

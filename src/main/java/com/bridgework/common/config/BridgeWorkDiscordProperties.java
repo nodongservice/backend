@@ -9,13 +9,13 @@ import org.springframework.validation.annotation.Validated;
 public class BridgeWorkDiscordProperties {
 
     @NotNull
-    private String webhookUrl = "";
+    private String springBotWebhookUrl = "";
 
-    public String getWebhookUrl() {
-        return webhookUrl;
+    public String getSpringBotWebhookUrl() {
+        return springBotWebhookUrl;
     }
 
-    public void setWebhookUrl(String webhookUrl) {
-        this.webhookUrl = webhookUrl;
+    public void setSpringBotWebhookUrl(String springBotWebhookUrl) {
+        this.springBotWebhookUrl = springBotWebhookUrl;
     }
 }

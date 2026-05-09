@@ -32,10 +32,14 @@ spring:
       timeout: 3s
 
 management:
+  endpoint:
+    health:
+      probes:
+        enabled: true
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: health,info,prometheus
 
 springdoc:
   swagger-ui:
@@ -47,7 +51,14 @@ bridgework:
   openapi:
     server-url: /
   discord:
-    webhook-url: ""
+    spring-bot-webhook-url: ""
+  health-monitor:
+    enabled: true
+    interval: 60s
+    request-timeout: 5s
+    fastapi-health-url: http://localhost:8000/health
+    fastapi-db-health-url: http://localhost:8000/db-health
+    alert-reminder-interval: 10m
   recommend:
     fastapi-base-url: http://localhost:8000
     quick-path: /api/v1/score/quick
