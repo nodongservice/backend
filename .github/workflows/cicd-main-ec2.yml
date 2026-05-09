@@ -1,4 +1,4 @@
-name: aiserver-cicd-ec2
+name: backend-cicd-ec2
 
 on:
   push:
@@ -6,7 +6,7 @@ on:
       - main
 
 concurrency:
-  group: aiserver-prod-deploy
+  group: backend-prod-deploy
   cancel-in-progress: false
 
 jobs:
@@ -36,7 +36,7 @@ jobs:
       - name: Resolve image tags
         run: |
           OWNER_LOWER="$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')"
-          IMAGE_BASE="ghcr.io/${OWNER_LOWER}/bridgework-aiserver"
+          IMAGE_BASE="ghcr.io/${OWNER_LOWER}/bridgework-backend"
           echo "IMAGE_SHA_TAG=${IMAGE_BASE}:${GITHUB_SHA}" >> "$GITHUB_ENV"
           echo "IMAGE_LATEST_TAG=${IMAGE_BASE}:latest" >> "$GITHUB_ENV"
 
@@ -183,7 +183,7 @@ jobs:
           key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
           port: ${{ secrets.EC2_PORT }}
           source: "deploy/blue_green_deploy.sh"
-          target: "~/bridgework/aiserver/deploy"
+          target: "~/bridgework/backend/deploy"
           strip_components: 1
 
       - name: Upload application-prod.yml to EC2
@@ -194,7 +194,7 @@ jobs:
           key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
           port: ${{ secrets.EC2_PORT }}
           source: ".cicd/application-prod.yml"
-          target: "~/bridgework/aiserver"
+          target: "~/bridgework/backend"
           strip_components: 1
 
       - name: Deploy on EC2 (blue-green)
@@ -207,18 +207,16 @@ jobs:
           script: |
             set -euo pipefail
 
-            mkdir -p "$HOME/bridgework/aiserver/deploy" "$HOME/bridgework/aiserver/state"
-            chmod +x "$HOME/bridgework/aiserver/deploy/blue_green_deploy.sh"
-            chmod 600 "$HOME/bridgework/aiserver/application-prod.yml"
+            mkdir -p "$HOME/bridgework/backend/deploy" "$HOME/bridgework/backend/state"
+            chmod +x "$HOME/bridgework/backend/deploy/blue_green_deploy.sh"
+            chmod 600 "$HOME/bridgework/backend/application-prod.yml"
 
             echo '${{ secrets.GHCR_READ_TOKEN }}' | docker login ghcr.io -u '${{ github.repository_owner }}' --password-stdin
 
             IMAGE_URI='${{ env.IMAGE_SHA_TAG }}' \
-            APP_NAME='bridgework-aiserver' \
-            APP_ROOT="$HOME/bridgework/aiserver" \
-            CONFIG_FILE="$HOME/bridgework/aiserver/application-prod.yml" \
-            BLUE_PORT='19000' \
-            GREEN_PORT='19001' \
-            UPSTREAM_SWITCH_SCRIPT="$HOME/bridgework-infra/deploy/fastapi_blue_green_switch.sh" \
+            APP_NAME='bridgework-backend' \
+            APP_ROOT="$HOME/bridgework/backend" \
+            CONFIG_FILE="$HOME/bridgework/backend/application-prod.yml" \
+            UPSTREAM_SWITCH_SCRIPT="$HOME/bridgework-infra/deploy/spring_blue_green_switch.sh" \
             REDIS_PASSWORD='${{ secrets.REDIS_PASSWORD }}' \
-            bash "$HOME/bridgework/aiserver/deploy/blue_green_deploy.sh"
+            bash "$HOME/bridgework/backend/deploy/blue_green_deploy.sh"
