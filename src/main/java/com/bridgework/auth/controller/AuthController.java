@@ -48,10 +48,16 @@ public class AuthController {
     )
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "로그인 성공",
-                    content = @Content(examples = @ExampleObject(
-                            name = "기존 회원 응답 예시",
-                            value = "{\"code\":\"SUCCESS\",\"message\":\"요청이 성공했습니다.\",\"result\":{\"signupRequired\":false,\"signupToken\":null,\"provider\":\"KAKAO\",\"email\":\"user@example.com\",\"name\":\"홍길동\",\"tokenPair\":{\"accessToken\":\"<ACCESS_TOKEN>\",\"refreshToken\":\"<REFRESH_TOKEN>\",\"tokenType\":\"Bearer\",\"accessTokenExpiresAt\":\"2026-05-08T08:00:00Z\",\"refreshTokenExpiresAt\":\"2026-05-22T08:00:00Z\"}}}"
-                    )))
+                    content = @Content(examples = {
+                            @ExampleObject(
+                                    name = "기존 회원 응답 예시",
+                                    value = "{\"code\":\"SUCCESS\",\"message\":\"요청이 성공했습니다.\",\"result\":{\"signupRequired\":false,\"signupToken\":null,\"provider\":\"KAKAO\",\"email\":\"user@example.com\",\"name\":\"홍길동\",\"tokenPair\":{\"accessToken\":\"<ACCESS_TOKEN>\",\"refreshToken\":\"<REFRESH_TOKEN>\",\"tokenType\":\"Bearer\",\"accessTokenExpiresAt\":\"2026-05-08T08:00:00Z\",\"refreshTokenExpiresAt\":\"2026-05-22T08:00:00Z\"}}}"
+                            ),
+                            @ExampleObject(
+                                    name = "최초 회원 응답 예시",
+                                    value = "{\"code\":\"SUCCESS\",\"message\":\"요청이 성공했습니다.\",\"result\":{\"signupRequired\":true,\"signupToken\":\"signup-token-sample\",\"provider\":\"KAKAO\",\"email\":\"first-user@example.com\",\"name\":\"홍길동\",\"tokenPair\":null}}"
+                            )
+                    }))
     })
     public ResponseEntity<com.bridgework.common.dto.ApiResponse<SocialLoginResponseDto>> socialLogin(@Valid @RequestBody SocialLoginRequestDto request) {
         return ResponseEntity.ok(com.bridgework.common.dto.ApiResponse.success(authService.socialLogin(request)));
