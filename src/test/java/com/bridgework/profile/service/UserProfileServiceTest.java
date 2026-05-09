@@ -18,7 +18,6 @@ import com.bridgework.profile.enums.ProfileDisabilityType;
 import com.bridgework.profile.enums.ProfileGraduationStatus;
 import com.bridgework.profile.enums.ProfileHighestEducation;
 import com.bridgework.profile.enums.ProfileMilitaryService;
-import com.bridgework.profile.enums.ProfileResidenceRegion;
 import com.bridgework.profile.enums.ProfileWorkAvailability;
 import com.bridgework.profile.enums.ProfileWorkTimePreference;
 import com.bridgework.profile.enums.ProfileWorkType;
@@ -188,10 +187,8 @@ class UserProfileServiceTest {
                 birthDate,
                 GenderType.MALE,
                 ageGroup,
-                ProfileResidenceRegion.SEOUL,
                 "강남구",
                 "010-9999-9999",
-                "https://example.com/profile.jpg",
 
                 ProfileHighestEducation.BACHELOR,
                 ProfileGraduationStatus.GRADUATED,

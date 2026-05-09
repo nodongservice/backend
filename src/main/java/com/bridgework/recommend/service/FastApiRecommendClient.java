@@ -190,7 +190,7 @@ public class FastApiRecommendClient {
         scoreProfile.put("profile_id", profile.profileId());
         scoreProfile.put("user_id", profile.userId());
         scoreProfile.put("name", profile.fullName());
-        scoreProfile.put("address", joinAddress(profile.residenceRegion(), profile.detailAddress()));
+        scoreProfile.put("address", profile.detailAddress());
         scoreProfile.put("desired_jobs", desiredJobs(profile));
         scoreProfile.put("skills", nullToEmpty(profile.skills()));
         scoreProfile.put("education", firstNotBlank(profile.highestEducation(), profile.educationSummary()));
@@ -281,19 +281,6 @@ public class FastApiRecommendClient {
         } catch (NumberFormatException ignored) {
             return null;
         }
-    }
-
-    private String joinAddress(String region, String detailAddress) {
-        if ((region == null || region.isBlank()) && (detailAddress == null || detailAddress.isBlank())) {
-            return null;
-        }
-        if (region == null || region.isBlank()) {
-            return detailAddress;
-        }
-        if (detailAddress == null || detailAddress.isBlank()) {
-            return region;
-        }
-        return region + " " + detailAddress;
     }
 
     private String firstNotBlank(String first, String second) {

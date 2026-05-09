@@ -34,10 +34,10 @@ public class UserProfile {
     @Column(name = "is_default", nullable = false)
     private boolean isDefault;
 
-    @Column(name = "desired_job", nullable = false, length = 200)
+    @Column(name = "desired_job", length = 200)
     private String desiredJob;
 
-    @Column(name = "commute_range", nullable = false, length = 120)
+    @Column(name = "commute_range", length = 120)
     private String commuteRange;
 
     @Column(name = "preferred_work_environments_json", nullable = false, columnDefinition = "TEXT")
@@ -52,13 +52,13 @@ public class UserProfile {
     @Column(name = "disability_type", nullable = false, length = 120)
     private String disabilityType;
 
-    @Column(name = "career_summary", nullable = false, length = 500)
+    @Column(name = "career_summary", length = 500)
     private String careerSummary;
 
-    @Column(name = "education_summary", nullable = false, length = 500)
+    @Column(name = "education_summary", length = 500)
     private String educationSummary;
 
-    @Column(name = "employment_type_summary", nullable = false, length = 200)
+    @Column(name = "employment_type_summary", length = 200)
     private String employmentTypeSummary;
 
     @Column(name = "full_name", nullable = false, length = 100)
@@ -80,17 +80,11 @@ public class UserProfile {
     @Column(name = "age_group", length = 50)
     private String ageGroup;
 
-    @Column(name = "residence_region", nullable = false, length = 120)
-    private String residenceRegion;
-
     @Column(name = "detail_address", length = 300)
     private String detailAddress;
 
     @Column(name = "emergency_contact", length = 100)
     private String emergencyContact;
-
-    @Column(name = "profile_image_url", length = 500)
-    private String profileImageUrl;
 
     @Column(name = "highest_education", nullable = false, length = 300)
     private String highestEducation;
@@ -143,7 +137,7 @@ public class UserProfile {
     @Column(name = "work_support_requirements", columnDefinition = "TEXT")
     private String workSupportRequirements;
 
-    @Column(name = "work_availability", nullable = false, length = 80)
+    @Column(name = "work_availability", length = 80)
     private String workAvailability;
 
     @Column(name = "work_types_json", nullable = false, columnDefinition = "TEXT")
@@ -164,7 +158,7 @@ public class UserProfile {
     @Column(name = "self_introduction", nullable = false, columnDefinition = "TEXT")
     private String selfIntroduction;
 
-    @Column(name = "motivation", nullable = false, columnDefinition = "TEXT")
+    @Column(name = "motivation", columnDefinition = "TEXT")
     private String motivation;
 
     @Column(name = "job_fit_description", columnDefinition = "TEXT")
@@ -242,10 +236,8 @@ public class UserProfile {
         this.birthDate = request.birthDate();
         this.genderType = request.genderType();
         this.ageGroup = request.ageGroup();
-        this.residenceRegion = enumCode(request.residenceRegion());
         this.detailAddress = request.detailAddress();
         this.emergencyContact = request.emergencyContact();
-        this.profileImageUrl = request.profileImageUrl();
 
         this.highestEducation = enumCode(request.highestEducation());
         this.graduationStatus = enumCode(request.graduationStatus());
@@ -374,20 +366,12 @@ public class UserProfile {
         return ageGroup;
     }
 
-    public String getResidenceRegion() {
-        return residenceRegion;
-    }
-
     public String getDetailAddress() {
         return detailAddress;
     }
 
     public String getEmergencyContact() {
         return emergencyContact;
-    }
-
-    public String getProfileImageUrl() {
-        return profileImageUrl;
     }
 
     public String getHighestEducation() {

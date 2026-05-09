@@ -27,7 +27,6 @@ import com.bridgework.profile.enums.ProfileDisabilitySeverity;
 import com.bridgework.profile.enums.ProfileDisabilityType;
 import com.bridgework.profile.enums.ProfileGraduationStatus;
 import com.bridgework.profile.enums.ProfileHighestEducation;
-import com.bridgework.profile.enums.ProfileResidenceRegion;
 import com.bridgework.profile.enums.ProfileWorkAvailability;
 import com.bridgework.profile.enums.ProfileWorkType;
 import com.bridgework.profile.repository.UserProfileRepository;
@@ -191,9 +190,7 @@ class AuthServiceTest {
                 java.time.LocalDate.of(1990, 1, 1),
                 GenderType.MALE,
                 null,
-                ProfileResidenceRegion.SEOUL,
                 "강남구",
-                null,
                 null,
                 ProfileHighestEducation.BACHELOR,
                 ProfileGraduationStatus.GRADUATED,

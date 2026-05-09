@@ -25,10 +25,8 @@ public record UserProfileResponseDto(
         LocalDate birthDate,
         GenderType genderType,
         String ageGroup,
-        String residenceRegion,
         String detailAddress,
         String emergencyContact,
-        String profileImageUrl,
 
         String highestEducation,
         String graduationStatus,

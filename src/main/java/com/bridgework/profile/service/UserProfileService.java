@@ -202,10 +202,8 @@ public class UserProfileService {
                 profile.getBirthDate(),
                 profile.getGenderType(),
                 profile.getAgeGroup(),
-                profile.getResidenceRegion(),
                 profile.getDetailAddress(),
                 profile.getEmergencyContact(),
-                profile.getProfileImageUrl(),
 
                 profile.getHighestEducation(),
                 profile.getGraduationStatus(),

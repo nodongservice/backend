@@ -9,7 +9,6 @@ import com.bridgework.profile.enums.ProfileDisabilitySeverity;
 import com.bridgework.profile.enums.ProfileDisabilityType;
 import com.bridgework.profile.enums.ProfileGraduationStatus;
 import com.bridgework.profile.enums.ProfileHighestEducation;
-import com.bridgework.profile.enums.ProfileResidenceRegion;
 import com.bridgework.profile.enums.ProfileWorkAvailability;
 import com.bridgework.profile.enums.ProfileWorkType;
 import java.time.LocalDate;
@@ -52,9 +51,7 @@ class ProfileAiTagServiceTest {
                 LocalDate.of(1995, 5, 10),
                 GenderType.MALE,
                 null,
-                ProfileResidenceRegion.SEOUL,
                 "강남구",
-                null,
                 null,
 
                 ProfileHighestEducation.BACHELOR,

@@ -6,7 +6,6 @@ import com.bridgework.profile.enums.ProfileDisabilityType;
 import com.bridgework.profile.enums.ProfileGraduationStatus;
 import com.bridgework.profile.enums.ProfileHighestEducation;
 import com.bridgework.profile.enums.ProfileMilitaryService;
-import com.bridgework.profile.enums.ProfileResidenceRegion;
 import com.bridgework.profile.enums.ProfileWorkAvailability;
 import com.bridgework.profile.enums.ProfileWorkTimePreference;
 import com.bridgework.profile.enums.ProfileWorkType;
@@ -27,7 +26,6 @@ import java.util.List;
                 "contactEmail",
                 "birthDate",
                 "genderType",
-                "residenceRegion",
                 "detailAddress",
                 "highestEducation",
                 "graduationStatus",
@@ -36,7 +34,6 @@ import java.util.List;
                 "skills",
                 "disabilitySeverity",
                 "disabilityRegisteredYn",
-                "workAvailability",
                 "workTypes",
                 "selfIntroduction"
         }
@@ -67,12 +64,9 @@ public record UserProfileUpsertRequestDto(
         @NotNull(message = "성별은 필수입니다.")
         GenderType genderType,
         String ageGroup,
-        @NotNull(message = "거주 지역은 필수입니다.")
-        ProfileResidenceRegion residenceRegion,
         @NotBlank(message = "상세 주소는 필수입니다.")
         String detailAddress,
         String emergencyContact,
-        String profileImageUrl,
 
         @NotNull(message = "최종 학력은 필수입니다.")
         ProfileHighestEducation highestEducation,
@@ -101,7 +95,6 @@ public record UserProfileUpsertRequestDto(
         String assistiveDevices,
         String workSupportRequirements,
 
-        @NotNull(message = "근무 가능 여부는 필수입니다.")
         ProfileWorkAvailability workAvailability,
         @NotEmpty(message = "근무 형태는 1개 이상 필요합니다.")
         List<ProfileWorkType> workTypes,
