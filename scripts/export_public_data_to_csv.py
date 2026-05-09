@@ -340,7 +340,7 @@ def source_specs(api_keys: dict[str, str]) -> list[SourceSpec]:
             name="전국횡단보도표준데이터",
             slug="nationwide_crosswalk",
             kind="data_go_json",
-            endpoint="https://api.data.go.kr/openapi/tn_pubr_public_crosswalk_api",
+            endpoint="가https://api.data.go.kr/openapi/tn_pubr_public_crosswalk_api",
             key=data_go_kr_service_key,
             params={
                 "item_id_field": "crswlkManageNo",

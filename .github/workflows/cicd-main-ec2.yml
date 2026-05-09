@@ -182,8 +182,8 @@ jobs:
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
           port: ${{ secrets.EC2_PORT }}
-          source: "deploy/*"
-          target: "~/bridgework/deploy"
+          source: "deploy/blue_green_deploy.sh"
+          target: "~/bridgework/backend/deploy"
           strip_components: 1
 
       - name: Upload application-prod.yml to EC2
@@ -194,7 +194,7 @@ jobs:
           key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
           port: ${{ secrets.EC2_PORT }}
           source: ".cicd/application-prod.yml"
-          target: "~/bridgework"
+          target: "~/bridgework/backend"
           strip_components: 1
 
       - name: Deploy on EC2 (blue-green)
@@ -207,18 +207,16 @@ jobs:
           script: |
             set -euo pipefail
 
-            mkdir -p "$HOME/bridgework/deploy" "$HOME/bridgework/state"
-            chmod +x "$HOME/bridgework/deploy"/*.sh
-            chmod 600 "$HOME/bridgework/application-prod.yml"
-
-            # 최초 배포 서버에서도 upstream 파일이 준비되도록 nginx 설정을 보장한다.
-            bash "$HOME/bridgework/deploy/setup_nginx.sh"
+            mkdir -p "$HOME/bridgework/backend/deploy" "$HOME/bridgework/backend/state"
+            chmod +x "$HOME/bridgework/backend/deploy/blue_green_deploy.sh"
+            chmod 600 "$HOME/bridgework/backend/application-prod.yml"
 
             echo '${{ secrets.GHCR_READ_TOKEN }}' | docker login ghcr.io -u '${{ github.repository_owner }}' --password-stdin
 
             IMAGE_URI='${{ env.IMAGE_SHA_TAG }}' \
             APP_NAME='bridgework-backend' \
-            APP_ROOT="$HOME/bridgework" \
-            CONFIG_FILE="$HOME/bridgework/application-prod.yml" \
+            APP_ROOT="$HOME/bridgework/backend" \
+            CONFIG_FILE="$HOME/bridgework/backend/application-prod.yml" \
+            UPSTREAM_SWITCH_SCRIPT="$HOME/bridgework-infra/deploy/spring_blue_green_switch.sh" \
             REDIS_PASSWORD='${{ secrets.REDIS_PASSWORD }}' \
-            bash "$HOME/bridgework/deploy/blue_green_deploy.sh"
+            bash "$HOME/bridgework/backend/deploy/blue_green_deploy.sh"

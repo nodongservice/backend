@@ -42,7 +42,7 @@ CONFIG_FILE="${CONFIG_FILE:-$APP_ROOT/application-prod.yml}"
 STATE_DIR="${STATE_DIR:-$APP_ROOT/state}"
 ACTIVE_SLOT_FILE="${ACTIVE_SLOT_FILE:-$STATE_DIR/active_slot}"
 DOCKER_NETWORK="${DOCKER_NETWORK:-bridgework-network}"
-NGINX_UPSTREAM_CONF="${NGINX_UPSTREAM_CONF:-}"
+리UPSTREAM_SWITCH_SCRIPT="${UPSTREAM_SWITCH_SCRIPT:-$HOME/bridgework-infra/deploy/spring_blue_green_switch.sh}"
 REDIS_CONTAINER_NAME="${REDIS_CONTAINER_NAME:-bridgework-redis}"
 REDIS_IMAGE="${REDIS_IMAGE:-redis:7.2-alpine}"
 REDIS_VOLUME="${REDIS_VOLUME:-bridgework-redis-data}"
@@ -71,28 +71,6 @@ fi
 
 require_command docker
 require_command curl
-require_command nginx
-
-resolve_upstream_conf_path() {
-  if [[ -n "$NGINX_UPSTREAM_CONF" ]]; then
-    echo "$NGINX_UPSTREAM_CONF"
-    return
-  fi
-
-  if [[ -f "/etc/nginx/conf.d/bridgework-upstream.inc" || -d "/etc/nginx/conf.d" ]]; then
-    echo "/etc/nginx/conf.d/bridgework-upstream.inc"
-    return
-  fi
-
-  if [[ -f "/etc/nginx/sites-enabled/bridgework-upstream.inc" || -d "/etc/nginx/sites-enabled" ]]; then
-    echo "/etc/nginx/sites-enabled/bridgework-upstream.inc"
-    return
-  fi
-
-  echo "/etc/nginx/conf.d/bridgework-upstream.inc"
-}
-
-NGINX_UPSTREAM_CONF="$(resolve_upstream_conf_path)"
 
 if [[ ! -f "$CONFIG_FILE" ]]; then
   log "외부 설정 파일이 없습니다: $CONFIG_FILE"
@@ -214,19 +192,6 @@ resolve_current_slot() {
     fi
   fi
 
-  # 상태 파일이 없어도 nginx upstream이 가리키는 포트로 활성 슬롯을 복원한다.
-  if [[ -f "$NGINX_UPSTREAM_CONF" ]]; then
-    if grep -Eq "server[[:space:]]+127\\.0\\.0\\.1:${BLUE_PORT};" "$NGINX_UPSTREAM_CONF"; then
-      echo "blue"
-      return
-    fi
-
-    if grep -Eq "server[[:space:]]+127\\.0\\.0\\.1:${GREEN_PORT};" "$NGINX_UPSTREAM_CONF"; then
-      echo "green"
-      return
-    fi
-  fi
-
   # 상태 파일이 없으면 현재 실행 중인 컨테이너를 기준으로 슬롯을 판별한다.
   if is_container_running "$BLUE_CONTAINER"; then
     echo "blue"
@@ -324,35 +289,18 @@ if ! wait_for_health "$HEALTH_URL" "$HEALTH_TIMEOUT_SECONDS" "$HEALTH_INTERVAL_S
   exit 1
 fi
 
-TMP_UPSTREAM_FILE="$(mktemp)"
-cat > "$TMP_UPSTREAM_FILE" <<UPSTREAM
-upstream bridgework_backend {
-    server 127.0.0.1:${TARGET_PORT};
-    keepalive 64;
-}
-UPSTREAM
-
-PREV_UPSTREAM_FILE=""
-if sudo test -f "$NGINX_UPSTREAM_CONF"; then
-  PREV_UPSTREAM_FILE="$(mktemp)"
-  sudo cp "$NGINX_UPSTREAM_CONF" "$PREV_UPSTREAM_FILE"
-fi
-
-log "nginx upstream 전환: $NGINX_UPSTREAM_CONF"
-sudo cp "$TMP_UPSTREAM_FILE" "$NGINX_UPSTREAM_CONF"
-rm -f "$TMP_UPSTREAM_FILE"
-
-if ! sudo nginx -t >/dev/null 2>&1; then
-  log "nginx 설정 검증 실패. 이전 설정으로 롤백합니다."
-  if [[ -n "$PREV_UPSTREAM_FILE" ]]; then
-    sudo cp "$PREV_UPSTREAM_FILE" "$NGINX_UPSTREAM_CONF"
-  fi
+if [[ ! -f "$UPSTREAM_SWITCH_SCRIPT" ]]; then
+  log "공통 인프라 전환 스크립트가 없습니다: $UPSTREAM_SWITCH_SCRIPT"
   docker rm -f "$TARGET_CONTAINER" >/dev/null 2>&1 || true
   exit 1
 fi
 
-sudo systemctl reload nginx
-log "nginx 리로드 완료"
+log "공통 인프라 전환 스크립트 실행: ${UPSTREAM_SWITCH_SCRIPT} ${TARGET_SLOT}"
+if ! bash "$UPSTREAM_SWITCH_SCRIPT" "$TARGET_SLOT"; then
+  log "공통 인프라 전환 스크립트 실행 실패"
+  docker rm -f "$TARGET_CONTAINER" >/dev/null 2>&1 || true
+  exit 1
+fi
 
 echo "$TARGET_SLOT" > "$ACTIVE_SLOT_FILE"
 
@@ -362,10 +310,6 @@ docker update --restart unless-stopped "$TARGET_CONTAINER" >/dev/null
 if docker ps -a --format '{{.Names}}' | grep -q "^${OLD_CONTAINER}$"; then
   log "이전 슬롯 컨테이너 정리: $OLD_CONTAINER"
   docker rm -f "$OLD_CONTAINER" >/dev/null 2>&1 || true
-fi
-
-if [[ -n "$PREV_UPSTREAM_FILE" ]]; then
-  rm -f "$PREV_UPSTREAM_FILE"
 fi
 
 log "배포 완료: active_slot=$TARGET_SLOT"
