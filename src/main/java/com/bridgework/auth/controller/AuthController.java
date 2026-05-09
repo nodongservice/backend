@@ -7,6 +7,7 @@ import com.bridgework.auth.dto.SocialLoginRequestDto;
 import com.bridgework.auth.dto.SocialLoginResponseDto;
 import com.bridgework.auth.dto.TokenPairResponseDto;
 import com.bridgework.auth.dto.TokenRefreshRequestDto;
+import com.bridgework.auth.dto.WithdrawCancelRequestDto;
 import com.bridgework.auth.exception.UnauthorizedException;
 import com.bridgework.auth.security.UserPrincipal;
 import com.bridgework.auth.service.AuthService;
@@ -21,6 +22,7 @@ import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -54,11 +56,15 @@ public class AuthController {
                     content = @Content(examples = {
                             @ExampleObject(
                                     name = "기존 회원 응답 예시",
-                                    value = "{\"code\":\"SUCCESS\",\"message\":\"요청이 성공했습니다.\",\"result\":{\"signupRequired\":false,\"signupToken\":null,\"provider\":\"KAKAO\",\"email\":\"user@example.com\",\"name\":\"홍길동\",\"tokenPair\":{\"accessToken\":\"<ACCESS_TOKEN>\",\"refreshToken\":\"<REFRESH_TOKEN>\",\"tokenType\":\"Bearer\",\"accessTokenExpiresAt\":\"2026-05-08T08:00:00Z\",\"refreshTokenExpiresAt\":\"2026-05-22T08:00:00Z\"}}}"
+                                    value = "{\"code\":\"SUCCESS\",\"message\":\"요청이 성공했습니다.\",\"result\":{\"signupRequired\":false,\"signupToken\":null,\"provider\":\"KAKAO\",\"email\":\"user@example.com\",\"name\":\"홍길동\",\"accountStatus\":\"ACTIVE\",\"withdrawalDeadlineAt\":null,\"withdrawalCancelToken\":null,\"tokenPair\":{\"accessToken\":\"<ACCESS_TOKEN>\",\"refreshToken\":\"<REFRESH_TOKEN>\",\"tokenType\":\"Bearer\",\"accessTokenExpiresAt\":\"2026-05-08T08:00:00Z\",\"refreshTokenExpiresAt\":\"2026-05-22T08:00:00Z\"}}}"
                             ),
                             @ExampleObject(
                                     name = "최초 회원 응답 예시",
-                                    value = "{\"code\":\"SUCCESS\",\"message\":\"요청이 성공했습니다.\",\"result\":{\"signupRequired\":true,\"signupToken\":\"signup-token-sample\",\"provider\":\"KAKAO\",\"email\":\"first-user@example.com\",\"name\":\"홍길동\",\"tokenPair\":null}}"
+                                    value = "{\"code\":\"SUCCESS\",\"message\":\"요청이 성공했습니다.\",\"result\":{\"signupRequired\":true,\"signupToken\":\"signup-token-sample\",\"provider\":\"KAKAO\",\"email\":\"first-user@example.com\",\"name\":\"홍길동\",\"accountStatus\":\"SIGNUP_REQUIRED\",\"withdrawalDeadlineAt\":null,\"withdrawalCancelToken\":null,\"tokenPair\":null}}"
+                            ),
+                            @ExampleObject(
+                                    name = "탈퇴 신청 상태 회원 응답 예시",
+                                    value = "{\"code\":\"SUCCESS\",\"message\":\"요청이 성공했습니다.\",\"result\":{\"signupRequired\":false,\"signupToken\":null,\"provider\":\"KAKAO\",\"email\":\"user@example.com\",\"name\":\"홍길동\",\"accountStatus\":\"PENDING_DELETION\",\"withdrawalDeadlineAt\":\"2026-06-09T03:00:00Z\",\"withdrawalCancelToken\":\"withdraw-cancel-token-sample\",\"tokenPair\":null}}"
                             )
                     }))
     })
@@ -128,6 +134,37 @@ public class AuthController {
     public ResponseEntity<com.bridgework.common.dto.ApiResponse<AuthMeResponseDto>> me(Authentication authentication) {
         Long userId = currentUserId(authentication);
         return ResponseEntity.ok(com.bridgework.common.dto.ApiResponse.success(authService.getMe(userId)));
+    }
+
+    @DeleteMapping("/withdraw")
+    @SecurityRequirement(name = "bearerAuth")
+    @Operation(summary = "회원 탈퇴 신청", description = "회원 상태를 탈퇴 신청으로 전환하고 30일 후 최종 탈퇴 처리 대상으로 등록한다.")
+    @ApiResponse(responseCode = "200", description = "탈퇴 신청 성공",
+            content = @Content(examples = @ExampleObject(
+                    value = "{\"code\":\"SUCCESS\",\"message\":\"요청이 성공했습니다.\",\"result\":null}"
+            )))
+    public ResponseEntity<com.bridgework.common.dto.ApiResponse<Void>> withdraw(Authentication authentication) {
+        Long userId = currentUserId(authentication);
+        authService.withdraw(userId);
+        return ResponseEntity.ok(com.bridgework.common.dto.ApiResponse.success(null));
+    }
+
+    @PostMapping("/withdraw/cancel")
+    @Operation(summary = "회원 탈퇴 신청 취소", description = "탈퇴 신청 상태 계정을 활성화로 복구하고 토큰을 재발급한다.")
+    @io.swagger.v3.oas.annotations.parameters.RequestBody(
+            required = true,
+            content = @Content(examples = @ExampleObject(
+                    value = "{\"withdrawalCancelToken\":\"withdraw-cancel-token-sample\"}"
+            ))
+    )
+    @ApiResponse(responseCode = "200", description = "탈퇴 취소 및 토큰 재발급 성공",
+            content = @Content(examples = @ExampleObject(
+                    value = "{\"code\":\"SUCCESS\",\"message\":\"요청이 성공했습니다.\",\"result\":{\"accessToken\":\"<ACCESS_TOKEN>\",\"refreshToken\":\"<REFRESH_TOKEN>\",\"tokenType\":\"Bearer\",\"accessTokenExpiresAt\":\"2026-05-08T08:00:00Z\",\"refreshTokenExpiresAt\":\"2026-05-22T08:00:00Z\"}}"
+            )))
+    public ResponseEntity<com.bridgework.common.dto.ApiResponse<TokenPairResponseDto>> cancelWithdraw(@Valid @RequestBody WithdrawCancelRequestDto request) {
+        return ResponseEntity.ok(com.bridgework.common.dto.ApiResponse.success(
+                authService.cancelWithdrawal(request.withdrawalCancelToken())
+        ));
     }
 
     private Long currentUserId(Authentication authentication) {

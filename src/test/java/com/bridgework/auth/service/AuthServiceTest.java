@@ -10,6 +10,7 @@ import static org.mockito.Mockito.when;
 
 import com.bridgework.auth.config.BridgeWorkAuthProperties;
 import com.bridgework.auth.dto.SignupCompleteRequestDto;
+import com.bridgework.auth.dto.SocialLoginAccountStatus;
 import com.bridgework.auth.dto.SocialLoginRequestDto;
 import com.bridgework.auth.dto.SocialLoginResponseDto;
 import com.bridgework.auth.dto.TokenPairResponseDto;
@@ -17,11 +18,13 @@ import com.bridgework.auth.entity.AppUser;
 import com.bridgework.auth.entity.GenderType;
 import com.bridgework.auth.entity.SocialProvider;
 import com.bridgework.auth.entity.UserRole;
+import com.bridgework.auth.entity.UserStatus;
 import com.bridgework.auth.exception.InvalidRefreshTokenException;
 import com.bridgework.auth.repository.AppUserRepository;
 import com.bridgework.auth.security.JwtTokenProvider;
 import com.bridgework.auth.security.ParsedJwtToken;
 import com.bridgework.common.notification.DiscordNotifierService;
+import com.bridgework.profile.entity.UserProfile;
 import com.bridgework.profile.dto.UserProfileUpsertRequestDto;
 import com.bridgework.profile.enums.ProfileDisabilitySeverity;
 import com.bridgework.profile.enums.ProfileDisabilityType;
@@ -33,6 +36,7 @@ import com.bridgework.profile.repository.UserProfileRepository;
 import com.bridgework.profile.service.UserProfileService;
 import java.time.Duration;
 import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -60,6 +64,8 @@ class AuthServiceTest {
     private UserProfileRepository userProfileRepository;
     @Mock
     private DiscordNotifierService discordNotifierService;
+    @Mock
+    private WithdrawalCancelTokenStoreService withdrawalCancelTokenStoreService;
     private AuthService authService;
 
     @BeforeEach
@@ -76,7 +82,8 @@ class AuthServiceTest {
                 authProperties,
                 userProfileService,
                 userProfileRepository,
-                discordNotifierService
+                discordNotifierService,
+                withdrawalCancelTokenStoreService
         );
     }
 
@@ -105,6 +112,7 @@ class AuthServiceTest {
 
         assertThat(response.signupRequired()).isTrue();
         assertThat(response.signupToken()).isEqualTo("signup-token");
+        assertThat(response.accountStatus()).isEqualTo(SocialLoginAccountStatus.SIGNUP_REQUIRED);
         assertThat(response.tokenPair()).isNull();
         verify(jwtTokenProvider, never()).issueTokenPair(any(), any());
     }
@@ -172,6 +180,85 @@ class AuthServiceTest {
         authService.logout(1L, "refresh-token");
 
         verify(refreshTokenStoreService).delete(1L, "refresh-id");
+    }
+
+    @Test
+    void withdraw_whenActiveUser_thenMovesToPendingDeletionAndPurgesRefreshTokens() {
+        AppUser user = new AppUser();
+        ReflectionTestUtils.setField(user, "id", 1L);
+        user.setProvider(SocialProvider.KAKAO);
+        user.setProviderUserId("provider-user-id");
+        user.setEmail("user@example.com");
+        user.setRole(UserRole.USER);
+        user.setSignupCompleted(true);
+        user.setStatus(UserStatus.ACTIVE);
+
+        when(appUserRepository.findByIdAndStatus(1L, UserStatus.ACTIVE)).thenReturn(Optional.of(user));
+
+        authService.withdraw(1L);
+
+        assertThat(user.getStatus()).isEqualTo(UserStatus.PENDING_DELETION);
+        assertThat(user.getWithdrawalRequestedAt()).isNotNull();
+        assertThat(user.getDeletedAt()).isNull();
+        verify(refreshTokenStoreService).deleteAllByUserId(1L);
+    }
+
+    @Test
+    void cancelWithdrawal_whenPendingDeletionUser_thenRestoresActiveAndIssuesToken() {
+        AppUser user = new AppUser();
+        ReflectionTestUtils.setField(user, "id", 1L);
+        user.setProvider(SocialProvider.KAKAO);
+        user.setProviderUserId("provider-user-id");
+        user.setEmail("user@example.com");
+        user.setRole(UserRole.USER);
+        user.setSignupCompleted(true);
+        user.setStatus(UserStatus.PENDING_DELETION);
+        user.setWithdrawalRequestedAt(OffsetDateTime.now());
+        when(withdrawalCancelTokenStoreService.getRequiredUserId("cancel-token")).thenReturn(1L);
+        when(appUserRepository.findById(1L)).thenReturn(Optional.of(user));
+        OffsetDateTime now = OffsetDateTime.now();
+        JwtTokenPair tokenPair = new JwtTokenPair(
+                "access-token",
+                "refresh-token",
+                "refresh-id",
+                now.plusMinutes(15),
+                now.plusDays(14)
+        );
+        when(jwtTokenProvider.issueTokenPair(1L, UserRole.USER)).thenReturn(tokenPair);
+
+        TokenPairResponseDto response = authService.cancelWithdrawal("cancel-token");
+
+        assertThat(response.accessToken()).isEqualTo("access-token");
+        assertThat(user.getStatus()).isEqualTo(UserStatus.ACTIVE);
+        assertThat(user.getWithdrawalRequestedAt()).isNull();
+        verify(withdrawalCancelTokenStoreService).deleteToken("cancel-token");
+    }
+
+    @Test
+    void finalizeDueWithdrawals_whenGracePeriodExceeded_thenFinalizesUserData() {
+        AppUser user = new AppUser();
+        ReflectionTestUtils.setField(user, "id", 1L);
+        user.setProvider(SocialProvider.KAKAO);
+        user.setProviderUserId("provider-user-id");
+        user.setEmail("user@example.com");
+        user.setRole(UserRole.USER);
+        user.setSignupCompleted(true);
+        user.setStatus(UserStatus.PENDING_DELETION);
+        user.setWithdrawalRequestedAt(OffsetDateTime.now().minusDays(40));
+        UserProfile profile = new UserProfile();
+        ReflectionTestUtils.setField(profile, "id", 11L);
+        when(appUserRepository.findAllByStatusAndWithdrawalRequestedAtBefore(eq(UserStatus.PENDING_DELETION), any()))
+                .thenReturn(List.of(user));
+        when(userProfileRepository.findByUser_IdOrderByIsDefaultDescUpdatedAtDesc(1L)).thenReturn(List.of(profile));
+
+        int finalizedCount = authService.finalizeDueWithdrawals(OffsetDateTime.now());
+
+        assertThat(finalizedCount).isEqualTo(1);
+        assertThat(user.getStatus()).isEqualTo(UserStatus.DELETED);
+        assertThat(user.getDeletedAt()).isNotNull();
+        assertThat(user.getProviderUserId()).startsWith("deleted:1:");
+        assertThat(profile.getFullName()).isEqualTo("탈퇴회원");
+        verify(userProfileRepository).saveAll(any());
     }
 
     private UserProfileUpsertRequestDto onboardingRequest() {

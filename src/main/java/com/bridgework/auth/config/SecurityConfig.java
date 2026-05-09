@@ -62,6 +62,7 @@ public class SecurityConfig {
                         .requestMatchers("/actuator/health", "/actuator/health/**", "/actuator/info", "/actuator/prometheus").permitAll()
                         .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.GET, "/api/v1/auth/me").hasRole("USER")
+                        .requestMatchers(HttpMethod.DELETE, "/api/v1/auth/withdraw").hasRole("USER")
                         .requestMatchers(HttpMethod.GET,
                                 "/api/v1/options/**",
                                 "/api/v1/map/support-agencies").permitAll()
@@ -69,6 +70,7 @@ public class SecurityConfig {
                                 "/api/v1/auth/admin/login",
                                 "/api/v1/auth/social/login",
                                 "/api/v1/auth/social/signup/complete",
+                                "/api/v1/auth/withdraw/cancel",
                                 "/api/v1/auth/token/refresh").permitAll()
                         .anyRequest().authenticated()
                 )

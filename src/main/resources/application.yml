@@ -224,6 +224,8 @@ bridgework:
         total-count-json-pointer: /empPgmSchdInviteList/total
   auth:
     signup-session-validity: 20m
+    withdrawal-grace-period: 30d
+    withdrawal-finalize-interval: 1h
     allowed-origins:
       - http://localhost:3000
     jwt:

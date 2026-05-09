@@ -1,6 +1,8 @@
 package com.bridgework.auth.security;
 
+import com.bridgework.auth.entity.UserStatus;
 import com.bridgework.auth.exception.InvalidJwtException;
+import com.bridgework.auth.repository.AppUserRepository;
 import com.bridgework.common.dto.ApiResponse;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.FilterChain;
@@ -24,10 +26,14 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private static final String BEARER_PREFIX = "Bearer ";
 
     private final JwtTokenProvider jwtTokenProvider;
+    private final AppUserRepository appUserRepository;
     private final ObjectMapper objectMapper;
 
-    public JwtAuthenticationFilter(JwtTokenProvider jwtTokenProvider, ObjectMapper objectMapper) {
+    public JwtAuthenticationFilter(JwtTokenProvider jwtTokenProvider,
+                                   AppUserRepository appUserRepository,
+                                   ObjectMapper objectMapper) {
         this.jwtTokenProvider = jwtTokenProvider;
+        this.appUserRepository = appUserRepository;
         this.objectMapper = objectMapper;
     }
 
@@ -51,6 +57,10 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             ParsedJwtToken parsedToken = jwtTokenProvider.parse(token);
             if (!JwtTokenProvider.TOKEN_TYPE_ACCESS.equals(parsedToken.tokenType())) {
                 throw new InvalidJwtException("액세스 토큰이 아닙니다.");
+            }
+            boolean isActiveUser = appUserRepository.findByIdAndStatus(parsedToken.userId(), UserStatus.ACTIVE).isPresent();
+            if (!isActiveUser) {
+                throw new InvalidJwtException("비활성화된 계정입니다.");
             }
 
             UserPrincipal principal = new UserPrincipal(parsedToken.userId(), parsedToken.role());

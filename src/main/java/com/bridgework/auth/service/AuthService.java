@@ -3,23 +3,30 @@ package com.bridgework.auth.service;
 import com.bridgework.auth.config.BridgeWorkAuthProperties;
 import com.bridgework.auth.dto.AuthMeResponseDto;
 import com.bridgework.auth.dto.SignupCompleteRequestDto;
+import com.bridgework.auth.dto.SocialLoginAccountStatus;
 import com.bridgework.auth.dto.SocialLoginRequestDto;
 import com.bridgework.auth.dto.SocialLoginResponseDto;
 import com.bridgework.auth.dto.TokenPairResponseDto;
 import com.bridgework.auth.entity.AppUser;
 import com.bridgework.auth.entity.UserRole;
+import com.bridgework.auth.entity.UserStatus;
 import com.bridgework.auth.exception.DuplicateEmailException;
 import com.bridgework.auth.exception.InvalidRefreshTokenException;
 import com.bridgework.auth.exception.UserNotFoundException;
+import com.bridgework.auth.exception.WithdrawalNotPendingException;
 import com.bridgework.auth.repository.AppUserRepository;
 import com.bridgework.auth.security.JwtTokenProvider;
 import com.bridgework.auth.security.ParsedJwtToken;
 import com.bridgework.common.notification.DiscordNotifierService;
+import com.bridgework.profile.entity.UserProfile;
 import com.bridgework.profile.repository.UserProfileRepository;
 import com.bridgework.profile.service.UserProfileService;
 import jakarta.transaction.Transactional;
+import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.List;
 import java.util.Locale;
+import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
@@ -35,6 +42,7 @@ public class AuthService {
     private final UserProfileService userProfileService;
     private final UserProfileRepository userProfileRepository;
     private final DiscordNotifierService discordNotifierService;
+    private final WithdrawalCancelTokenStoreService withdrawalCancelTokenStoreService;
 
     public AuthService(AppUserRepository appUserRepository,
                        SocialOAuthService socialOAuthService,
@@ -44,7 +52,8 @@ public class AuthService {
                        BridgeWorkAuthProperties authProperties,
                        UserProfileService userProfileService,
                        UserProfileRepository userProfileRepository,
-                       DiscordNotifierService discordNotifierService) {
+                       DiscordNotifierService discordNotifierService,
+                       WithdrawalCancelTokenStoreService withdrawalCancelTokenStoreService) {
         this.appUserRepository = appUserRepository;
         this.socialOAuthService = socialOAuthService;
         this.signupSessionStoreService = signupSessionStoreService;
@@ -54,6 +63,7 @@ public class AuthService {
         this.userProfileService = userProfileService;
         this.userProfileRepository = userProfileRepository;
         this.discordNotifierService = discordNotifierService;
+        this.withdrawalCancelTokenStoreService = withdrawalCancelTokenStoreService;
     }
 
     @Transactional
@@ -69,6 +79,30 @@ public class AuthService {
                 .findByProviderAndProviderUserId(socialUserProfile.provider(), socialUserProfile.providerUserId())
                 .orElse(null);
 
+        if (user != null && UserStatus.PENDING_DELETION.equals(user.getStatus())) {
+            OffsetDateTime deadlineAt = resolveWithdrawalDeadlineAt(user);
+            if (deadlineAt != null && !OffsetDateTime.now().isBefore(deadlineAt)) {
+                finalizeUserDeletion(user, OffsetDateTime.now());
+                user = null;
+            } else {
+                String cancelToken = withdrawalCancelTokenStoreService.createToken(
+                        user.getId(),
+                        authProperties.getWithdrawalGracePeriod()
+                );
+                return new SocialLoginResponseDto(
+                        false,
+                        null,
+                        user.getProvider(),
+                        user.getEmail(),
+                        resolveDefaultProfileName(user.getId()),
+                        SocialLoginAccountStatus.PENDING_DELETION,
+                        deadlineAt,
+                        cancelToken,
+                        null
+                );
+            }
+        }
+
         if (user == null || !user.isSignupCompleted()) {
             String signupToken = signupSessionStoreService.createSession(new SocialSignupSessionData(
                     socialUserProfile.provider(),
@@ -83,6 +117,9 @@ public class AuthService {
                     socialUserProfile.provider(),
                     socialUserProfile.email(),
                     socialUserProfile.name(),
+                    SocialLoginAccountStatus.SIGNUP_REQUIRED,
+                    null,
+                    null,
                     null
             );
         }
@@ -94,6 +131,9 @@ public class AuthService {
                 user.getProvider(),
                 user.getEmail(),
                 resolveDefaultProfileName(user.getId()),
+                SocialLoginAccountStatus.ACTIVE,
+                null,
+                null,
                 tokenPairResponse
         );
     }
@@ -117,6 +157,9 @@ public class AuthService {
         }
         user.setRole(UserRole.USER);
         user.setSignupCompleted(true);
+        user.setStatus(UserStatus.ACTIVE);
+        user.setWithdrawalRequestedAt(null);
+        user.setDeletedAt(null);
 
         AppUser savedUser = appUserRepository.save(user);
         // 가입 완료 시 기본 프로필을 생성해 사용자 상태를 일관되게 만든다.
@@ -141,7 +184,7 @@ public class AuthService {
             throw new InvalidRefreshTokenException();
         }
 
-        AppUser user = appUserRepository.findById(parsedJwtToken.userId())
+        AppUser user = appUserRepository.findByIdAndStatus(parsedJwtToken.userId(), UserStatus.ACTIVE)
                 .orElseThrow(UserNotFoundException::new);
 
         refreshTokenStoreService.delete(parsedJwtToken.userId(), parsedJwtToken.tokenId());
@@ -173,7 +216,8 @@ public class AuthService {
     }
 
     public AuthMeResponseDto getMe(Long userId) {
-        AppUser user = appUserRepository.findById(userId).orElseThrow(UserNotFoundException::new);
+        AppUser user = appUserRepository.findByIdAndStatus(userId, UserStatus.ACTIVE)
+                .orElseThrow(UserNotFoundException::new);
 
         return new AuthMeResponseDto(
                 user.getId(),
@@ -182,6 +226,48 @@ public class AuthService {
                 user.getRole(),
                 user.isSignupCompleted()
         );
+    }
+
+    @Transactional
+    public void withdraw(Long userId) {
+        AppUser user = appUserRepository.findByIdAndStatus(userId, UserStatus.ACTIVE)
+                .orElseThrow(UserNotFoundException::new);
+
+        user.setStatus(UserStatus.PENDING_DELETION);
+        user.setWithdrawalRequestedAt(OffsetDateTime.now());
+
+        refreshTokenStoreService.deleteAllByUserId(userId);
+    }
+
+    @Transactional
+    public TokenPairResponseDto cancelWithdrawal(String withdrawalCancelToken) {
+        Long userId = withdrawalCancelTokenStoreService.getRequiredUserId(withdrawalCancelToken);
+        AppUser user = appUserRepository.findById(userId).orElseThrow(UserNotFoundException::new);
+
+        if (!UserStatus.PENDING_DELETION.equals(user.getStatus())) {
+            throw new WithdrawalNotPendingException();
+        }
+
+        user.setStatus(UserStatus.ACTIVE);
+        user.setWithdrawalRequestedAt(null);
+        user.setDeletedAt(null);
+        withdrawalCancelTokenStoreService.deleteToken(withdrawalCancelToken);
+        return issueAndStoreTokenPair(user);
+    }
+
+    @Transactional
+    public int finalizeDueWithdrawals(OffsetDateTime now) {
+        OffsetDateTime referenceTime = now == null ? OffsetDateTime.now() : now;
+        OffsetDateTime expirationCutoff = referenceTime.minus(authProperties.getWithdrawalGracePeriod());
+        List<AppUser> targets = appUserRepository.findAllByStatusAndWithdrawalRequestedAtBefore(
+                UserStatus.PENDING_DELETION,
+                expirationCutoff
+        );
+
+        for (AppUser target : targets) {
+            finalizeUserDeletion(target, referenceTime);
+        }
+        return targets.size();
     }
 
     private TokenPairResponseDto issueAndStoreTokenPair(AppUser user) {
@@ -242,5 +328,34 @@ public class AuthService {
         return userProfileRepository.findByUser_IdAndIsDefaultTrue(userId)
                 .map(profile -> profile.getFullName())
                 .orElse(null);
+    }
+
+    private OffsetDateTime resolveWithdrawalDeadlineAt(AppUser user) {
+        if (user.getWithdrawalRequestedAt() == null) {
+            return null;
+        }
+        return user.getWithdrawalRequestedAt().plus(authProperties.getWithdrawalGracePeriod());
+    }
+
+    private void finalizeUserDeletion(AppUser user, OffsetDateTime deletedAt) {
+        Long userId = user.getId();
+        String deletedIdentity = "deleted:" + userId + ":" + UUID.randomUUID().toString().replace("-", "");
+        user.setProviderUserId(deletedIdentity);
+        user.setEmail(null);
+        user.setSignupCompleted(false);
+        user.setStatus(UserStatus.DELETED);
+        user.setDeletedAt(deletedAt);
+
+        List<UserProfile> profiles = userProfileRepository.findByUser_IdOrderByIsDefaultDescUpdatedAtDesc(userId);
+        for (UserProfile profile : profiles) {
+            profile.anonymizeForWithdrawal(buildAnonymizedProfileEmail(profile.getId(), userId));
+        }
+        userProfileRepository.saveAll(profiles);
+        refreshTokenStoreService.deleteAllByUserId(userId);
+    }
+
+    private String buildAnonymizedProfileEmail(Long profileId, Long userId) {
+        String safeProfileId = profileId == null ? "0" : profileId.toString();
+        return "deleted-profile-" + userId + "-" + safeProfileId + "@bridgework.local";
     }
 }

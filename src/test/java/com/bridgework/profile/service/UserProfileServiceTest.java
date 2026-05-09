@@ -8,6 +8,7 @@ import static org.mockito.Mockito.when;
 
 import com.bridgework.auth.entity.AppUser;
 import com.bridgework.auth.entity.GenderType;
+import com.bridgework.auth.entity.UserStatus;
 import com.bridgework.auth.repository.AppUserRepository;
 import com.bridgework.common.exception.BridgeWorkDomainException;
 import com.bridgework.profile.dto.UserProfileResponseDto;
@@ -70,7 +71,7 @@ class UserProfileServiceTest {
         UserProfileUpsertRequestDto request = baseRequest(LocalDate.of(1995, 5, 10), null);
         AppUser user = user(1L);
 
-        when(appUserRepository.findById(1L)).thenReturn(Optional.of(user));
+        when(appUserRepository.findByIdAndStatus(1L, UserStatus.ACTIVE)).thenReturn(Optional.of(user));
         when(userProfileRepository.countByUser_Id(1L)).thenReturn(3L);
 
         assertThatThrownBy(() -> userProfileService.create(1L, request))
@@ -88,7 +89,7 @@ class UserProfileServiceTest {
                 List.of("휠체어 접근")
         );
 
-        when(appUserRepository.findById(1L)).thenReturn(Optional.of(user));
+        when(appUserRepository.findByIdAndStatus(1L, UserStatus.ACTIVE)).thenReturn(Optional.of(user));
         when(userProfileRepository.countByUser_Id(1L)).thenReturn(0L);
         when(profileAiTagService.buildTags(request)).thenReturn(tags);
         when(userProfileRepository.save(any(UserProfile.class))).thenAnswer(invocation -> {
@@ -146,6 +147,7 @@ class UserProfileServiceTest {
     private AppUser user(Long id) {
         AppUser user = new AppUser();
         ReflectionTestUtils.setField(user, "id", id);
+        user.setStatus(UserStatus.ACTIVE);
         return user;
     }
 

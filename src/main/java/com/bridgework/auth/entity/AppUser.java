@@ -44,6 +44,16 @@ public class AppUser {
     @Column(name = "signup_completed", nullable = false)
     private boolean signupCompleted;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "status", nullable = false, length = 20)
+    private UserStatus status;
+
+    @Column(name = "withdrawal_requested_at")
+    private OffsetDateTime withdrawalRequestedAt;
+
+    @Column(name = "deleted_at")
+    private OffsetDateTime deletedAt;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private OffsetDateTime createdAt;
 
@@ -53,6 +63,9 @@ public class AppUser {
     @PrePersist
     void onCreate() {
         OffsetDateTime now = OffsetDateTime.now();
+        if (status == null) {
+            status = UserStatus.ACTIVE;
+        }
         createdAt = now;
         updatedAt = now;
     }
@@ -112,5 +125,29 @@ public class AppUser {
 
     public OffsetDateTime getUpdatedAt() {
         return updatedAt;
+    }
+
+    public UserStatus getStatus() {
+        return status;
+    }
+
+    public void setStatus(UserStatus status) {
+        this.status = status;
+    }
+
+    public OffsetDateTime getDeletedAt() {
+        return deletedAt;
+    }
+
+    public void setDeletedAt(OffsetDateTime deletedAt) {
+        this.deletedAt = deletedAt;
+    }
+
+    public OffsetDateTime getWithdrawalRequestedAt() {
+        return withdrawalRequestedAt;
+    }
+
+    public void setWithdrawalRequestedAt(OffsetDateTime withdrawalRequestedAt) {
+        this.withdrawalRequestedAt = withdrawalRequestedAt;
     }
 }

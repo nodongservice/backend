@@ -1,6 +1,7 @@
 package com.bridgework.profile.service;
 
 import com.bridgework.auth.entity.AppUser;
+import com.bridgework.auth.entity.UserStatus;
 import com.bridgework.auth.repository.AppUserRepository;
 import com.bridgework.profile.dto.UserProfileResponseDto;
 import com.bridgework.profile.dto.UserProfileUpsertRequestDto;
@@ -139,7 +140,7 @@ public class UserProfileService {
     }
 
     private AppUser loadUser(Long userId) {
-        return appUserRepository.findById(userId)
+        return appUserRepository.findByIdAndStatus(userId, UserStatus.ACTIVE)
                 .orElseThrow(() -> new ProfileDomainException("USER_NOT_FOUND", HttpStatus.NOT_FOUND, "사용자를 찾을 수 없습니다."));
     }
 

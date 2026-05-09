@@ -39,6 +39,8 @@ bridgework:
     work24-competency-auth-key: ${WORK24_COMPETENCY_AUTH_KEY}
     seoul-open-api-key: ${SEOUL_OPEN_API_KEY}
   auth:
+    withdrawal-grace-period: 30d
+    withdrawal-finalize-interval: 1h
     allowed-origins:
       - https://bridgework.cloud
       - https://www.bridgework.cloud

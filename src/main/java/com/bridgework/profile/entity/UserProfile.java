@@ -286,6 +286,48 @@ public class UserProfile {
         return value == null ? null : value.name();
     }
 
+    public void anonymizeForWithdrawal(String anonymizedContactEmail) {
+        // 통계에 필요한 구조화 코드는 유지하고 식별/서술형 개인정보만 제거한다.
+        this.fullName = "탈퇴회원";
+        this.contactPhone = "00000000000";
+        this.contactEmail = anonymizedContactEmail;
+        this.birthDate = LocalDate.of(1900, 1, 1);
+        this.detailAddress = "탈퇴회원";
+        this.emergencyContact = null;
+
+        this.careerSummary = null;
+        this.educationSummary = null;
+        this.majorCareer = "탈퇴회원";
+        this.careerDetail = null;
+        this.projectExperience = null;
+        this.careerGapReason = null;
+
+        this.desiredJob = null;
+        this.commuteRange = null;
+        this.preferredWorkEnvironmentsJson = "[]";
+        this.avoidedWorkEnvironmentsJson = "[]";
+        this.requiredSupportsJson = "[]";
+
+        this.certificationsJson = "[]";
+        this.portfolioUrl = null;
+        this.awards = null;
+        this.trainings = null;
+
+        this.disabilityDescription = null;
+        this.assistiveDevices = null;
+        this.workSupportRequirements = null;
+        this.mobilityRange = null;
+
+        this.selfIntroduction = "탈퇴회원";
+        this.motivation = null;
+        this.jobFitDescription = null;
+        this.careerGoal = null;
+        this.strengthsWeaknesses = null;
+
+        this.referrer = null;
+        this.snsUrl = null;
+    }
+
     public Long getId() {
         return id;
     }

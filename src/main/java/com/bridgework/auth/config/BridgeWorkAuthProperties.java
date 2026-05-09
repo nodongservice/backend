@@ -25,6 +25,12 @@ public class BridgeWorkAuthProperties {
     private Duration signupSessionValidity = Duration.ofMinutes(20);
 
     @NotNull
+    private Duration withdrawalGracePeriod = Duration.ofDays(30);
+
+    @NotNull
+    private Duration withdrawalFinalizeInterval = Duration.ofHours(1);
+
+    @NotNull
     private List<String> allowedOrigins = new ArrayList<>();
 
     public Jwt getJwt() {
@@ -57,6 +63,22 @@ public class BridgeWorkAuthProperties {
 
     public void setAllowedOrigins(List<String> allowedOrigins) {
         this.allowedOrigins = allowedOrigins;
+    }
+
+    public Duration getWithdrawalGracePeriod() {
+        return withdrawalGracePeriod;
+    }
+
+    public void setWithdrawalGracePeriod(Duration withdrawalGracePeriod) {
+        this.withdrawalGracePeriod = withdrawalGracePeriod;
+    }
+
+    public Duration getWithdrawalFinalizeInterval() {
+        return withdrawalFinalizeInterval;
+    }
+
+    public void setWithdrawalFinalizeInterval(Duration withdrawalFinalizeInterval) {
+        this.withdrawalFinalizeInterval = withdrawalFinalizeInterval;
     }
 
     public static class Jwt {
