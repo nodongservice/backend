@@ -124,7 +124,7 @@ public class AuthService {
 
         // 회원가입이 완료되면 세션 토큰은 즉시 제거해 재사용을 차단한다.
         signupSessionStoreService.deleteSession(request.signupToken());
-        discordNotifierService.notifySignupCompleted(savedUser.getEmail(), appUserRepository.count());
+        discordNotifierService.notifySignupCompleted(savedUser.getEmail(), appUserRepository.countRealSignedUpUsers());
         return issueAndStoreTokenPair(savedUser);
     }
 

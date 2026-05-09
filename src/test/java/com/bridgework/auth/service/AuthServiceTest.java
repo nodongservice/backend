@@ -140,6 +140,7 @@ class AuthServiceTest {
             ReflectionTestUtils.setField(user, "id", 1L);
             return user;
         });
+        when(appUserRepository.countRealSignedUpUsers()).thenReturn(1L);
         when(jwtTokenProvider.issueTokenPair(1L, UserRole.USER)).thenReturn(tokenPair);
 
         TokenPairResponseDto response = authService.completeSignup(request);
@@ -151,7 +152,7 @@ class AuthServiceTest {
 
         verify(appUserRepository).save(any(AppUser.class));
         verify(userProfileService).create(eq(1L), any(UserProfileUpsertRequestDto.class));
-        verify(discordNotifierService).notifySignupCompleted(eq("social@example.com"), eq(0L));
+        verify(discordNotifierService).notifySignupCompleted(eq("social@example.com"), eq(1L));
     }
 
     @Test
