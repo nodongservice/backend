@@ -54,7 +54,7 @@ bridgework:
     spring-bot-webhook-url: ""
   health-monitor:
     enabled: true
-    interval: 60s
+    interval: PT60S
     request-timeout: 5s
     fastapi-health-url: http://localhost:8000/health
     fastapi-db-health-url: http://localhost:8000/db-health

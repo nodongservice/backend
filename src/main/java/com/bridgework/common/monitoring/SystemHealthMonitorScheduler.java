@@ -40,8 +40,8 @@ public class SystemHealthMonitorScheduler {
     }
 
     @Scheduled(
-            fixedDelayString = "#{@bridgeWorkHealthMonitorProperties.interval.toMillis()}",
-            initialDelayString = "#{@bridgeWorkHealthMonitorProperties.interval.toMillis()}"
+            fixedDelayString = "${bridgework.health-monitor.interval:PT60S}",
+            initialDelayString = "${bridgework.health-monitor.interval:PT60S}"
     )
     @SchedulerLock(name = "systemHealthMonitorScheduler", lockAtLeastFor = "PT5S", lockAtMostFor = "PT2M")
     public void monitorSystemHealth() {
