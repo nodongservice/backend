@@ -1,10 +1,14 @@
 package com.bridgework.auth.config;
 
 import com.bridgework.auth.security.JwtAuthenticationFilter;
+import com.bridgework.common.dto.ApiResponse;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.io.IOException;
 import java.time.Duration;
 import java.util.List;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.MediaType;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -25,11 +29,14 @@ public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
     private final BridgeWorkAuthProperties authProperties;
+    private final ObjectMapper objectMapper;
 
     public SecurityConfig(JwtAuthenticationFilter jwtAuthenticationFilter,
-                          BridgeWorkAuthProperties authProperties) {
+                          BridgeWorkAuthProperties authProperties,
+                          ObjectMapper objectMapper) {
         this.jwtAuthenticationFilter = jwtAuthenticationFilter;
         this.authProperties = authProperties;
+        this.objectMapper = objectMapper;
     }
 
     @Bean
@@ -92,6 +99,15 @@ public class SecurityConfig {
 
     @Bean
     public AuthenticationEntryPoint unauthorizedEntryPoint() {
-        return (request, response, authException) -> response.sendError(401, "Unauthorized");
+        return (request, response, authException) -> {
+            response.setStatus(401);
+            response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+            response.setCharacterEncoding("UTF-8");
+            try {
+                objectMapper.writeValue(response.getWriter(), ApiResponse.error("UNAUTHORIZED", "인증이 필요합니다."));
+            } catch (IOException exception) {
+                response.sendError(401, "Unauthorized");
+            }
+        };
     }
 }

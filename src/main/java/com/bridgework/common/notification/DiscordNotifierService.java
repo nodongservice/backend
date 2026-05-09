@@ -33,6 +33,7 @@ public class DiscordNotifierService {
     private static final String HEADER_SYNC_FINISHED_FAILED = "❌ [공공데이터 동기화 완료 알림]";
     private static final String HEADER_SIGNUP_COMPLETED = "🎉 [회원가입 완료 알림]";
     private static final String HEADER_ADMIN_LOCKED = "🔒 [관리자 계정 잠금 알림]";
+    private static final String HEADER_UNHANDLED_EXCEPTION = "🚨 [Unhandled Exception 알림]";
     private static final String HEADER_GENERIC = "ℹ️ [시스템 알림]";
 
     private final WebClient webClient;
@@ -115,6 +116,25 @@ public class DiscordNotifierService {
                 + "사유: " + safeReason + '\n'
                 + '\n';
         send(message);
+    }
+
+    public void notifyUnhandledException(String requestUri, String errorCode, String message, Throwable throwable) {
+        String safeRequestUri = (requestUri == null || requestUri.isBlank()) ? "(unknown)" : requestUri;
+        String safeErrorCode = (errorCode == null || errorCode.isBlank()) ? "INTERNAL_SERVER_ERROR" : errorCode;
+        String safeMessage = (message == null || message.isBlank()) ? "(메시지 없음)" : message;
+
+        String rootCause = extractRootCauseMessage(throwable);
+        String exceptionType = throwable == null ? "(unknown)" : throwable.getClass().getSimpleName();
+
+        String discordMessage = HEADER_UNHANDLED_EXCEPTION + '\n'
+                + "요청 URI: " + safeRequestUri + '\n'
+                + "에러 코드: " + safeErrorCode + '\n'
+                + "메시지: " + safeMessage + '\n'
+                + "예외 타입: " + exceptionType + '\n'
+                + "원인: " + rootCause + '\n'
+                + '\n';
+
+        send(discordMessage);
     }
 
     private void send(String content) {
@@ -343,6 +363,23 @@ public class DiscordNotifierService {
         }
         if (message == null || message.isBlank()) {
             message = throwable == null ? "unknown" : throwable.getClass().getSimpleName();
+        }
+        return message.replace('\n', ' ').replace('\r', ' ').trim();
+    }
+
+    private String extractRootCauseMessage(Throwable throwable) {
+        if (throwable == null) {
+            return "(원인 없음)";
+        }
+
+        Throwable current = throwable;
+        while (current.getCause() != null && current.getCause() != current) {
+            current = current.getCause();
+        }
+
+        String message = current.getMessage();
+        if (message == null || message.isBlank()) {
+            message = current.getClass().getSimpleName();
         }
         return message.replace('\n', ' ').replace('\r', ' ').trim();
     }
