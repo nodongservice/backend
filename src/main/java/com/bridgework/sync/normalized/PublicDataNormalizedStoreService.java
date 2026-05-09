@@ -26,7 +26,9 @@ import org.springframework.transaction.annotation.Transactional;
 public class PublicDataNormalizedStoreService {
 
     private static final Pattern DECIMAL_PATTERN = Pattern.compile("^[+-]?(?:\\d+(?:\\.\\d+)?|\\.\\d+)$");
+    private static final Pattern INTEGER_PATTERN = Pattern.compile("^[+-]?\\d+$");
     private static final Set<String> COORDINATE_COLUMNS = Set.of("latitude", "longitude", "geo_latitude", "geo_longitude");
+    private static final Set<String> INTEGER_COLUMNS = Set.of("slope_vhcle_co", "lift_vhcle_co");
 
     private final NamedParameterJdbcTemplate namedParameterJdbcTemplate;
     private final ObjectMapper objectMapper;
@@ -208,10 +210,13 @@ public class PublicDataNormalizedStoreService {
     }
 
     private Object convertColumnValue(String columnName, String rawValue) {
-        if (!COORDINATE_COLUMNS.contains(columnName)) {
-            return rawValue;
+        if (COORDINATE_COLUMNS.contains(columnName)) {
+            return parseCoordinate(rawValue);
         }
-        return parseCoordinate(rawValue);
+        if (INTEGER_COLUMNS.contains(columnName)) {
+            return parseInteger(rawValue);
+        }
+        return rawValue;
     }
 
     private Double parseCoordinate(String rawValue) {
@@ -227,6 +232,24 @@ public class PublicDataNormalizedStoreService {
         }
         try {
             return Double.valueOf(normalized);
+        } catch (NumberFormatException ignored) {
+            return null;
+        }
+    }
+
+    private Integer parseInteger(String rawValue) {
+        if (rawValue == null) {
+            return null;
+        }
+        String normalized = rawValue.trim();
+        if (normalized.isEmpty()) {
+            return null;
+        }
+        if (!INTEGER_PATTERN.matcher(normalized).matches()) {
+            return null;
+        }
+        try {
+            return Integer.valueOf(normalized);
         } catch (NumberFormatException ignored) {
             return null;
         }
