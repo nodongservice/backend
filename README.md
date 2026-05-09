@@ -55,12 +55,20 @@
 
 ## 현재 구현 범위
 - 기능 0: 소셜 로그인/회원가입 완료, JWT 재발급/로그아웃/내 정보 조회
+- 기능 0-1: 회원 탈퇴 신청/취소, 30일 유예 후 최종 비식별화(스케줄러)
 - 기능 1: 프로필 CRUD(최대 3개), 기본 프로필 지정/변경
 - 기능 1-2(OCR): **2차 개발로 제외**
 - 기능 2: 퀵 맞춤 추천 게이트웨이(`aiEnabled` ON/OFF)
 - 기능 3: 지도 추천 게이트웨이(`aiEnabled` ON/OFF)
+- 기능 3-1: 추천 설명 생성 게이트웨이
 - 공공데이터: 스케줄러 동기화 + 수동 실행 + 원본/정규화 저장
 - 화면 옵션/지도 레이어: 직무 트리, 지역/고용형태/급여방식 옵션, 근로지원인 수행기관 마커 조회
+
+## 회원 탈퇴 상태 전이
+- `ACTIVE` -> `PENDING_DELETION` (탈퇴 신청)
+- `PENDING_DELETION` -> `ACTIVE` (유예기간 내 취소)
+- `PENDING_DELETION` -> `DELETED` (유예기간 만료 후 스케줄러 최종 처리)
+- 유예기간 기본값: `bridgework.auth.withdrawal-grace-period=30d`
 
 ## 프로필 입력 정책(선택형 Enum 강제)
 - 원칙: 자유서술이 아닌 항목은 `Enum`으로 강제한다.
@@ -68,7 +76,6 @@
 
 ### 필수 선택형(Enum)
 - `genderType`: `MALE`, `FEMALE`, `OTHER`, `NOT_DISCLOSED`
-- `residenceRegion`: 서울, 부산, 대구, 인천, 광주, 대전, 울산, 세종, 경기, 강원, 충북, 충남, 전북, 전남, 경북, 경남, 제주
 - `highestEducation`: 고졸 이하, 고졸, 전문대졸, 대졸, 석사, 박사, 기타
 - `graduationStatus`: 졸업, 졸업예정, 재학, 수료, 중퇴, 기타
 - `disabilityType`: 지체장애, 뇌병변장애, 시각장애, 청각장애, 언어장애, 지적장애, 자폐성장애, 정신장애, 신장장애, 심장장애, 호흡기장애, 간장애, 안면장애, 장루·요루장애, 뇌전증장애, 기타
@@ -79,6 +86,11 @@
 ### 선택 선택형(Enum)
 - `workTimePreference`: 주간, 오전, 오후, 야간, 탄력근무, 협의 가능
 - `militaryService`: 군필, 면제, 해당없음, 복무중
+
+### 화면 필터 옵션(Enum)
+- `regions`: value=`SEOUL` 등 영문코드, label=한글
+- `employment-types`: value=`FULL_TIME` 등 영문코드, label=한글
+- `salary-types`: value=`MONTHLY_SALARY` 등 영문코드, label=한글
 
 ### 자유서술/직접입력(예시)
 - 이름, 연락처, 이메일, 상세주소, 자기소개
@@ -108,6 +120,8 @@
 - `BRIDGEWORK_AUTH_JWT_SECRET`
 - `KAKAO_CLIENT_SECRET`
 - `NAVER_CLIENT_SECRET`
+- `BRIDGEWORK_FASTAPI_HEALTH_URL` (선택, 미지정 시 기본 내부 URL 사용)
+- `BRIDGEWORK_RECOMMEND_FASTAPI_BASE_URL` (선택, 미지정 시 기본 내부 URL 사용)
 
 ### 역사 코드 파일(프로젝트 포함)
 - 기본 포함 파일: `backend/resources/reference/operating_agency_station_codes_2026-02-28.xlsx`
@@ -148,6 +162,8 @@
 - `BRIDGEWORK_AUTH_JWT_SECRET`
 - `KAKAO_CLIENT_SECRET`
 - `NAVER_CLIENT_SECRET`
+- `BRIDGEWORK_FASTAPI_HEALTH_URL` (선택)
+- `BRIDGEWORK_RECOMMEND_FASTAPI_BASE_URL` (선택)
 
 ### 생성 방식
 - GitHub Actions가 위 개별 Secrets를 읽어 `application-prod.yml`을 런타임에 생성
@@ -663,8 +679,8 @@
 | `openPlcCont` | 개최장소 |
 
 ## 데이터 저장 방식
-- `app_user`: 계정 정보(소셜 provider/userId, 이메일, 권한, 가입완료)
-- `onboarding_profile`: 사용자 프로필(최대 3개, 기본 프로필 1개 필수)
+- `app_user`: 계정 정보(소셜 provider/userId, 이메일, 권한, 가입완료, 상태/탈퇴시각)
+- `user_profile`: 사용자 프로필(최대 3개, 기본 프로필 1개 필수)
 - `public_data_record`: 원본 payload(JSON), 해시, 외부ID, 수집시각 저장
 - `public_data_record_field`: payload를 `field_path` 단위로 펼쳐 저장
 - `pd_*` 정규화 테이블: 데이터셋별 컬럼형 저장(스코어링/지도 조회용)
@@ -755,6 +771,7 @@
 - ShedLock 적용으로 다중 인스턴스 중복 실행 방지
 - 페이징은 API별 최대 페이지 크기로 조회하고 마지막 페이지까지 순회
 - `SEOUL_WHEELCHAIR_RAMP_STATUS`, `SEOUL_LOW_FLOOR_BUS_ROUTE_RETENTION`는 최신 파일 revision 동일 시 스킵(`public_data_source_snapshot` 기준)
+- 탈퇴 최종 처리 스케줄러: `bridgework.auth.withdrawal-finalize-interval` (기본 `1h`)
 
 ## Discord 알림
 - 동기화 시작: `🚀 [공공데이터 동기화 시작 알림]`
@@ -767,6 +784,7 @@
 
 ## 수동 실행/조회 API
 - 소셜 로그인: `POST /api/v1/auth/social/login`
+  - 응답 상태: `SIGNUP_REQUIRED` / `ACTIVE` / `PENDING_DELETION`
 - 회원가입 완료(기본 프로필 생성 포함): `POST /api/v1/auth/social/signup/complete`
 - 관리자 로그인: `POST /api/v1/auth/admin/login`
   - 요청 바디: `{"loginId":"admin01","password":"***"}`
@@ -774,6 +792,8 @@
 - 토큰 재발급: `POST /api/v1/auth/token/refresh`
 - 로그아웃: `POST /api/v1/auth/logout`
 - 내 정보 조회: `GET /api/v1/auth/me`
+- 회원 탈퇴 신청: `DELETE /api/v1/auth/withdraw`
+- 회원 탈퇴 신청 취소: `POST /api/v1/auth/withdraw/cancel`
 
 - 내 프로필 목록: `GET /api/v1/profiles`
 - 프로필 생성: `POST /api/v1/profiles`
@@ -792,6 +812,8 @@
 - 퀵 추천 게이트웨이(기능2): `POST /api/v1/recommend/quick`
 - 지도 추천 게이트웨이(기능3): `POST /api/v1/recommend/map`
   - 요청 바디: `{"aiEnabled": true|false, "profileId": 1}`
+- 추천 설명 생성 게이트웨이: `POST /api/v1/recommend/explain`
+  - 요청 바디: FastAPI 설명 API 스키마에 맞는 `job/score/evidence` 구조
 
 - 전체 동기화(관리자): `POST /api/v1/admin/sync/public-data/run`
 - 단일 동기화(관리자): `POST /api/v1/admin/sync/public-data/run?sourceType=KEPAD_RECRUITMENT`
