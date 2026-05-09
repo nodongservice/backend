@@ -44,7 +44,6 @@ public record UserProfileResponseDto(
         String awards,
         String trainings,
 
-        Boolean disabilityYn,
         String disabilitySeverity,
         Boolean disabilityRegisteredYn,
         String disabilityDescription,
