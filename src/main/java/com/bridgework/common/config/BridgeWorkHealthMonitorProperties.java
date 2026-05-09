@@ -3,6 +3,8 @@ package com.bridgework.common.config;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import java.time.Duration;
+import java.util.Arrays;
+import java.util.List;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.validation.annotation.Validated;
 
@@ -20,9 +22,6 @@ public class BridgeWorkHealthMonitorProperties {
 
     @NotBlank
     private String fastapiHealthUrl = "http://localhost:8000/health";
-
-    @NotBlank
-    private String fastapiDbHealthUrl = "http://localhost:8000/db-health";
 
     @NotNull
     private Duration alertReminderInterval = Duration.ofMinutes(10);
@@ -59,12 +58,11 @@ public class BridgeWorkHealthMonitorProperties {
         this.fastapiHealthUrl = fastapiHealthUrl;
     }
 
-    public String getFastapiDbHealthUrl() {
-        return fastapiDbHealthUrl;
-    }
-
-    public void setFastapiDbHealthUrl(String fastapiDbHealthUrl) {
-        this.fastapiDbHealthUrl = fastapiDbHealthUrl;
+    public List<String> getFastapiHealthUrls() {
+        return Arrays.stream(fastapiHealthUrl.split(","))
+                .map(String::trim)
+                .filter(url -> !url.isBlank())
+                .toList();
     }
 
     public Duration getAlertReminderInterval() {

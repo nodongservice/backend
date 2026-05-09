@@ -4,6 +4,7 @@ import com.bridgework.common.config.BridgeWorkHealthMonitorProperties;
 import com.bridgework.common.notification.DiscordNotifierService;
 import java.time.Duration;
 import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
@@ -21,7 +22,6 @@ public class SystemHealthMonitorScheduler {
 
     private static final String CHECK_SPRING_DB = "SPRING_DB";
     private static final String CHECK_FASTAPI_HEALTH = "FASTAPI_HEALTH";
-    private static final String CHECK_FASTAPI_DB_HEALTH = "FASTAPI_DB_HEALTH";
 
     private final JdbcTemplate jdbcTemplate;
     private final WebClient webClient;
@@ -50,8 +50,7 @@ public class SystemHealthMonitorScheduler {
         }
 
         evaluate(CHECK_SPRING_DB, this::checkSpringDbHealth);
-        evaluate(CHECK_FASTAPI_HEALTH, () -> checkHttpHealth(healthMonitorProperties.getFastapiHealthUrl()));
-        evaluate(CHECK_FASTAPI_DB_HEALTH, () -> checkHttpHealth(healthMonitorProperties.getFastapiDbHealthUrl()));
+        evaluate(CHECK_FASTAPI_HEALTH, this::checkFastApiHealth);
     }
 
     private void evaluate(String checkName, HealthCheckExecutor executor) {
@@ -100,6 +99,27 @@ public class SystemHealthMonitorScheduler {
         } catch (Exception exception) {
             return HealthCheckResult.createDown("Spring DB 연결 확인 실패: " + summarize(exception));
         }
+    }
+
+    private HealthCheckResult checkFastApiHealth() {
+        List<String> urls = healthMonitorProperties.getFastapiHealthUrls();
+        if (urls.isEmpty()) {
+            return HealthCheckResult.createDown("FastAPI health URL이 비어 있습니다.");
+        }
+
+        StringBuilder reasons = new StringBuilder();
+        for (String url : urls) {
+            HealthCheckResult result = checkHttpHealth(url);
+            if (result.up()) {
+                return result;
+            }
+            if (!reasons.isEmpty()) {
+                reasons.append(" | ");
+            }
+            reasons.append(url).append(" -> ").append(result.reason());
+        }
+
+        return HealthCheckResult.createDown("모든 FastAPI health URL 실패: " + reasons);
     }
 
     private HealthCheckResult checkHttpHealth(String url) {
