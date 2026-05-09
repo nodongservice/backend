@@ -16,6 +16,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.regex.Pattern;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -23,6 +24,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class PublicDataNormalizedStoreService {
+
+    private static final Pattern DECIMAL_PATTERN = Pattern.compile("^[+-]?(?:\\d+(?:\\.\\d+)?|\\.\\d+)$");
+    private static final Set<String> COORDINATE_COLUMNS = Set.of("latitude", "longitude", "geo_latitude", "geo_longitude");
 
     private final NamedParameterJdbcTemplate namedParameterJdbcTemplate;
     private final ObjectMapper objectMapper;
@@ -58,7 +62,7 @@ public class PublicDataNormalizedStoreService {
 
         for (NormalizedSourceDefinition.NormalizedColumnMapping mapping : definition.columnMappings()) {
             String value = extractFieldValue(payloadNode, mapping.sourceField());
-            params.addValue(mapping.columnName(), value);
+            params.addValue(mapping.columnName(), convertColumnValue(mapping.columnName(), value));
         }
 
         applyGeocoding(definition, payloadNode, params);
@@ -201,6 +205,31 @@ public class PublicDataNormalizedStoreService {
         params.addValue(definition.geocodeLatitudeColumn(), geoPoint.get().latitude());
         params.addValue(definition.geocodeLongitudeColumn(), geoPoint.get().longitude());
         params.addValue(definition.geocodeMatchedAddressColumn(), geoPoint.get().matchedAddress());
+    }
+
+    private Object convertColumnValue(String columnName, String rawValue) {
+        if (!COORDINATE_COLUMNS.contains(columnName)) {
+            return rawValue;
+        }
+        return parseCoordinate(rawValue);
+    }
+
+    private Double parseCoordinate(String rawValue) {
+        if (rawValue == null) {
+            return null;
+        }
+        String normalized = rawValue.trim();
+        if (normalized.isEmpty()) {
+            return null;
+        }
+        if (!DECIMAL_PATTERN.matcher(normalized).matches()) {
+            return null;
+        }
+        try {
+            return Double.valueOf(normalized);
+        } catch (NumberFormatException ignored) {
+            return null;
+        }
     }
 
     private String buildUpsertSql(NormalizedSourceDefinition definition) {
