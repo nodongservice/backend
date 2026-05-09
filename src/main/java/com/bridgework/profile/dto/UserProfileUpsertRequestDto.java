@@ -1,6 +1,7 @@
 package com.bridgework.profile.dto;
 
 import com.bridgework.auth.entity.GenderType;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
@@ -8,6 +9,30 @@ import jakarta.validation.constraints.Email;
 import java.time.LocalDate;
 import java.util.List;
 
+@Schema(
+        description = "회원 프로필 생성/수정 요청 DTO",
+        requiredProperties = {
+                "disabilityType",
+                "fullName",
+                "contactPhone",
+                "contactEmail",
+                "birthDate",
+                "genderType",
+                "residenceRegion",
+                "detailAddress",
+                "highestEducation",
+                "graduationStatus",
+                "majorCareer",
+                "targetJob",
+                "skills",
+                "disabilityYn",
+                "disabilitySeverity",
+                "disabilityRegisteredYn",
+                "workAvailability",
+                "workTypes",
+                "selfIntroduction"
+        }
+)
 public record UserProfileUpsertRequestDto(
         // 기능 2/3 화면 필터에서 주로 사용하는 값으로 선택 입력을 허용한다.
         String desiredJob,
