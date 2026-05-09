@@ -54,7 +54,7 @@ public class OptionController {
     @GetMapping("/salary-types")
     @Operation(summary = "급여 방식 옵션 조회", description = "화면 필터에서 사용할 급여 방식 옵션을 조회한다.")
     @ApiResponse(responseCode = "200", description = "조회 성공",
-            content = @Content(examples = @ExampleObject(value = "{\"code\":\"SUCCESS\",\"message\":\"요청이 성공했습니다.\",\"result\":[{\"value\":\"월급\",\"label\":\"월급\"},{\"value\":\"연봉\",\"label\":\"연봉\"}]}")))
+            content = @Content(examples = @ExampleObject(value = "{\"code\":\"SUCCESS\",\"message\":\"요청이 성공했습니다.\",\"result\":[{\"value\":\"MONTHLY_SALARY\",\"label\":\"월급\"},{\"value\":\"ANNUAL_SALARY\",\"label\":\"연봉\"}]}")))
     public ResponseEntity<com.bridgework.common.dto.ApiResponse<List<OptionItemDto>>> getSalaryTypes() {
         return ResponseEntity.ok(com.bridgework.common.dto.ApiResponse.success(optionQueryService.getSalaryTypes()));
     }

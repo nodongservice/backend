@@ -5,6 +5,7 @@ import com.bridgework.auth.repository.AppUserRepository;
 import com.bridgework.profile.dto.UserProfileResponseDto;
 import com.bridgework.profile.dto.UserProfileUpsertRequestDto;
 import com.bridgework.profile.entity.UserProfile;
+import com.bridgework.profile.enums.LabeledEnum;
 import com.bridgework.profile.exception.ProfileDomainException;
 import com.bridgework.profile.exception.UserProfileNotFoundException;
 import com.bridgework.profile.repository.UserProfileRepository;
@@ -150,7 +151,7 @@ public class UserProfileService {
         String requiredSupportsJson = toJson(request.requiredSupports());
         String skillsJson = toJson(request.skills());
         String certificationsJson = toJson(request.certifications());
-        String workTypesJson = toJson(request.workTypes());
+        String workTypesJson = toJsonLabeledEnum(request.workTypes());
 
         String aiJobTagsJson = toJson(profileAiTags.jobTags());
         String aiEnvironmentTagsJson = toJson(profileAiTags.environmentTags());
@@ -261,6 +262,13 @@ public class UserProfileService {
                     "프로필 데이터 직렬화에 실패했습니다."
             );
         }
+    }
+
+    private String toJsonLabeledEnum(List<? extends LabeledEnum> values) {
+        List<String> labels = values == null
+                ? List.of()
+                : values.stream().map(value -> ((Enum<?>) value).name()).toList();
+        return toJson(labels);
     }
 
     private List<String> toStringList(String json) {

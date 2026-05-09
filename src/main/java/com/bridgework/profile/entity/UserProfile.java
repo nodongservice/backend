@@ -231,7 +231,7 @@ public class UserProfile {
         this.preferredWorkEnvironmentsJson = preferredWorkEnvironmentsJson;
         this.avoidedWorkEnvironmentsJson = avoidedWorkEnvironmentsJson;
         this.requiredSupportsJson = requiredSupportsJson;
-        this.disabilityType = request.disabilityType();
+        this.disabilityType = enumCode(request.disabilityType());
         this.careerSummary = request.careerSummary();
         this.educationSummary = request.educationSummary();
         this.employmentTypeSummary = request.employmentTypeSummary();
@@ -242,13 +242,13 @@ public class UserProfile {
         this.birthDate = request.birthDate();
         this.genderType = request.genderType();
         this.ageGroup = request.ageGroup();
-        this.residenceRegion = request.residenceRegion();
+        this.residenceRegion = enumCode(request.residenceRegion());
         this.detailAddress = request.detailAddress();
         this.emergencyContact = request.emergencyContact();
         this.profileImageUrl = request.profileImageUrl();
 
-        this.highestEducation = request.highestEducation();
-        this.graduationStatus = request.graduationStatus();
+        this.highestEducation = enumCode(request.highestEducation());
+        this.graduationStatus = enumCode(request.graduationStatus());
         this.majorCareer = request.majorCareer();
         this.careerDetail = request.careerDetail();
         this.projectExperience = request.projectExperience();
@@ -261,16 +261,16 @@ public class UserProfile {
         this.awards = request.awards();
         this.trainings = request.trainings();
 
-        this.disabilitySeverity = request.disabilitySeverity();
+        this.disabilitySeverity = enumCode(request.disabilitySeverity());
         this.disabilityRegisteredYn = request.disabilityRegisteredYn();
         this.disabilityDescription = request.disabilityDescription();
         this.assistiveDevices = request.assistiveDevices();
         this.workSupportRequirements = request.workSupportRequirements();
 
-        this.workAvailability = request.workAvailability();
+        this.workAvailability = enumCode(request.workAvailability());
         this.workTypesJson = workTypesJson;
         this.expectedSalary = request.expectedSalary();
-        this.workTimePreference = request.workTimePreference();
+        this.workTimePreference = enumCode(request.workTimePreference());
         this.remoteAvailableYn = request.remoteAvailableYn();
         this.mobilityRange = request.mobilityRange();
 
@@ -280,7 +280,7 @@ public class UserProfile {
         this.careerGoal = request.careerGoal();
         this.strengthsWeaknesses = request.strengthsWeaknesses();
 
-        this.militaryService = request.militaryService();
+        this.militaryService = enumCode(request.militaryService());
         this.patrioticVeteranYn = request.patrioticVeteranYn();
         this.referrer = request.referrer();
         this.snsUrl = request.snsUrl();
@@ -288,6 +288,10 @@ public class UserProfile {
         this.aiJobTagsJson = aiJobTagsJson;
         this.aiEnvironmentTagsJson = aiEnvironmentTagsJson;
         this.aiSupportTagsJson = aiSupportTagsJson;
+    }
+
+    private String enumCode(Enum<?> value) {
+        return value == null ? null : value.name();
     }
 
     public Long getId() {

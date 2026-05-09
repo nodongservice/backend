@@ -1,6 +1,7 @@
 package com.bridgework.profile.service;
 
 import com.bridgework.profile.dto.UserProfileUpsertRequestDto;
+import com.bridgework.profile.enums.LabeledEnum;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashSet;
@@ -22,12 +23,20 @@ public class ProfileAiTagService {
         List<String> environmentTags = mergeUnique(
                 request.preferredWorkEnvironments(),
                 request.avoidedWorkEnvironments(),
-                nullableValues(request.workAvailability(), request.disabilitySeverity(), request.commuteRange())
+                nullableValues(
+                        enumLabel(request.workAvailability()),
+                        enumLabel(request.disabilitySeverity()),
+                        request.commuteRange()
+                )
         );
 
         List<String> supportTags = mergeUnique(
                 request.requiredSupports(),
-                nullableValues(request.disabilityType(), request.workSupportRequirements(), request.assistiveDevices())
+                nullableValues(
+                        enumLabel(request.disabilityType()),
+                        request.workSupportRequirements(),
+                        request.assistiveDevices()
+                )
         );
 
         return new ProfileAiTags(jobTags, environmentTags, supportTags);
@@ -38,6 +47,10 @@ public class ProfileAiTagService {
             return List.of();
         }
         return new ArrayList<>(Arrays.asList(values));
+    }
+
+    private String enumLabel(LabeledEnum value) {
+        return value == null ? null : ((Enum<?>) value).name();
     }
 
     @SafeVarargs

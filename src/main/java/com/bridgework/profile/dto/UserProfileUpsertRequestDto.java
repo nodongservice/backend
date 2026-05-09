@@ -1,6 +1,15 @@
 package com.bridgework.profile.dto;
 
 import com.bridgework.auth.entity.GenderType;
+import com.bridgework.profile.enums.ProfileDisabilitySeverity;
+import com.bridgework.profile.enums.ProfileDisabilityType;
+import com.bridgework.profile.enums.ProfileGraduationStatus;
+import com.bridgework.profile.enums.ProfileHighestEducation;
+import com.bridgework.profile.enums.ProfileMilitaryService;
+import com.bridgework.profile.enums.ProfileResidenceRegion;
+import com.bridgework.profile.enums.ProfileWorkAvailability;
+import com.bridgework.profile.enums.ProfileWorkTimePreference;
+import com.bridgework.profile.enums.ProfileWorkType;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
@@ -40,8 +49,8 @@ public record UserProfileUpsertRequestDto(
         List<String> preferredWorkEnvironments,
         List<String> avoidedWorkEnvironments,
         List<String> requiredSupports,
-        @NotBlank(message = "장애 종류는 필수입니다.")
-        String disabilityType,
+        @NotNull(message = "장애 종류는 필수입니다.")
+        ProfileDisabilityType disabilityType,
         String careerSummary,
         String educationSummary,
         String employmentTypeSummary,
@@ -58,17 +67,17 @@ public record UserProfileUpsertRequestDto(
         @NotNull(message = "성별은 필수입니다.")
         GenderType genderType,
         String ageGroup,
-        @NotBlank(message = "거주 지역은 필수입니다.")
-        String residenceRegion,
+        @NotNull(message = "거주 지역은 필수입니다.")
+        ProfileResidenceRegion residenceRegion,
         @NotBlank(message = "상세 주소는 필수입니다.")
         String detailAddress,
         String emergencyContact,
         String profileImageUrl,
 
-        @NotBlank(message = "최종 학력은 필수입니다.")
-        String highestEducation,
-        @NotBlank(message = "졸업 여부는 필수입니다.")
-        String graduationStatus,
+        @NotNull(message = "최종 학력은 필수입니다.")
+        ProfileHighestEducation highestEducation,
+        @NotNull(message = "졸업 여부는 필수입니다.")
+        ProfileGraduationStatus graduationStatus,
         @NotBlank(message = "주요 경력은 필수입니다.")
         String majorCareer,
         String careerDetail,
@@ -84,20 +93,20 @@ public record UserProfileUpsertRequestDto(
         String awards,
         String trainings,
 
-        @NotBlank(message = "장애 정도는 필수입니다.")
-        String disabilitySeverity,
+        @NotNull(message = "장애 정도는 필수입니다.")
+        ProfileDisabilitySeverity disabilitySeverity,
         @NotNull(message = "장애인 등록 여부는 필수입니다.")
         Boolean disabilityRegisteredYn,
         String disabilityDescription,
         String assistiveDevices,
         String workSupportRequirements,
 
-        @NotBlank(message = "근무 가능 여부는 필수입니다.")
-        String workAvailability,
+        @NotNull(message = "근무 가능 여부는 필수입니다.")
+        ProfileWorkAvailability workAvailability,
         @NotEmpty(message = "근무 형태는 1개 이상 필요합니다.")
-        List<String> workTypes,
+        List<ProfileWorkType> workTypes,
         String expectedSalary,
-        String workTimePreference,
+        ProfileWorkTimePreference workTimePreference,
         Boolean remoteAvailableYn,
         String mobilityRange,
 
@@ -108,7 +117,7 @@ public record UserProfileUpsertRequestDto(
         String careerGoal,
         String strengthsWeaknesses,
 
-        String militaryService,
+        ProfileMilitaryService militaryService,
         Boolean patrioticVeteranYn,
         String referrer,
         String snsUrl

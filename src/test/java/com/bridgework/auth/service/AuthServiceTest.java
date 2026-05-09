@@ -23,6 +23,13 @@ import com.bridgework.auth.security.JwtTokenProvider;
 import com.bridgework.auth.security.ParsedJwtToken;
 import com.bridgework.common.notification.DiscordNotifierService;
 import com.bridgework.profile.dto.UserProfileUpsertRequestDto;
+import com.bridgework.profile.enums.ProfileDisabilitySeverity;
+import com.bridgework.profile.enums.ProfileDisabilityType;
+import com.bridgework.profile.enums.ProfileGraduationStatus;
+import com.bridgework.profile.enums.ProfileHighestEducation;
+import com.bridgework.profile.enums.ProfileResidenceRegion;
+import com.bridgework.profile.enums.ProfileWorkAvailability;
+import com.bridgework.profile.enums.ProfileWorkType;
 import com.bridgework.profile.repository.UserProfileRepository;
 import com.bridgework.profile.service.UserProfileService;
 import java.time.Duration;
@@ -174,7 +181,7 @@ class AuthServiceTest {
                 java.util.List.of("실내"),
                 java.util.List.of("소음"),
                 java.util.List.of("출입구 경사로"),
-                "지체",
+                ProfileDisabilityType.PHYSICAL,
                 "사무보조 3년",
                 "대졸",
                 "정규직",
@@ -184,12 +191,12 @@ class AuthServiceTest {
                 java.time.LocalDate.of(1990, 1, 1),
                 GenderType.MALE,
                 null,
-                "서울",
+                ProfileResidenceRegion.SEOUL,
                 "강남구",
                 null,
                 null,
-                "대졸",
-                "졸업",
+                ProfileHighestEducation.BACHELOR,
+                ProfileGraduationStatus.GRADUATED,
                 "A사 사무보조",
                 null,
                 null,
@@ -200,13 +207,13 @@ class AuthServiceTest {
                 null,
                 null,
                 null,
-                "중증",
+                ProfileDisabilitySeverity.SEVERE,
                 true,
                 null,
                 null,
                 null,
-                "즉시",
-                java.util.List.of("정규직"),
+                ProfileWorkAvailability.IMMEDIATE,
+                java.util.List.of(ProfileWorkType.FULL_TIME),
                 null,
                 null,
                 null,

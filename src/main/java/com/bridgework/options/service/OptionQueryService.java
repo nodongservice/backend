@@ -2,6 +2,9 @@ package com.bridgework.options.service;
 
 import com.bridgework.options.dto.JobCategoryTreeNodeDto;
 import com.bridgework.options.dto.OptionItemDto;
+import com.bridgework.options.enums.FilterSalaryType;
+import com.bridgework.profile.enums.ProfileResidenceRegion;
+import com.bridgework.profile.enums.ProfileWorkType;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -14,46 +17,17 @@ import org.springframework.stereotype.Service;
 @Service
 public class OptionQueryService {
 
-    private static final List<OptionItemDto> REGION_OPTIONS = List.of(
-            new OptionItemDto("서울", "서울"),
-            new OptionItemDto("부산", "부산"),
-            new OptionItemDto("대구", "대구"),
-            new OptionItemDto("인천", "인천"),
-            new OptionItemDto("광주", "광주"),
-            new OptionItemDto("대전", "대전"),
-            new OptionItemDto("울산", "울산"),
-            new OptionItemDto("세종", "세종"),
-            new OptionItemDto("경기", "경기"),
-            new OptionItemDto("강원", "강원"),
-            new OptionItemDto("충북", "충북"),
-            new OptionItemDto("충남", "충남"),
-            new OptionItemDto("전북", "전북"),
-            new OptionItemDto("전남", "전남"),
-            new OptionItemDto("경북", "경북"),
-            new OptionItemDto("경남", "경남"),
-            new OptionItemDto("제주", "제주")
-    );
+    private static final List<OptionItemDto> REGION_OPTIONS = List.of(ProfileResidenceRegion.values()).stream()
+            .map(value -> new OptionItemDto(value.name(), value.getKoreanLabel()))
+            .toList();
 
-    private static final List<OptionItemDto> EMPLOYMENT_TYPE_OPTIONS = List.of(
-            new OptionItemDto("정규직", "정규직"),
-            new OptionItemDto("계약직", "계약직"),
-            new OptionItemDto("무기계약직", "무기계약직"),
-            new OptionItemDto("시간제", "시간제"),
-            new OptionItemDto("일용직", "일용직"),
-            new OptionItemDto("인턴", "인턴"),
-            new OptionItemDto("파견/용역", "파견/용역"),
-            new OptionItemDto("재택/원격", "재택/원격")
-    );
+    private static final List<OptionItemDto> EMPLOYMENT_TYPE_OPTIONS = List.of(ProfileWorkType.values()).stream()
+            .map(value -> new OptionItemDto(value.name(), value.getKoreanLabel()))
+            .toList();
 
-    private static final List<OptionItemDto> SALARY_TYPE_OPTIONS = List.of(
-            new OptionItemDto("월급", "월급"),
-            new OptionItemDto("연봉", "연봉"),
-            new OptionItemDto("시급", "시급"),
-            new OptionItemDto("일급", "일급"),
-            new OptionItemDto("건별/성과급", "건별/성과급"),
-            new OptionItemDto("회사 내규에 따름", "회사 내규에 따름"),
-            new OptionItemDto("면접 후 협의", "면접 후 협의")
-    );
+    private static final List<OptionItemDto> SALARY_TYPE_OPTIONS = List.of(FilterSalaryType.values()).stream()
+            .map(value -> new OptionItemDto(value.name(), value.getKoreanLabel()))
+            .toList();
 
     private final NamedParameterJdbcTemplate namedParameterJdbcTemplate;
 

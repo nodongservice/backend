@@ -5,6 +5,13 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 
 import com.bridgework.auth.entity.GenderType;
 import com.bridgework.profile.dto.UserProfileUpsertRequestDto;
+import com.bridgework.profile.enums.ProfileDisabilitySeverity;
+import com.bridgework.profile.enums.ProfileDisabilityType;
+import com.bridgework.profile.enums.ProfileGraduationStatus;
+import com.bridgework.profile.enums.ProfileHighestEducation;
+import com.bridgework.profile.enums.ProfileResidenceRegion;
+import com.bridgework.profile.enums.ProfileWorkAvailability;
+import com.bridgework.profile.enums.ProfileWorkType;
 import java.time.LocalDate;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -23,8 +30,8 @@ class ProfileAiTagServiceTest {
         ProfileAiTags tags = profileAiTagService.buildTags(request);
 
         assertThat(tags.jobTags()).contains("사무보조", "엑셀");
-        assertThat(tags.environmentTags()).contains("즉시", "중증");
-        assertThat(tags.supportTags()).contains("지체");
+        assertThat(tags.environmentTags()).contains("IMMEDIATE", "SEVERE");
+        assertThat(tags.supportTags()).contains("PHYSICAL");
     }
 
     private UserProfileUpsertRequestDto baseRequestWithNullableSupportFields() {
@@ -34,7 +41,7 @@ class ProfileAiTagServiceTest {
                 List.of("실내", "주간"),
                 List.of("소음"),
                 List.of("휠체어 접근"),
-                "지체",
+                ProfileDisabilityType.PHYSICAL,
                 "사무 경력 3년",
                 "대졸",
                 "정규직",
@@ -45,13 +52,13 @@ class ProfileAiTagServiceTest {
                 LocalDate.of(1995, 5, 10),
                 GenderType.MALE,
                 null,
-                "서울",
+                ProfileResidenceRegion.SEOUL,
                 "강남구",
                 null,
                 null,
 
-                "대학교 졸업",
-                "졸업",
+                ProfileHighestEducation.BACHELOR,
+                ProfileGraduationStatus.GRADUATED,
                 "A사 사무보조",
                 null,
                 null,
@@ -63,14 +70,14 @@ class ProfileAiTagServiceTest {
                 null,
                 null,
                 null,
-                "중증",
+                ProfileDisabilitySeverity.SEVERE,
                 true,
                 null,
                 null,
                 null,
 
-                "즉시",
-                List.of("정규직"),
+                ProfileWorkAvailability.IMMEDIATE,
+                List.of(ProfileWorkType.FULL_TIME),
                 null,
                 null,
                 false,

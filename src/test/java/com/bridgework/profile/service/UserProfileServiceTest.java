@@ -13,6 +13,15 @@ import com.bridgework.common.exception.BridgeWorkDomainException;
 import com.bridgework.profile.dto.UserProfileResponseDto;
 import com.bridgework.profile.dto.UserProfileUpsertRequestDto;
 import com.bridgework.profile.entity.UserProfile;
+import com.bridgework.profile.enums.ProfileDisabilitySeverity;
+import com.bridgework.profile.enums.ProfileDisabilityType;
+import com.bridgework.profile.enums.ProfileGraduationStatus;
+import com.bridgework.profile.enums.ProfileHighestEducation;
+import com.bridgework.profile.enums.ProfileMilitaryService;
+import com.bridgework.profile.enums.ProfileResidenceRegion;
+import com.bridgework.profile.enums.ProfileWorkAvailability;
+import com.bridgework.profile.enums.ProfileWorkTimePreference;
+import com.bridgework.profile.enums.ProfileWorkType;
 import com.bridgework.profile.exception.UserProfileNotFoundException;
 import com.bridgework.profile.repository.UserProfileRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -168,7 +177,7 @@ class UserProfileServiceTest {
                 List.of("실내", "주간"),
                 List.of("소음"),
                 List.of("휠체어 접근"),
-                "지체",
+                ProfileDisabilityType.PHYSICAL,
                 "사무 경력 3년",
                 "대졸",
                 "정규직",
@@ -179,13 +188,13 @@ class UserProfileServiceTest {
                 birthDate,
                 GenderType.MALE,
                 ageGroup,
-                "서울",
+                ProfileResidenceRegion.SEOUL,
                 "강남구",
                 "010-9999-9999",
                 "https://example.com/profile.jpg",
 
-                "대학교 졸업",
-                "졸업",
+                ProfileHighestEducation.BACHELOR,
+                ProfileGraduationStatus.GRADUATED,
                 "A사 사무보조",
                 "문서 관리",
                 "내부 시스템 개선",
@@ -197,16 +206,16 @@ class UserProfileServiceTest {
                 "https://example.com/portfolio",
                 "우수사원",
                 "직무교육",
-                "중증",
+                ProfileDisabilitySeverity.SEVERE,
                 true,
                 "이동 시 보조 필요",
                 "수동 휠체어",
                 "출입구 경사로",
 
-                "즉시",
-                List.of("정규직"),
+                ProfileWorkAvailability.IMMEDIATE,
+                List.of(ProfileWorkType.FULL_TIME),
                 "3000만원",
-                "주간",
+                ProfileWorkTimePreference.DAYTIME,
                 false,
                 "대중교통 1회 환승",
 
@@ -216,7 +225,7 @@ class UserProfileServiceTest {
                 "행정 전문가",
                 "꼼꼼함/완벽주의",
 
-                "해당없음",
+                ProfileMilitaryService.NOT_APPLICABLE,
                 false,
                 "지인 추천",
                 "https://example.com/sns"
