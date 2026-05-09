@@ -52,7 +52,6 @@ bridgework:
     server-url: /
   discord:
     spring-bot-webhook-url: ""
-    infra-alert-webhook-url: ""
   health-monitor:
     enabled: true
     interval: 60s

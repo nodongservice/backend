@@ -22,7 +22,6 @@ bridgework:
     server-url: /
   discord:
     spring-bot-webhook-url: ${SPRING_BOT_DISCORD_WEBHOOK_URL}
-    infra-alert-webhook-url: ${INFRA_ALERT_DISCORD_WEBHOOK_URL:}
   health-monitor:
     fastapi-health-url: ${BRIDGEWORK_FASTAPI_HEALTH_URL:http://host.docker.internal/api/py/health}
     fastapi-db-health-url: ${BRIDGEWORK_FASTAPI_DB_HEALTH_URL:http://host.docker.internal/api/py/db-health}

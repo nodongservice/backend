@@ -11,22 +11,11 @@ public class BridgeWorkDiscordProperties {
     @NotNull
     private String springBotWebhookUrl = "";
 
-    @NotNull
-    private String infraAlertWebhookUrl = "";
-
     public String getSpringBotWebhookUrl() {
         return springBotWebhookUrl;
     }
 
     public void setSpringBotWebhookUrl(String springBotWebhookUrl) {
         this.springBotWebhookUrl = springBotWebhookUrl;
-    }
-
-    public String getInfraAlertWebhookUrl() {
-        return infraAlertWebhookUrl;
-    }
-
-    public void setInfraAlertWebhookUrl(String infraAlertWebhookUrl) {
-        this.infraAlertWebhookUrl = infraAlertWebhookUrl;
     }
 }
