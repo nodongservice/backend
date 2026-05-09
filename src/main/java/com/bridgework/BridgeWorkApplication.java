@@ -2,6 +2,7 @@ package com.bridgework;
 
 import com.bridgework.auth.config.BridgeWorkAuthProperties;
 import com.bridgework.common.config.BridgeWorkDiscordProperties;
+import com.bridgework.common.config.BridgeWorkHealthMonitorProperties;
 import com.bridgework.recommend.config.BridgeWorkRecommendProperties;
 import com.bridgework.sync.config.BridgeWorkSyncProperties;
 import net.javacrumbs.shedlock.spring.annotation.EnableSchedulerLock;
@@ -15,6 +16,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 @SpringBootApplication
 @EnableConfigurationProperties({
         BridgeWorkDiscordProperties.class,
+        BridgeWorkHealthMonitorProperties.class,
         BridgeWorkSyncProperties.class,
         BridgeWorkAuthProperties.class,
         BridgeWorkRecommendProperties.class

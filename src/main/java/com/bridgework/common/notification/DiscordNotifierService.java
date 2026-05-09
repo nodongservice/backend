@@ -34,6 +34,8 @@ public class DiscordNotifierService {
     private static final String HEADER_SIGNUP_COMPLETED = "🎉 [회원가입 완료 알림]";
     private static final String HEADER_ADMIN_LOCKED = "🔒 [관리자 계정 잠금 알림]";
     private static final String HEADER_UNHANDLED_EXCEPTION = "🚨 [Unhandled Exception 알림]";
+    private static final String HEADER_HEALTH_ISSUE = "🚨 [시스템 헬스체크 장애]";
+    private static final String HEADER_HEALTH_RECOVERY = "✅ [시스템 헬스체크 복구]";
     private static final String HEADER_GENERIC = "ℹ️ [시스템 알림]";
 
     private final WebClient webClient;
@@ -137,8 +139,38 @@ public class DiscordNotifierService {
         send(discordMessage);
     }
 
+    public void notifyHealthCheckIssue(String checkName, String reason, OffsetDateTime detectedAtUtc) {
+        String safeCheckName = (checkName == null || checkName.isBlank()) ? "(unknown-check)" : checkName;
+        String safeReason = (reason == null || reason.isBlank()) ? "원인 미상" : reason;
+        String safeDetectedAt = detectedAtUtc == null ? "(unknown-time)" : detectedAtUtc.toString();
+
+        String message = HEADER_HEALTH_ISSUE + '\n'
+                + "체크 항목: " + safeCheckName + '\n'
+                + "감지 시각(UTC): " + safeDetectedAt + '\n'
+                + "원인: " + safeReason + '\n'
+                + '\n';
+
+        send(message);
+    }
+
+    public void notifyHealthCheckRecovered(String checkName, OffsetDateTime recoveredAtUtc, String recoverySummary) {
+        String safeCheckName = (checkName == null || checkName.isBlank()) ? "(unknown-check)" : checkName;
+        String safeRecoveredAt = recoveredAtUtc == null ? "(unknown-time)" : recoveredAtUtc.toString();
+        String safeSummary = (recoverySummary == null || recoverySummary.isBlank())
+                ? "정상 응답이 확인되었습니다."
+                : recoverySummary;
+
+        String message = HEADER_HEALTH_RECOVERY + '\n'
+                + "체크 항목: " + safeCheckName + '\n'
+                + "복구 시각(UTC): " + safeRecoveredAt + '\n'
+                + "상세: " + safeSummary + '\n'
+                + '\n';
+
+        send(message);
+    }
+
     private void send(String content) {
-        String webhookUrl = discordProperties.getWebhookUrl();
+        String webhookUrl = discordProperties.getSpringBotWebhookUrl();
         if (webhookUrl == null || webhookUrl.isBlank()) {
             return;
         }
