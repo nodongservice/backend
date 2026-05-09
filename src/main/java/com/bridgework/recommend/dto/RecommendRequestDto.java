@@ -10,7 +10,7 @@ public record RecommendRequestDto(
         )
         Boolean aiEnabled,
         @Schema(
-                description = "선택 프로필 ID(onboarding_profile.id). 미지정 시 기본 프로필을 사용한다.",
+                description = "선택 프로필 ID(user_profile.id). 미지정 시 기본 프로필을 사용한다.",
                 example = "3"
         )
         Long profileId
@@ -20,4 +20,3 @@ public record RecommendRequestDto(
         return aiEnabled == null || aiEnabled;
     }
 }
-

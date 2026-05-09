@@ -14,6 +14,7 @@ import com.bridgework.auth.dto.SocialLoginRequestDto;
 import com.bridgework.auth.dto.SocialLoginResponseDto;
 import com.bridgework.auth.dto.TokenPairResponseDto;
 import com.bridgework.auth.entity.AppUser;
+import com.bridgework.auth.entity.GenderType;
 import com.bridgework.auth.entity.SocialProvider;
 import com.bridgework.auth.entity.UserRole;
 import com.bridgework.auth.exception.InvalidRefreshTokenException;
@@ -181,6 +182,7 @@ class AuthServiceTest {
                 "010-1234-5678",
                 "social@example.com",
                 java.time.LocalDate.of(1990, 1, 1),
+                GenderType.MALE,
                 null,
                 "서울",
                 "강남구",

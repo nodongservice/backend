@@ -5,6 +5,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.bridgework.auth.entity.GenderType;
 import com.bridgework.profile.dto.UserProfileResponseDto;
 import com.bridgework.profile.service.UserProfileService;
 import com.bridgework.recommend.dto.RecommendJobResponseDto;
@@ -128,6 +129,7 @@ class RecommendGatewayServiceTest {
                 "010-1111-1111",
                 "hong@example.com",
                 LocalDate.of(1990, 1, 1),
+                GenderType.MALE,
                 null,
                 "서울",
                 "강남구",
@@ -173,4 +175,3 @@ class RecommendGatewayServiceTest {
         );
     }
 }
-

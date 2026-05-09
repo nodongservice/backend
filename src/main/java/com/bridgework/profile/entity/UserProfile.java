@@ -1,9 +1,12 @@
 package com.bridgework.profile.entity;
 
+import com.bridgework.auth.entity.GenderType;
 import com.bridgework.auth.entity.AppUser;
 import com.bridgework.profile.dto.UserProfileUpsertRequestDto;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -17,7 +20,7 @@ import java.time.LocalDate;
 import java.time.OffsetDateTime;
 
 @Entity
-@Table(name = "onboarding_profile")
+@Table(name = "user_profile")
 public class UserProfile {
 
     @Id
@@ -69,6 +72,10 @@ public class UserProfile {
 
     @Column(name = "birth_date")
     private LocalDate birthDate;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "gender_type", nullable = false, length = 20)
+    private GenderType genderType;
 
     @Column(name = "age_group", length = 50)
     private String ageGroup;
@@ -236,6 +243,7 @@ public class UserProfile {
         this.contactPhone = request.contactPhone();
         this.contactEmail = request.contactEmail();
         this.birthDate = request.birthDate();
+        this.genderType = request.genderType();
         this.ageGroup = request.ageGroup();
         this.residenceRegion = request.residenceRegion();
         this.detailAddress = request.detailAddress();
@@ -356,6 +364,10 @@ public class UserProfile {
 
     public LocalDate getBirthDate() {
         return birthDate;
+    }
+
+    public GenderType getGenderType() {
+        return genderType;
     }
 
     public String getAgeGroup() {
