@@ -197,8 +197,6 @@ class UserProfileServiceTest {
                 "https://example.com/portfolio",
                 "우수사원",
                 "직무교육",
-
-                true,
                 "중증",
                 true,
                 "이동 시 보조 필요",

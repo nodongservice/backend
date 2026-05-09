@@ -25,7 +25,6 @@ import java.util.List;
                 "majorCareer",
                 "targetJob",
                 "skills",
-                "disabilityYn",
                 "disabilitySeverity",
                 "disabilityRegisteredYn",
                 "workAvailability",
@@ -85,8 +84,6 @@ public record UserProfileUpsertRequestDto(
         String awards,
         String trainings,
 
-        @NotNull(message = "장애 여부는 필수입니다.")
-        Boolean disabilityYn,
         @NotBlank(message = "장애 정도는 필수입니다.")
         String disabilitySeverity,
         @NotNull(message = "장애인 등록 여부는 필수입니다.")

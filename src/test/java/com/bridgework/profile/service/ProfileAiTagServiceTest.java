@@ -63,8 +63,6 @@ class ProfileAiTagServiceTest {
                 null,
                 null,
                 null,
-
-                true,
                 "중증",
                 true,
                 null,
