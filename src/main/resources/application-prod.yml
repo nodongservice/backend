@@ -19,7 +19,7 @@ server:
 
 bridgework:
   openapi:
-    server-url: /api/java
+    server-url: /
   discord:
     webhook-url: ${DISCORD_WEBHOOK_URL}
   recommend:
