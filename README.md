@@ -96,10 +96,10 @@
 ## CI/CD (main -> EC2 무중단 배포)
 - 워크플로우: `.github/workflows/cicd-main-ec2.yml`
 - 트리거: `main` 브랜치 push
-- 방식: `Blue/Green` 컨테이너(`18080`, `18081`) 전환
+- 방식: `Blue/Green` 컨테이너(`19000`, `19001`) 전환
 - DB: 컨테이너 DB 미사용, `RDS PostgreSQL` 접속(`application-prod.yml` 외부 파일 마운트)
 - Nginx 라우팅/업스트림 전환: `backend-infra` 레포에서 관리
-- Spring 트래픽 전환 스크립트: `~/bridgework-infra/deploy/spring_blue_green_switch.sh`
+- FastAPI 트래픽 전환 스크립트: `~/bridgework-infra/deploy/fastapi_blue_green_switch.sh`
 - Redis: 배포 스크립트에서 `bridgework-redis` 컨테이너를 자동 생성/기동(동일 Docker network)
 
 ### GitHub Secrets
@@ -126,7 +126,7 @@
 
 ### 생성 방식
 - GitHub Actions가 위 개별 Secrets를 읽어 `application-prod.yml`을 런타임에 생성
-- 생성 파일을 EC2 `~/bridgework/backend/application-prod.yml`로 업로드
+- 생성 파일을 EC2 `~/bridgework/aiserver/application-prod.yml`로 업로드
 - 컨테이너 실행 시 `/app/config/application-prod.yml`로 read-only 마운트
 
 ### EC2 선행 작업
