@@ -18,9 +18,10 @@ public class UserWithdrawalFinalizeScheduler {
         this.authService = authService;
     }
 
+    // 설정값은 Duration으로 바인딩한 뒤 밀리초로 스케줄러에 전달해 문자열 파싱 오류를 방지한다.
     @Scheduled(
-            fixedDelayString = "${bridgework.auth.withdrawal-finalize-interval:PT1H}",
-            initialDelayString = "${bridgework.auth.withdrawal-finalize-interval:PT1H}"
+            fixedDelayString = "#{@bridgeWorkAuthProperties.withdrawalFinalizeInterval.toMillis()}",
+            initialDelayString = "#{@bridgeWorkAuthProperties.withdrawalFinalizeInterval.toMillis()}"
     )
     @SchedulerLock(name = "userWithdrawalFinalizeScheduler", lockAtLeastFor = "PT5S", lockAtMostFor = "PT10M")
     public void finalizeDueWithdrawals() {
@@ -29,4 +30,5 @@ public class UserWithdrawalFinalizeScheduler {
             log.info("탈퇴 유예기간 만료 계정 최종 처리 완료: {}건", finalizedCount);
         }
     }
+
 }
