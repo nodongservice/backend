@@ -31,6 +31,9 @@ import org.springframework.web.bind.annotation.RestController;
 @Tag(name = "Auth", description = "소셜 로그인/회원가입/토큰 API")
 public class AuthController {
 
+    private static final String SIGNUP_COMPLETE_REQUIRED_REQUEST_EXAMPLE = "{\"signupToken\":\"signup-token-sample\",\"email\":\"user@example.com\",\"profile\":{\"fullName\":\"홍길동\",\"contactPhone\":\"010-1234-5678\",\"contactEmail\":\"user@example.com\",\"birthDate\":\"1990-01-01\",\"genderType\":\"MALE\",\"residenceRegion\":\"서울\",\"detailAddress\":\"강남구 테헤란로 123\",\"highestEducation\":\"대졸\",\"graduationStatus\":\"졸업\",\"majorCareer\":\"신입\",\"targetJob\":\"사무보조\",\"skills\":[\"엑셀\",\"문서작성\"],\"disabilityType\":\"지체장애\",\"disabilitySeverity\":\"중등도\",\"disabilityRegisteredYn\":true,\"workAvailability\":\"즉시\",\"workTypes\":[\"정규직\"],\"selfIntroduction\":\"꼼꼼한 문서 작업이 강점입니다.\"}}";
+    private static final String SIGNUP_COMPLETE_FULL_REQUEST_EXAMPLE = "{\"signupToken\":\"signup-token-sample\",\"email\":\"user@example.com\",\"profile\":{\"desiredJob\":\"데이터 라벨러\",\"commuteRange\":\"대중교통 50분 이내\",\"preferredWorkEnvironments\":[\"저소음\",\"엘리베이터 접근 용이\"],\"avoidedWorkEnvironments\":[\"장시간 서서 근무\"],\"requiredSupports\":[\"높이조절 책상\"],\"disabilityType\":\"지체장애\",\"careerSummary\":\"사무지원 및 문서관리 4년\",\"educationSummary\":\"대학교 졸업\",\"employmentTypeSummary\":\"정규직 우선\",\"fullName\":\"홍길동\",\"contactPhone\":\"010-1234-5678\",\"contactEmail\":\"user@example.com\",\"birthDate\":\"1990-01-01\",\"genderType\":\"MALE\",\"ageGroup\":\"30대\",\"residenceRegion\":\"서울\",\"detailAddress\":\"강남구 테헤란로 123\",\"emergencyContact\":\"010-9999-8888\",\"profileImageUrl\":\"https://cdn.bridgework.cloud/profile/1.jpg\",\"highestEducation\":\"대졸\",\"graduationStatus\":\"졸업\",\"majorCareer\":\"사무보조 3년\",\"careerDetail\":\"고객응대 및 행정문서 정리 담당\",\"projectExperience\":\"민원 응대 프로세스 개선 프로젝트 참여\",\"careerGapReason\":\"재활 치료 후 복귀 준비\",\"targetJob\":\"사무보조\",\"skills\":[\"엑셀\",\"문서작성\",\"고객응대\"],\"certifications\":[\"컴퓨터활용능력 2급\",\"워드프로세서\"],\"portfolioUrl\":\"https://portfolio.example.com/hong\",\"awards\":\"구청 민원 서비스 개선 우수상\",\"trainings\":\"직업능력개발훈련 수료(사무행정)\",\"disabilitySeverity\":\"중등도\",\"disabilityRegisteredYn\":true,\"disabilityDescription\":\"장시간 보행이 어려워 좌식 위주 업무 선호\",\"assistiveDevices\":\"전동휠체어\",\"workSupportRequirements\":\"출입구 경사로와 자동문 필요\",\"workAvailability\":\"2주 내 가능\",\"workTypes\":[\"정규직\",\"계약직\"],\"expectedSalary\":\"연봉 3200만원\",\"workTimePreference\":\"주간\",\"remoteAvailableYn\":true,\"mobilityRange\":\"8\",\"selfIntroduction\":\"정확한 문서 처리와 민원 응대에 강점이 있습니다.\",\"motivation\":\"장기적으로 안정적인 사무직 커리어를 이어가고 싶습니다.\",\"jobFitDescription\":\"행정업무 경험과 커뮤니케이션 역량으로 직무에 빠르게 적응 가능합니다.\",\"careerGoal\":\"3년 내 사무운영 담당자로 성장\",\"strengthsWeaknesses\":\"강점은 책임감, 약점은 완벽주의 성향\",\"militaryService\":\"해당없음\",\"patrioticVeteranYn\":false,\"referrer\":\"장애인고용포털\",\"snsUrl\":\"https://www.linkedin.com/in/hong\"}}";
+
     private final AuthService authService;
 
     public AuthController(AuthService authService) {
@@ -67,10 +70,16 @@ public class AuthController {
     @Operation(summary = "최초 회원가입 완료", description = "최초 소셜 로그인 후 필수 추가정보를 저장하고 가입을 완료한다.")
     @io.swagger.v3.oas.annotations.parameters.RequestBody(
             required = true,
-            content = @Content(examples = @ExampleObject(
-                    name = "회원가입 완료 요청 예시",
-                    value = "{\"signupToken\":\"signup-token-sample\",\"email\":\"user@example.com\",\"profile\":{\"fullName\":\"홍길동\",\"contactPhone\":\"010-1234-5678\",\"contactEmail\":\"user@example.com\",\"birthDate\":\"1990-01-01\",\"genderType\":\"MALE\",\"residenceRegion\":\"서울\",\"detailAddress\":\"강남구\",\"highestEducation\":\"대졸\",\"graduationStatus\":\"졸업\",\"majorCareer\":\"사무보조 3년\",\"targetJob\":\"사무보조\",\"skills\":[\"엑셀\",\"문서작성\"],\"disabilityType\":\"지체장애\",\"disabilitySeverity\":\"중등도\",\"disabilityRegisteredYn\":true,\"workAvailability\":\"즉시\",\"workTypes\":[\"정규직\"],\"selfIntroduction\":\"꼼꼼한 문서 작업이 강점입니다.\",\"commuteRange\":\"대중교통 40분 이내\",\"preferredWorkEnvironments\":[\"저소음\"],\"avoidedWorkEnvironments\":[],\"requiredSupports\":[],\"careerSummary\":\"사무 경력\",\"educationSummary\":\"대졸\",\"employmentTypeSummary\":\"정규직\",\"motivation\":\"장기근속 희망\"}}"
-            ))
+            content = @Content(examples = {
+                    @ExampleObject(
+                            name = "회원가입 완료 요청(필수 입력 중심)",
+                            value = SIGNUP_COMPLETE_REQUIRED_REQUEST_EXAMPLE
+                    ),
+                    @ExampleObject(
+                            name = "회원가입 완료 요청(필수+선택 입력 포함)",
+                            value = SIGNUP_COMPLETE_FULL_REQUEST_EXAMPLE
+                    )
+            })
     )
     @ApiResponse(responseCode = "200", description = "가입 완료 및 토큰 발급",
             content = @Content(examples = @ExampleObject(
