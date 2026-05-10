@@ -124,6 +124,9 @@ public class SocialOAuthService {
             if (!StringUtils.hasText(providerUserId)) {
                 throw new SocialLoginFailedException("카카오 사용자 식별자를 확인할 수 없습니다.");
             }
+            if (!StringUtils.hasText(email)) {
+                throw new SocialLoginFailedException("카카오 계정 이메일 정보를 확인할 수 없습니다. 이메일 제공 동의 후 다시 시도해 주세요.");
+            }
 
             return new SocialUserProfile(SocialProvider.KAKAO, providerUserId, email, name);
         } catch (SocialLoginFailedException exception) {
@@ -143,6 +146,9 @@ public class SocialOAuthService {
 
             if (!StringUtils.hasText(providerUserId)) {
                 throw new SocialLoginFailedException("네이버 사용자 식별자를 확인할 수 없습니다.");
+            }
+            if (!StringUtils.hasText(email)) {
+                throw new SocialLoginFailedException("네이버 계정 이메일 정보를 확인할 수 없습니다. 이메일 제공 동의 후 다시 시도해 주세요.");
             }
 
             return new SocialUserProfile(SocialProvider.NAVER, providerUserId, email, name);

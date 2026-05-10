@@ -19,6 +19,7 @@ import com.bridgework.auth.entity.GenderType;
 import com.bridgework.auth.entity.SocialProvider;
 import com.bridgework.auth.entity.UserRole;
 import com.bridgework.auth.entity.UserStatus;
+import com.bridgework.auth.exception.InvalidAuthRequestException;
 import com.bridgework.auth.exception.InvalidRefreshTokenException;
 import com.bridgework.auth.repository.AppUserRepository;
 import com.bridgework.auth.security.JwtTokenProvider;
@@ -121,7 +122,6 @@ class AuthServiceTest {
     void completeSignup_whenValidRequest_thenSavesUserAndIssuesToken() {
         SignupCompleteRequestDto request = new SignupCompleteRequestDto(
                 "signup-token",
-                null,
                 onboardingRequest()
         );
         SocialSignupSessionData sessionData = new SocialSignupSessionData(
@@ -161,6 +161,26 @@ class AuthServiceTest {
         verify(appUserRepository).save(any(AppUser.class));
         verify(userProfileService).create(eq(1L), any(UserProfileUpsertRequestDto.class));
         verify(discordNotifierService).notifySignupCompleted(eq("social@example.com"), eq(1L));
+    }
+
+    @Test
+    void completeSignup_whenSocialEmailMissing_thenThrowsInvalidAuthRequest() {
+        SignupCompleteRequestDto request = new SignupCompleteRequestDto(
+                "signup-token",
+                onboardingRequest()
+        );
+        SocialSignupSessionData sessionData = new SocialSignupSessionData(
+                SocialProvider.KAKAO,
+                "kakao-user-1",
+                null,
+                "소셜이름"
+        );
+
+        when(signupSessionStoreService.getRequiredSession("signup-token")).thenReturn(sessionData);
+
+        assertThatThrownBy(() -> authService.completeSignup(request))
+                .isInstanceOf(InvalidAuthRequestException.class)
+                .hasMessageContaining("소셜 계정 이메일");
     }
 
     @Test
@@ -257,6 +277,7 @@ class AuthServiceTest {
         assertThat(user.getStatus()).isEqualTo(UserStatus.DELETED);
         assertThat(user.getDeletedAt()).isNotNull();
         assertThat(user.getProviderUserId()).startsWith("deleted:1:");
+        assertThat(user.getEmail()).startsWith("deleted-user-1-");
         assertThat(profile.getFullName()).isEqualTo("탈퇴회원");
         verify(userProfileRepository).saveAll(any());
     }

@@ -34,7 +34,7 @@ public class AppUser {
     @Column(name = "provider_user_id", nullable = false, length = 128)
     private String providerUserId;
 
-    @Column(name = "email", length = 255)
+    @Column(name = "email", nullable = false, length = 255)
     private String email;
 
     @Enumerated(EnumType.STRING)

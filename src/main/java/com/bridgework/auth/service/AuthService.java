@@ -12,6 +12,7 @@ import com.bridgework.auth.entity.UserRole;
 import com.bridgework.auth.entity.UserStatus;
 import com.bridgework.auth.exception.DuplicateEmailException;
 import com.bridgework.auth.exception.InvalidRefreshTokenException;
+import com.bridgework.auth.exception.InvalidAuthRequestException;
 import com.bridgework.auth.exception.UserNotFoundException;
 import com.bridgework.auth.exception.WithdrawalNotPendingException;
 import com.bridgework.auth.repository.AppUserRepository;
@@ -142,7 +143,10 @@ public class AuthService {
     public TokenPairResponseDto completeSignup(SignupCompleteRequestDto request) {
         SocialSignupSessionData signupSessionData = signupSessionStoreService.getRequiredSession(request.signupToken());
 
-        String normalizedEmail = normalizeEmail(resolveEmail(signupSessionData.email(), request.email()));
+        String normalizedEmail = normalizeEmail(signupSessionData.email());
+        if (!StringUtils.hasText(normalizedEmail)) {
+            throw new InvalidAuthRequestException("소셜 계정 이메일 정보를 확인할 수 없습니다. 이메일 제공 동의 후 다시 시도해 주세요.");
+        }
 
         validateDuplicateIdentity(normalizedEmail, signupSessionData);
 
@@ -152,9 +156,7 @@ public class AuthService {
 
         user.setProvider(signupSessionData.provider());
         user.setProviderUserId(signupSessionData.providerUserId());
-        if (normalizedEmail != null) {
-            user.setEmail(normalizedEmail);
-        }
+        user.setEmail(normalizedEmail);
         user.setRole(UserRole.USER);
         user.setSignupCompleted(true);
         user.setStatus(UserStatus.ACTIVE);
@@ -296,15 +298,14 @@ public class AuthService {
                 .orElse(null);
 
         if (existingBySocial == null) {
-            if (normalizedEmail != null && appUserRepository.existsByEmail(normalizedEmail)) {
+            if (appUserRepository.existsByEmail(normalizedEmail)) {
                 throw new DuplicateEmailException();
             }
             return;
         }
 
         String existingEmail = normalizeEmail(existingBySocial.getEmail());
-        if (normalizedEmail != null
-                && !normalizedEmail.equals(existingEmail)
+        if (!normalizedEmail.equals(existingEmail)
                 && appUserRepository.existsByEmail(normalizedEmail)) {
             throw new DuplicateEmailException();
         }
@@ -315,13 +316,6 @@ public class AuthService {
             return null;
         }
         return email.trim().toLowerCase(Locale.ROOT);
-    }
-
-    private String resolveEmail(String socialEmail, String requestEmail) {
-        if (StringUtils.hasText(requestEmail)) {
-            return requestEmail;
-        }
-        return socialEmail;
     }
 
     private String resolveDefaultProfileName(Long userId) {
@@ -341,7 +335,7 @@ public class AuthService {
         Long userId = user.getId();
         String deletedIdentity = "deleted:" + userId + ":" + UUID.randomUUID().toString().replace("-", "");
         user.setProviderUserId(deletedIdentity);
-        user.setEmail(null);
+        user.setEmail(buildAnonymizedUserEmail(userId));
         user.setSignupCompleted(false);
         user.setStatus(UserStatus.DELETED);
         user.setDeletedAt(deletedAt);
@@ -357,5 +351,9 @@ public class AuthService {
     private String buildAnonymizedProfileEmail(Long profileId, Long userId) {
         String safeProfileId = profileId == null ? "0" : profileId.toString();
         return "deleted-profile-" + userId + "-" + safeProfileId + "@bridgework.local";
+    }
+
+    private String buildAnonymizedUserEmail(Long userId) {
+        return "deleted-user-" + userId + "-" + UUID.randomUUID().toString().replace("-", "") + "@bridgework.local";
     }
 }
