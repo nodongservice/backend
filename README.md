@@ -57,12 +57,27 @@
 - 기능 0: 소셜 로그인/회원가입 완료, JWT 재발급/로그아웃/내 정보 조회
 - 기능 0-1: 회원 탈퇴 신청/취소, 30일 유예 후 최종 비식별화(스케줄러)
 - 기능 1: 프로필 CRUD(최대 3개), 기본 프로필 지정/변경
-- 기능 1-2(OCR): **2차 개발로 제외**
+- 기능 1-2(OCR): 포트폴리오 PDF 업로드 기반 프로필 초안 생성 게이트웨이
 - 기능 2: 퀵 맞춤 추천 게이트웨이(`aiEnabled` ON/OFF)
 - 기능 3: 지도 추천 게이트웨이(`aiEnabled` ON/OFF)
 - 기능 3-1: 추천 설명 생성 게이트웨이
 - 공공데이터: 스케줄러 동기화 + 수동 실행 + 원본/정규화 저장
 - 화면 옵션/지도 레이어: 직무 트리, 지역/고용형태/급여방식 옵션, 근로지원인 수행기관 마커 조회
+
+## 프로필 OCR 게이트웨이 API
+
+- `POST /api/v1/profiles/ocr/extract` (`multipart/form-data`)
+- 파라미터: `file`(PDF)
+- 동작:
+  - Spring에서 1차 검증(빈 파일, 용량, Content-Type, PDF 시그니처)
+  - 파일을 디스크 영구 저장 없이 메모리 바이트로 FastAPI OCR API에 중계
+  - FastAPI 결과를 프로필 초안 DTO로 변환해 반환
+- 응답:
+  - `draft`(전체 필드, 값 없으면 `null`)
+  - `missingFields`
+  - `confidence`, `ocrTextLength`, `modelVersion`, `warnings`
+
+`draft`는 최종 저장 데이터가 아니라 사용자 확인/수정용 초안입니다. 실제 저장은 기존 `POST /api/v1/profiles` 검증 규칙을 따릅니다.
 
 ## 회원 탈퇴 상태 전이
 - `ACTIVE` -> `PENDING_DELETION` (탈퇴 신청)
@@ -131,6 +146,16 @@
 - 로컬: `SPRING_PROFILES_ACTIVE=local`
 - 로컬 FastAPI 주소 변경(선택): `BRIDGEWORK_RECOMMEND_FASTAPI_BASE_URL=http://localhost:8000`
 - 운영: `SPRING_PROFILES_ACTIVE=prod`
+
+### 프로필 OCR 게이트웨이 설정
+
+`application.yml`의 `bridgework.profile-ocr`로 제어합니다.
+
+- `fastapi-base-url` (기본: `http://localhost:8000`)
+- `extract-path` (기본: `/api/v1/profile-draft/from-portfolio`)
+- `request-timeout` (기본: `180s`)
+- `max-upload-bytes` (기본: `10485760`)
+- `allowed-content-types` (기본: `application/pdf`)
 
 ## CI/CD (main -> EC2 무중단 배포)
 - 워크플로우: `.github/workflows/cicd-main-ec2.yml`
