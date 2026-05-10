@@ -20,6 +20,7 @@ import org.springframework.web.reactive.function.BodyInserters;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.client.WebClientRequestException;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
+import org.springframework.web.util.UriComponentsBuilder;
 
 @Component
 public class FastApiProfileOcrClient {
@@ -45,7 +46,8 @@ public class FastApiProfileOcrClient {
     }
 
     public Map<String, Object> extractProfileDraft(String filename, String contentType, byte[] payload) {
-        List<String> candidateUris = resolveCandidateUris();
+        List<String> candidateUris = new ArrayList<>(resolveCandidateUris());
+        LinkedHashSet<String> discoveredRedirectUris = new LinkedHashSet<>();
         List<String> attemptFailures = new ArrayList<>();
         int maxAttemptsPerUri = Math.max(1, profileOcrProperties.getRetryAttemptsPerUri());
 
@@ -85,6 +87,13 @@ public class FastApiProfileOcrClient {
                     attemptFailures.add(failureMessage);
 
                     boolean retryableHttpStatus = isRetryableHttpStatus(exception.getStatusCode());
+                    if (retryableHttpStatus && StringUtils.hasText(redirectLocation)) {
+                        String redirectUri = normalizeAbsoluteUri(redirectLocation);
+                        if (StringUtils.hasText(redirectUri) && discoveredRedirectUris.add(redirectUri)) {
+                            candidateUris.add(index + 1, redirectUri);
+                            hasNextUri = true;
+                        }
+                    }
                     if (retryableHttpStatus && hasNextAttempt) {
                         continue;
                     }
@@ -141,7 +150,51 @@ public class FastApiProfileOcrClient {
         }
 
         candidates.add(joinBaseUrlAndPath(profileOcrProperties.getFastapiBaseUrl(), profileOcrProperties.getExtractPath()));
+        candidates.addAll(deriveInternalFastApiSlotUris(profileOcrProperties.getFastapiBaseUrl()));
         return List.copyOf(candidates);
+    }
+
+    private List<String> deriveInternalFastApiSlotUris(String configuredBaseUrl) {
+        if (!StringUtils.hasText(configuredBaseUrl)) {
+            return List.of();
+        }
+        String normalized = StringUtils.trimWhitespace(configuredBaseUrl);
+        if (!normalized.contains("/api/py")) {
+            return List.of();
+        }
+        if (!normalized.startsWith("http://") && !normalized.startsWith("https://")) {
+            return List.of();
+        }
+
+        try {
+            var uri = UriComponentsBuilder.fromUriString(normalized).build(true).toUri();
+            String host = uri.getHost();
+            int port = uri.getPort();
+            if (!StringUtils.hasText(host)) {
+                return List.of();
+            }
+            if (port > 0 && port != 80 && port != 443) {
+                return List.of();
+            }
+
+            List<String> fallbacks = new ArrayList<>();
+            fallbacks.add(joinBaseUrlAndPath("http://" + host + ":19000", profileOcrProperties.getExtractPath()));
+            fallbacks.add(joinBaseUrlAndPath("http://" + host + ":19001", profileOcrProperties.getExtractPath()));
+            return fallbacks;
+        } catch (Exception ignored) {
+            return List.of();
+        }
+    }
+
+    private String normalizeAbsoluteUri(String uri) {
+        if (!StringUtils.hasText(uri)) {
+            return "";
+        }
+        String normalized = StringUtils.trimWhitespace(uri);
+        if (!normalized.startsWith("http://") && !normalized.startsWith("https://")) {
+            return "";
+        }
+        return normalized;
     }
 
     private MultipartBodyBuilder buildMultipartBody(String filename, String contentType, byte[] payload) {
