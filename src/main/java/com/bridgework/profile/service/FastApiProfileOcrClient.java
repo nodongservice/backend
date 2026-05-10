@@ -13,7 +13,6 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.reactive.function.BodyInserters;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
-import org.springframework.web.util.UriComponentsBuilder;
 
 @Component
 public class FastApiProfileOcrClient {
@@ -30,10 +29,7 @@ public class FastApiProfileOcrClient {
     }
 
     public Map<String, Object> extractProfileDraft(String filename, String contentType, byte[] payload) {
-        String uri = UriComponentsBuilder.fromUriString(profileOcrProperties.getFastapiBaseUrl())
-                .path(normalizePath(profileOcrProperties.getExtractPath()))
-                .build(true)
-                .toUriString();
+        String uri = joinBaseUrlAndPath(profileOcrProperties.getFastapiBaseUrl(), profileOcrProperties.getExtractPath());
 
         MultipartBodyBuilder multipartBodyBuilder = new MultipartBodyBuilder();
         multipartBodyBuilder.part(
@@ -83,6 +79,17 @@ public class FastApiProfileOcrClient {
             return "";
         }
         return path.startsWith("/") ? path : "/" + path;
+    }
+
+    private String joinBaseUrlAndPath(String baseUrl, String path) {
+        String normalizedBase = StringUtils.trimWhitespace(baseUrl);
+        if (!StringUtils.hasText(normalizedBase)) {
+            return normalizePath(path);
+        }
+        while (normalizedBase.endsWith("/")) {
+            normalizedBase = normalizedBase.substring(0, normalizedBase.length() - 1);
+        }
+        return normalizedBase + normalizePath(path);
     }
 
     private String sanitizeErrorBody(String body) {
