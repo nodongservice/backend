@@ -2,9 +2,9 @@ package com.bridgework.profile.service;
 
 import com.bridgework.profile.config.BridgeWorkProfileOcrProperties;
 import com.bridgework.profile.exception.ProfileOcrDomainException;
-import java.io.ByteArrayInputStream;
 import java.util.Map;
 import org.springframework.core.ParameterizedTypeReference;
+import org.springframework.core.io.ByteArrayResource;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.MultipartBodyBuilder;
@@ -100,17 +100,22 @@ public class FastApiProfileOcrClient {
         return sanitized.length() <= 500 ? sanitized : sanitized.substring(0, 500);
     }
 
-    private static final class InMemoryFileResource extends org.springframework.core.io.InputStreamResource {
+    private static final class InMemoryFileResource extends ByteArrayResource {
         private final String filename;
 
         private InMemoryFileResource(byte[] bytes, String filename) {
-            super(new ByteArrayInputStream(bytes));
+            super(bytes);
             this.filename = filename;
         }
 
         @Override
         public String getFilename() {
             return filename;
+        }
+
+        @Override
+        public long contentLength() {
+            return getByteArray().length;
         }
     }
 }
