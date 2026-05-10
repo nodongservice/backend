@@ -52,9 +52,7 @@ public class PostingService {
                 WHERE p.posting_status = 'ACTIVE'
                 GROUP BY p.id
                 ORDER BY scrap_count DESC,
-backend
-fix(backend): 인기공고 동률 정렬을 최신 등록일 기준(COALESCE offerreg_dt, reg_dt)으로 보정                         COALESCE(p.offerreg_dt, p.reg_dt) DESC NULLS LAST,
-                         p.updated_at DESC,
+                         COALESCE(p.offerreg_dt, p.reg_dt) DESC NULLS LAST,
                          p.id DESC
                 LIMIT :limit
                 """;
