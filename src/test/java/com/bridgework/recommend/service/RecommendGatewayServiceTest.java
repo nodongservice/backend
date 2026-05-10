@@ -7,13 +7,13 @@ import static org.mockito.Mockito.when;
 
 import com.bridgework.auth.entity.GenderType;
 import com.bridgework.recommend.dto.RecommendExplainJobDto;
+import com.bridgework.recommend.dto.RecommendExplainProfileDto;
 import com.bridgework.recommend.dto.RecommendExplainRequestDto;
 import com.bridgework.recommend.dto.RecommendExplainResponseDto;
 import com.bridgework.profile.dto.UserProfileResponseDto;
 import com.bridgework.profile.service.UserProfileService;
 import com.bridgework.recommend.dto.RecommendJobResponseDto;
 import com.bridgework.recommend.dto.RecommendRequestDto;
-import com.bridgework.recommend.dto.RecommendResponseDto;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.List;
@@ -48,20 +48,29 @@ class RecommendGatewayServiceTest {
     @Test
     void recommendQuick_whenAiDisabled_thenReturnsDbRecruitments() {
         RecommendJobResponseDto job = new RecommendJobResponseDto(
-                "ext-1", "사업장", "사무보조", "서울", "정규직", "신입",
+                1L, 1L, "pd_kepad_recruitment", "사업장", "사무보조", "서울", "정규직", "신입",
                 "월급", "300만원", "20261231", "20260504", "20260504",
-                "무관", "고졸", "무관", "무관", 37.5, 127.0
+                "무관", "고졸", "무관", "무관", "담당기관", 37.5, 127.0
         );
         when(recommendJobQueryService.getLatestRecruitments()).thenReturn(List.of(job));
 
-        RecommendResponseDto response = recommendGatewayService.recommendQuick(
+        Map<String, Object> response = recommendGatewayService.recommendQuick(
                 1L,
                 new RecommendRequestDto(false, null)
         );
 
-        assertThat(response.aiEnabled()).isFalse();
-        assertThat(response.jobs()).hasSize(1);
-        assertThat(response.aiResponse()).isNull();
+        assertThat(response).containsKey("results");
+        List<?> results = (List<?>) response.get("results");
+        assertThat(results).hasSize(1);
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> first = (Map<String, Object>) results.get(0);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> jobPayload = (Map<String, Object>) first.get("job");
+
+        assertThat(jobPayload.get("job_post_id")).isEqualTo(1L);
+        assertThat(jobPayload.get("company_name")).isEqualTo("사업장");
+        assertThat(first.get("job_fit_score")).isNull();
         verify(fastApiRecommendClient, never()).requestQuickScore(org.mockito.ArgumentMatchers.any());
     }
 
@@ -100,25 +109,34 @@ class RecommendGatewayServiceTest {
         when(userProfileService.getProfiles(1L)).thenReturn(List.of(defaultProfile));
         when(fastApiRecommendClient.requestMapScore(defaultProfile)).thenReturn(aiResponse);
 
-        RecommendResponseDto response = recommendGatewayService.recommendMap(
+        Map<String, Object> response = recommendGatewayService.recommendMap(
                 1L,
                 new RecommendRequestDto(true, null)
         );
 
-        assertThat(response.aiEnabled()).isTrue();
-        assertThat(response.profileId()).isEqualTo(11L);
-        assertThat(response.aiResponse()).isEqualTo(aiResponse);
-        assertThat(response.jobs()).hasSize(1);
-        assertThat(response.jobs().get(0).externalId()).isEqualTo("ext-1");
-        assertThat(response.jobs().get(0).busplaName()).isEqualTo("사업장");
-        assertThat(response.jobs().get(0).jobNm()).isEqualTo("사무보조");
+        assertThat(response).isEqualTo(aiResponse.get("result"));
+        List<?> results = (List<?>) response.get("results");
+        assertThat(results).hasSize(1);
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> first = (Map<String, Object>) results.get(0);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> jobPayload = (Map<String, Object>) first.get("job");
+
+        assertThat(jobPayload.get("company_name")).isEqualTo("사업장");
+        assertThat(jobPayload.get("job_title")).isEqualTo("사무보조");
+        assertThat(first.get("total_score")).isEqualTo(88);
     }
 
     @Test
     void explainRecommendation_whenCalled_thenReturnsParsedExplainResult() {
-        UserProfileResponseDto profile = profile(11L, true);
+        RecommendExplainProfileDto profilePayload = new RecommendExplainProfileDto(
+                11L, 1L, "홍길동", "서울", null, null, List.of("사무보조"), List.of("엑셀"),
+                "고졸", "무관", null, List.of("컴활"), null, List.of("정규직"),
+                null, null, null, List.of(), null, null, null, List.of(), List.of(), null
+        );
         RecommendExplainRequestDto request = new RecommendExplainRequestDto(
-                11L,
+                profilePayload,
                 new RecommendExplainJobDto(
                         12345L,
                         "브릿지웍스",
@@ -138,9 +156,9 @@ class RecommendGatewayServiceTest {
                         null,
                         "20260504",
                         "pd_kepad_recruitment",
-                        99L,
-                        "ext-1"
+                        99L
                 ),
+                null,
                 null,
                 null,
                 86,
@@ -161,8 +179,7 @@ class RecommendGatewayServiceTest {
                 )
         );
 
-        when(userProfileService.getProfile(1L, 11L)).thenReturn(profile);
-        when(fastApiRecommendClient.requestRecommendationExplain(profile, request)).thenReturn(aiResponse);
+        when(fastApiRecommendClient.requestRecommendationExplain(request)).thenReturn(aiResponse);
 
         RecommendExplainResponseDto response = recommendGatewayService.explainRecommendation(1L, request);
 
@@ -173,6 +190,7 @@ class RecommendGatewayServiceTest {
         assertThat(response.checklist()).containsExactly("면접 전 근무지 동선을 확인하세요.");
         assertThat(response.usedLlm()).isFalse();
         assertThat(response.aiResponse()).isEqualTo(aiResponse);
+        verify(userProfileService, never()).getProfile(org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.anyLong());
     }
 
     private UserProfileResponseDto profile(Long profileId, boolean isDefault) {
