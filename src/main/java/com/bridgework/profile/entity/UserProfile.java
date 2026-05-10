@@ -155,9 +155,6 @@ public class UserProfile {
     @Column(name = "remote_available_yn")
     private Boolean remoteAvailableYn;
 
-    @Column(name = "mobility_range", length = 200)
-    private String mobilityRange;
-
     @Column(name = "self_introduction", nullable = false, columnDefinition = "TEXT")
     private String selfIntroduction;
 
@@ -267,7 +264,6 @@ public class UserProfile {
         this.expectedSalary = request.expectedSalary();
         this.workTimePreference = enumCode(request.workTimePreference());
         this.remoteAvailableYn = request.remoteAvailableYn();
-        this.mobilityRange = request.mobilityRange();
 
         this.selfIntroduction = request.selfIntroduction();
         this.motivation = request.motivation();
@@ -319,7 +315,6 @@ public class UserProfile {
         this.disabilityDescription = null;
         this.assistiveDevices = null;
         this.workSupportRequirements = null;
-        this.mobilityRange = null;
 
         this.selfIntroduction = "탈퇴회원";
         this.motivation = null;
@@ -514,10 +509,6 @@ public class UserProfile {
 
     public Boolean getRemoteAvailableYn() {
         return remoteAvailableYn;
-    }
-
-    public String getMobilityRange() {
-        return mobilityRange;
     }
 
     public String getSelfIntroduction() {

@@ -70,9 +70,6 @@ public record RecommendExplainProfileDto(
         List<String> assistiveDevices,
         @JsonAlias({"required_supports"})
         @Schema(description = "필요 지원사항 목록")
-        List<String> requiredSupports,
-        @JsonAlias({"mobility_range_km"})
-        @Schema(description = "이동 가능 범위(km)", example = "10.5")
-        Double mobilityRangeKm
+        List<String> requiredSupports
 ) {
 }

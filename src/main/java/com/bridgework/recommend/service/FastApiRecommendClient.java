@@ -35,7 +35,6 @@ public class FastApiRecommendClient {
 
     private static final ParameterizedTypeReference<Map<String, Object>> MAP_TYPE = new ParameterizedTypeReference<>() {
     };
-    private static final Pattern DECIMAL_PATTERN = Pattern.compile("(\\d+(?:\\.\\d+)?)");
     private static final Pattern INTEGER_PATTERN = Pattern.compile("(\\d+)");
     private static final List<String> RETRYABLE_MESSAGE_KEYWORDS = List.of(
             "connection prematurely closed before response",
@@ -279,7 +278,6 @@ public class FastApiRecommendClient {
         payload.put("disability_description", profile.disabilityDescription());
         payload.put("assistive_devices", nullToEmpty(profile.assistiveDevices()));
         payload.put("required_supports", nullToEmpty(profile.requiredSupports()));
-        payload.put("mobility_range_km", profile.mobilityRangeKm());
         return payload;
     }
 
@@ -380,7 +378,6 @@ public class FastApiRecommendClient {
         scoreProfile.put("disability_description", profile.disabilityDescription());
         scoreProfile.put("assistive_devices", splitToList(profile.assistiveDevices()));
         scoreProfile.put("required_supports", mergeRequiredSupports(profile.requiredSupports(), profile.workSupportRequirements()));
-        scoreProfile.put("mobility_range_km", extractDecimal(profile.mobilityRange()));
         return scoreProfile;
     }
 
@@ -435,21 +432,6 @@ public class FastApiRecommendClient {
         }
         try {
             return Integer.parseInt(matcher.group(1));
-        } catch (NumberFormatException ignored) {
-            return null;
-        }
-    }
-
-    private Double extractDecimal(String raw) {
-        if (raw == null || raw.isBlank()) {
-            return null;
-        }
-        Matcher matcher = DECIMAL_PATTERN.matcher(raw);
-        if (!matcher.find()) {
-            return null;
-        }
-        try {
-            return Double.parseDouble(matcher.group(1));
         } catch (NumberFormatException ignored) {
             return null;
         }

@@ -242,7 +242,6 @@ class UserProfileServiceTest {
                 "3000만원",
                 ProfileWorkTimePreference.DAYTIME,
                 false,
-                "대중교통 1회 환승",
 
                 "문서 관리에 강점이 있습니다.",
                 "장기 근속이 가능한 업무를 원합니다.",

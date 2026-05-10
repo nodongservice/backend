@@ -133,7 +133,7 @@ class RecommendGatewayServiceTest {
         RecommendExplainProfileDto profilePayload = new RecommendExplainProfileDto(
                 11L, 1L, "홍길동", "서울", null, null, List.of("사무보조"), List.of("엑셀"),
                 "고졸", "무관", null, List.of("컴활"), null, List.of("정규직"),
-                null, null, null, List.of(), null, null, null, List.of(), List.of(), null
+                null, null, null, List.of(), null, null, null, List.of(), List.of()
         );
         RecommendExplainRequestDto request = new RecommendExplainRequestDto(
                 profilePayload,
@@ -235,7 +235,6 @@ class RecommendGatewayServiceTest {
                 null,
                 "즉시",
                 List.of("정규직"),
-                null,
                 null,
                 null,
                 null,

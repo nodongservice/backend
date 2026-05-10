@@ -79,7 +79,6 @@ class ProfileAiTagServiceTest {
                 null,
                 null,
                 false,
-                null,
 
                 "문서 관리에 강점이 있습니다.",
                 null,

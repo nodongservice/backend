@@ -236,7 +236,6 @@ public class UserProfileService {
                 profile.getExpectedSalary(),
                 profile.getWorkTimePreference(),
                 profile.getRemoteAvailableYn(),
-                profile.getMobilityRange(),
 
                 profile.getSelfIntroduction(),
                 profile.getMotivation(),

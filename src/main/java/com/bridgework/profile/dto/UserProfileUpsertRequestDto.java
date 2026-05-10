@@ -102,7 +102,6 @@ public record UserProfileUpsertRequestDto(
         String expectedSalary,
         ProfileWorkTimePreference workTimePreference,
         Boolean remoteAvailableYn,
-        String mobilityRange,
 
         @NotBlank(message = "자기소개는 필수입니다.")
         String selfIntroduction,

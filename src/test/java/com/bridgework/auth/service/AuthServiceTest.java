@@ -324,7 +324,6 @@ class AuthServiceTest {
                 null,
                 null,
                 null,
-                null,
                 "자기소개",
                 "지원동기",
                 null,

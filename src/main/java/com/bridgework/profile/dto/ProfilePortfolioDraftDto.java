@@ -47,7 +47,6 @@ public record ProfilePortfolioDraftDto(
         String expectedSalary,
         String workTimePreference,
         Boolean remoteAvailableYn,
-        String mobilityRange,
 
         String selfIntroduction,
         String motivation,
