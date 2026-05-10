@@ -1,5 +1,6 @@
 package com.bridgework.recommend.service;
 
+import com.bridgework.common.config.BridgeWorkHealthMonitorProperties;
 import com.bridgework.profile.dto.UserProfileResponseDto;
 import com.bridgework.recommend.config.BridgeWorkRecommendProperties;
 import com.bridgework.recommend.dto.RecommendExplainEvidenceItemDto;
@@ -11,17 +12,21 @@ import com.bridgework.recommend.dto.RecommendExplainScoreDetailDto;
 import com.bridgework.recommend.exception.RecommendDomainException;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.LinkedHashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.TimeoutException;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpStatusCode;
 import org.springframework.stereotype.Component;
+import org.springframework.util.StringUtils;
 import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.reactive.function.client.WebClientRequestException;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
 import org.springframework.web.util.UriComponentsBuilder;
 
@@ -32,13 +37,24 @@ public class FastApiRecommendClient {
     };
     private static final Pattern DECIMAL_PATTERN = Pattern.compile("(\\d+(?:\\.\\d+)?)");
     private static final Pattern INTEGER_PATTERN = Pattern.compile("(\\d+)");
+    private static final List<String> RETRYABLE_MESSAGE_KEYWORDS = List.of(
+            "connection prematurely closed before response",
+            "connection reset by peer",
+            "broken pipe"
+    );
 
     private final WebClient webClient;
     private final BridgeWorkRecommendProperties recommendProperties;
+    private final BridgeWorkHealthMonitorProperties healthMonitorProperties;
 
-    public FastApiRecommendClient(WebClient webClient, BridgeWorkRecommendProperties recommendProperties) {
+    public FastApiRecommendClient(
+            WebClient webClient,
+            BridgeWorkRecommendProperties recommendProperties,
+            BridgeWorkHealthMonitorProperties healthMonitorProperties
+    ) {
         this.webClient = webClient;
         this.recommendProperties = recommendProperties;
+        this.healthMonitorProperties = healthMonitorProperties;
     }
 
     public Map<String, Object> requestQuickScore(UserProfileResponseDto profile) {
@@ -56,54 +72,136 @@ public class FastApiRecommendClient {
     }
 
     private Map<String, Object> post(String path, Map<String, Object> payload) {
-        String uri = UriComponentsBuilder.fromUriString(recommendProperties.getFastapiBaseUrl())
-                .path(normalizePath(path))
-                .build(true)
-                .toUriString();
+        List<String> candidateUris = new ArrayList<>(resolveCandidateUris(path));
+        LinkedHashSet<String> discoveredRedirectUris = new LinkedHashSet<>();
+        List<String> attemptFailures = new ArrayList<>();
+        int maxAttemptsPerUri = 2;
 
-        try {
-            Map<String, Object> response = webClient.post()
-                    .uri(uri)
-                    .bodyValue(payload)
-                    .retrieve()
-                    .bodyToMono(MAP_TYPE)
-                    .timeout(recommendProperties.getRequestTimeout())
-                    .block();
+        for (int index = 0; index < candidateUris.size(); index++) {
+            String uri = candidateUris.get(index);
+            boolean hasNextUri = index < candidateUris.size() - 1;
 
-            if (response == null) {
-                throw new RecommendDomainException(
-                        "FASTAPI_EMPTY_RESPONSE",
-                        HttpStatus.BAD_GATEWAY,
-                        "FastAPI 응답이 비어 있습니다."
-                );
+            for (int attempt = 1; attempt <= maxAttemptsPerUri; attempt++) {
+                boolean hasNextAttempt = attempt < maxAttemptsPerUri;
+
+                try {
+                    return executePost(uri, payload);
+                } catch (WebClientResponseException exception) {
+                    String redirectLocation = exception.getHeaders().getFirst("Location");
+                    String responseBody = sanitizeErrorBody(exception.getResponseBodyAsString());
+                    String failureMessage = "status=" + exception.getStatusCode().value()
+                            + ", uri=" + uri
+                            + ", attempt=" + attempt
+                            + (StringUtils.hasText(redirectLocation) ? ", location=" + redirectLocation : "")
+                            + (responseBody == null ? "" : ", body=" + responseBody);
+                    attemptFailures.add(failureMessage);
+
+                    boolean retryableHttpStatus = isRetryableHttpStatus(exception.getStatusCode());
+                    if (retryableHttpStatus && StringUtils.hasText(redirectLocation)) {
+                        String redirectUri = normalizeAbsoluteUri(redirectLocation);
+                        if (StringUtils.hasText(redirectUri) && discoveredRedirectUris.add(redirectUri)) {
+                            candidateUris.add(index + 1, redirectUri);
+                            hasNextUri = true;
+                        }
+                    }
+                    if (retryableHttpStatus && hasNextAttempt) {
+                        continue;
+                    }
+                    if (retryableHttpStatus && hasNextUri) {
+                        break;
+                    }
+
+                    throw new RecommendDomainException(
+                            "FASTAPI_HTTP_ERROR",
+                            HttpStatus.BAD_GATEWAY,
+                            "FastAPI 호출 실패: " + failureMessage,
+                            exception
+                    );
+                } catch (RecommendDomainException exception) {
+                    throw exception;
+                } catch (Exception exception) {
+                    String failureMessage = "uri=" + uri
+                            + ", attempt=" + attempt
+                            + ", reason=" + summarizeException(exception);
+                    attemptFailures.add(failureMessage);
+
+                    boolean retryableConnectionException = isRetryableConnectionException(exception);
+                    if (retryableConnectionException && hasNextAttempt) {
+                        continue;
+                    }
+                    if (retryableConnectionException && hasNextUri) {
+                        break;
+                    }
+
+                    throw new RecommendDomainException(
+                            "FASTAPI_CALL_FAILED",
+                            HttpStatus.BAD_GATEWAY,
+                            "FastAPI 호출 중 오류가 발생했습니다: " + summarizeException(exception),
+                            exception
+                    );
+                }
             }
-            if (!isSupportedResponseShape(response)) {
-                throw new RecommendDomainException(
-                        "FASTAPI_INVALID_RESPONSE",
-                        HttpStatus.BAD_GATEWAY,
-                        "FastAPI 응답 형식이 예상과 다릅니다. (code/message/result 또는 results 필요)"
-                );
-            }
-            return response;
-        } catch (WebClientResponseException exception) {
-            String responseBody = sanitizeErrorBody(exception.getResponseBodyAsString());
+        }
+
+        throw new RecommendDomainException(
+                "FASTAPI_CALL_FAILED",
+                HttpStatus.BAD_GATEWAY,
+                "FastAPI 호출 실패: " + String.join(" | ", attemptFailures)
+        );
+    }
+
+    private Map<String, Object> executePost(String uri, Map<String, Object> payload) {
+        Map<String, Object> response = webClient.post()
+                .uri(uri)
+                .bodyValue(payload)
+                .retrieve()
+                .bodyToMono(MAP_TYPE)
+                .timeout(recommendProperties.getRequestTimeout())
+                .block();
+
+        if (response == null) {
             throw new RecommendDomainException(
-                    "FASTAPI_HTTP_ERROR",
+                    "FASTAPI_EMPTY_RESPONSE",
                     HttpStatus.BAD_GATEWAY,
-                    "FastAPI 호출 실패: status=" + exception.getStatusCode().value()
-                            + (responseBody == null ? "" : ", body=" + responseBody),
-                    exception
-            );
-        } catch (RecommendDomainException exception) {
-            throw exception;
-        } catch (Exception exception) {
-            throw new RecommendDomainException(
-                    "FASTAPI_CALL_FAILED",
-                    HttpStatus.BAD_GATEWAY,
-                    "FastAPI 호출 중 오류가 발생했습니다.",
-                    exception
+                    "FastAPI 응답이 비어 있습니다."
             );
         }
+        if (!isSupportedResponseShape(response)) {
+            throw new RecommendDomainException(
+                    "FASTAPI_INVALID_RESPONSE",
+                    HttpStatus.BAD_GATEWAY,
+                    "FastAPI 응답 형식이 예상과 다릅니다. (code/message/result 또는 results 필요)"
+            );
+        }
+        return response;
+    }
+
+    private List<String> resolveCandidateUris(String path) {
+        LinkedHashSet<String> candidates = new LinkedHashSet<>();
+
+        // 운영에서는 blue/green 슬롯 헬스 경로를 기준으로 직접 호출 경로를 우선 구성한다.
+        for (String healthUrl : healthMonitorProperties.getFastapiHealthUrls()) {
+            String baseUrl = toBaseUrlFromHealthUrl(healthUrl);
+            if (!StringUtils.hasText(baseUrl)) {
+                continue;
+            }
+            candidates.add(joinBaseUrlAndPath(baseUrl, path));
+        }
+
+        candidates.add(joinBaseUrlAndPath(recommendProperties.getFastapiBaseUrl(), path));
+        return List.copyOf(candidates);
+    }
+
+    private String toBaseUrlFromHealthUrl(String healthUrl) {
+        if (!StringUtils.hasText(healthUrl)) {
+            return "";
+        }
+        String normalized = StringUtils.trimWhitespace(healthUrl);
+        int healthPathIndex = normalized.indexOf("/health");
+        if (healthPathIndex < 0) {
+            return normalized;
+        }
+        return normalized.substring(0, healthPathIndex);
     }
 
     private Map<String, Object> buildProfilePayload(UserProfileResponseDto profile) {
@@ -368,10 +466,32 @@ public class FastApiRecommendClient {
     }
 
     private String normalizePath(String path) {
-        if (path == null || path.isBlank()) {
+        if (!StringUtils.hasText(path)) {
             return "";
         }
         return path.startsWith("/") ? path : "/" + path;
+    }
+
+    private String joinBaseUrlAndPath(String baseUrl, String path) {
+        String normalizedBase = StringUtils.trimWhitespace(baseUrl);
+        if (!StringUtils.hasText(normalizedBase)) {
+            return normalizePath(path);
+        }
+        while (normalizedBase.endsWith("/")) {
+            normalizedBase = normalizedBase.substring(0, normalizedBase.length() - 1);
+        }
+        return normalizedBase + normalizePath(path);
+    }
+
+    private String normalizeAbsoluteUri(String uri) {
+        if (!StringUtils.hasText(uri)) {
+            return "";
+        }
+        String normalized = StringUtils.trimWhitespace(uri);
+        if (!normalized.startsWith("http://") && !normalized.startsWith("https://")) {
+            return "";
+        }
+        return normalized;
     }
 
     private String sanitizeErrorBody(String raw) {
@@ -393,5 +513,60 @@ public class FastApiRecommendClient {
         boolean hasWrapped = response.containsKey("code") && response.containsKey("message") && response.containsKey("result");
         boolean hasLegacy = response.containsKey("results");
         return hasWrapped || hasLegacy;
+    }
+
+    private boolean isRetryableHttpStatus(HttpStatusCode statusCode) {
+        int status = statusCode.value();
+        return (status >= 300 && status < 400) || status >= 500;
+    }
+
+    private boolean isRetryableConnectionException(Exception exception) {
+        if (exception instanceof WebClientRequestException || hasCauseOfType(exception, TimeoutException.class)) {
+            return true;
+        }
+        for (String keyword : RETRYABLE_MESSAGE_KEYWORDS) {
+            if (containsKeywordInCauseChain(exception, keyword)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean hasCauseOfType(Throwable throwable, Class<? extends Throwable> expectedType) {
+        Throwable current = throwable;
+        while (current != null) {
+            if (expectedType.isInstance(current)) {
+                return true;
+            }
+            current = current.getCause();
+        }
+        return false;
+    }
+
+    private boolean containsKeywordInCauseChain(Throwable throwable, String keyword) {
+        Throwable current = throwable;
+        while (current != null) {
+            String message = current.getMessage();
+            if (StringUtils.hasText(message) && message.toLowerCase().contains(keyword)) {
+                return true;
+            }
+            current = current.getCause();
+        }
+        return false;
+    }
+
+    private String summarizeException(Exception exception) {
+        Throwable rootCause = exception;
+        while (rootCause.getCause() != null && rootCause.getCause() != rootCause) {
+            rootCause = rootCause.getCause();
+        }
+        String message = rootCause.getMessage();
+        if (!StringUtils.hasText(message)) {
+            message = exception.getMessage();
+        }
+        if (!StringUtils.hasText(message)) {
+            return rootCause.getClass().getSimpleName();
+        }
+        return rootCause.getClass().getSimpleName() + ": " + message;
     }
 }
