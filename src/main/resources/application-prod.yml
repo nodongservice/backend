@@ -30,7 +30,7 @@ bridgework:
     map-path: /api/v1/score/map
     explain-path: /api/v1/explain/recommendation
   profile-ocr:
-    fastapi-base-url: ${BRIDGEWORK_RECOMMEND_FASTAPI_BASE_URL:http://host.docker.internal/api/py}
+    fastapi-base-url: ${bridgework.recommend.fastapi-base-url:http://host.docker.internal/api/py}
     extract-path: /api/v1/profile-draft/from-portfolio
   sync:
     kric-station-code-file-path: /app/resources/reference/operating_agency_station_codes_2026-02-28.xlsx

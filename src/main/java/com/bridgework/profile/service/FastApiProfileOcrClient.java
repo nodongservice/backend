@@ -57,10 +57,13 @@ public class FastApiProfileOcrClient {
             }
             return response;
         } catch (WebClientResponseException exception) {
+            String redirectLocation = exception.getHeaders().getFirst("Location");
             throw new ProfileOcrDomainException(
                     "FASTAPI_OCR_HTTP_ERROR",
                     HttpStatus.BAD_GATEWAY,
                     "FastAPI OCR 호출 실패: status=" + exception.getStatusCode().value()
+                            + ", uri=" + uri
+                            + (StringUtils.hasText(redirectLocation) ? ", location=" + redirectLocation : "")
                             + ", body=" + sanitizeErrorBody(exception.getResponseBodyAsString())
             );
         } catch (ProfileOcrDomainException exception) {
