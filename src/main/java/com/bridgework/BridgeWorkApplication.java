@@ -3,6 +3,7 @@ package com.bridgework;
 import com.bridgework.auth.config.BridgeWorkAuthProperties;
 import com.bridgework.common.config.BridgeWorkDiscordProperties;
 import com.bridgework.common.config.BridgeWorkHealthMonitorProperties;
+import com.bridgework.profile.config.BridgeWorkProfileOcrProperties;
 import com.bridgework.recommend.config.BridgeWorkRecommendProperties;
 import com.bridgework.sync.config.BridgeWorkSyncProperties;
 import net.javacrumbs.shedlock.spring.annotation.EnableSchedulerLock;
@@ -19,7 +20,8 @@ import org.springframework.scheduling.annotation.EnableScheduling;
         BridgeWorkHealthMonitorProperties.class,
         BridgeWorkSyncProperties.class,
         BridgeWorkAuthProperties.class,
-        BridgeWorkRecommendProperties.class
+        BridgeWorkRecommendProperties.class,
+        BridgeWorkProfileOcrProperties.class
 })
 public class BridgeWorkApplication {
 
