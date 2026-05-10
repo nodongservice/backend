@@ -29,6 +29,8 @@ public class PublicDataNormalizedStoreService {
     private static final Pattern INTEGER_PATTERN = Pattern.compile("^[+-]?\\d+$");
     private static final Set<String> COORDINATE_COLUMNS = Set.of("latitude", "longitude", "geo_latitude", "geo_longitude");
     private static final Set<String> INTEGER_COLUMNS = Set.of("slope_vhcle_co", "lift_vhcle_co");
+    private static final String RECRUITMENT_STATUS_ACTIVE = "ACTIVE";
+    private static final String RECRUITMENT_STATUS_CLOSED = "CLOSED";
 
     private final NamedParameterJdbcTemplate namedParameterJdbcTemplate;
     private final ObjectMapper objectMapper;
@@ -69,7 +71,7 @@ public class PublicDataNormalizedStoreService {
 
         applyGeocoding(definition, payloadNode, params);
 
-        String upsertSql = upsertSqlCache.computeIfAbsent(sourceType, ignored -> buildUpsertSql(definition));
+        String upsertSql = upsertSqlCache.computeIfAbsent(sourceType, ignored -> buildUpsertSql(sourceType, definition));
         namedParameterJdbcTemplate.update(upsertSql, params);
     }
 
@@ -128,6 +130,36 @@ public class PublicDataNormalizedStoreService {
         }
 
         return deletedCount;
+    }
+
+    @Transactional
+    public int closeMissingRecruitments(Set<String> fetchedExternalIds, OffsetDateTime statusChangedAt) {
+        NormalizedSourceDefinition definition = normalizedSourceRegistry.get(PublicDataSourceType.KEPAD_RECRUITMENT);
+        if (definition == null) {
+            return 0;
+        }
+
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("status", RECRUITMENT_STATUS_CLOSED)
+                .addValue("statusChangedAt", statusChangedAt);
+
+        if (fetchedExternalIds == null || fetchedExternalIds.isEmpty()) {
+            return namedParameterJdbcTemplate.update(
+                    "UPDATE " + definition.tableName() + " "
+                            + "SET posting_status = :status, closed_at = :statusChangedAt, status_updated_at = :statusChangedAt "
+                            + "WHERE posting_status <> :status",
+                    params
+            );
+        }
+
+        params.addValue("externalIds", fetchedExternalIds);
+        return namedParameterJdbcTemplate.update(
+                "UPDATE " + definition.tableName() + " "
+                        + "SET posting_status = :status, closed_at = :statusChangedAt, status_updated_at = :statusChangedAt "
+                        + "WHERE posting_status <> :status "
+                        + "AND external_id NOT IN (:externalIds)",
+                params
+        );
     }
 
     @Transactional(readOnly = true)
@@ -255,7 +287,7 @@ public class PublicDataNormalizedStoreService {
         }
     }
 
-    private String buildUpsertSql(NormalizedSourceDefinition definition) {
+    private String buildUpsertSql(PublicDataSourceType sourceType, NormalizedSourceDefinition definition) {
         StringBuilder columns = new StringBuilder("external_id, payload_hash, raw_fetched_at");
         StringBuilder values = new StringBuilder(":external_id, :payload_hash, :raw_fetched_at");
         StringBuilder updates = new StringBuilder("payload_hash = EXCLUDED.payload_hash, raw_fetched_at = EXCLUDED.raw_fetched_at, updated_at = NOW()");
@@ -284,6 +316,13 @@ public class PublicDataNormalizedStoreService {
             columns.append(", ").append(column);
             values.append(", :").append(column);
             updates.append(", ").append(column).append(" = EXCLUDED.").append(column);
+        }
+
+        if (sourceType == PublicDataSourceType.KEPAD_RECRUITMENT) {
+            columns.append(", posting_status, closed_at, status_updated_at");
+            values.append(", '").append(RECRUITMENT_STATUS_ACTIVE).append("', NULL, NOW()");
+            updates.append(", posting_status = '").append(RECRUITMENT_STATUS_ACTIVE)
+                    .append("', closed_at = NULL, status_updated_at = NOW()");
         }
 
         return "INSERT INTO " + definition.tableName() + " (" + columns + ", created_at, updated_at) "

@@ -20,4 +20,17 @@ public class AsyncTaskConfig {
         executor.initialize();
         return executor;
     }
+
+    @Bean(name = "recommendTaskExecutor")
+    public Executor recommendTaskExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        // 사용자별 추천 계산은 외부 AI 호출이 포함되어 I/O 대기 시간이 길다.
+        executor.setCorePoolSize(4);
+        executor.setMaxPoolSize(8);
+        executor.setQueueCapacity(200);
+        executor.setThreadNamePrefix("recommend-task-");
+        executor.setWaitForTasksToCompleteOnShutdown(true);
+        executor.initialize();
+        return executor;
+    }
 }

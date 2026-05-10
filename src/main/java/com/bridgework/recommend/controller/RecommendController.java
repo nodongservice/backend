@@ -2,9 +2,11 @@ package com.bridgework.recommend.controller;
 
 import com.bridgework.auth.exception.UnauthorizedException;
 import com.bridgework.auth.security.UserPrincipal;
+import com.bridgework.recommend.dto.RecommendAsyncResponseDto;
 import com.bridgework.recommend.dto.RecommendExplainRequestDto;
 import com.bridgework.recommend.dto.RecommendExplainResponseDto;
 import com.bridgework.recommend.dto.RecommendRequestDto;
+import com.bridgework.recommend.service.RecommendAsyncTaskService;
 import com.bridgework.recommend.service.RecommendGatewayService;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.ExampleObject;
@@ -13,8 +15,9 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
-import java.util.Map;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -28,9 +31,12 @@ import org.springframework.web.bind.annotation.RestController;
 public class RecommendController {
 
     private final RecommendGatewayService recommendGatewayService;
+    private final RecommendAsyncTaskService recommendAsyncTaskService;
 
-    public RecommendController(RecommendGatewayService recommendGatewayService) {
+    public RecommendController(RecommendGatewayService recommendGatewayService,
+                               RecommendAsyncTaskService recommendAsyncTaskService) {
         this.recommendGatewayService = recommendGatewayService;
+        this.recommendAsyncTaskService = recommendAsyncTaskService;
     }
 
     @PostMapping("/quick")
@@ -56,12 +62,12 @@ public class RecommendController {
                             value = "{\"code\":\"SUCCESS\",\"message\":\"요청이 성공했습니다.\",\"result\":{\"aiEnabled\":false,\"profileId\":null,\"jobs\":[{\"jobPostId\":12345,\"sourceId\":12345,\"sourceTable\":\"pd_kepad_recruitment\",\"busplaName\":\"브릿지웍스\",\"jobNm\":\"사무보조\",\"compAddr\":\"서울\",\"empType\":\"정규직\",\"enterType\":\"신입\",\"salaryType\":\"월급\",\"salary\":\"3200만원\",\"termDate\":\"20261231\",\"offerregDt\":\"20260508\",\"regDt\":\"20260508\",\"reqCareer\":\"무관\",\"reqEduc\":\"고졸\",\"reqMajor\":\"무관\",\"reqLicens\":\"무관\",\"regagnName\":\"서울강남고용센터\",\"geoLatitude\":37.498095,\"geoLongitude\":127.027610}],\"aiResponse\":null}}"
                     )
             }))
-    public ResponseEntity<com.bridgework.common.dto.ApiResponse<Map<String, Object>>> recommendQuick(
+    public ResponseEntity<com.bridgework.common.dto.ApiResponse<RecommendAsyncResponseDto>> recommendQuick(
             Authentication authentication,
             @RequestBody(required = false) RecommendRequestDto request
     ) {
         Long userId = currentUserId(authentication);
-        return ResponseEntity.ok(com.bridgework.common.dto.ApiResponse.success(recommendGatewayService.recommendQuick(userId, request)));
+        return ResponseEntity.ok(com.bridgework.common.dto.ApiResponse.success(recommendAsyncTaskService.requestQuick(userId, request)));
     }
 
     @PostMapping("/map")
@@ -87,12 +93,24 @@ public class RecommendController {
                             value = "{\"code\":\"SUCCESS\",\"message\":\"요청이 성공했습니다.\",\"result\":{\"aiEnabled\":false,\"profileId\":null,\"jobs\":[{\"jobPostId\":12345,\"sourceId\":12345,\"sourceTable\":\"pd_kepad_recruitment\",\"busplaName\":\"브릿지웍스\",\"jobNm\":\"사무보조\",\"compAddr\":\"서울\",\"empType\":\"정규직\",\"enterType\":\"신입\",\"salaryType\":\"월급\",\"salary\":\"3200만원\",\"termDate\":\"20261231\",\"offerregDt\":\"20260508\",\"regDt\":\"20260508\",\"reqCareer\":\"무관\",\"reqEduc\":\"고졸\",\"reqMajor\":\"무관\",\"reqLicens\":\"무관\",\"regagnName\":\"서울강남고용센터\",\"geoLatitude\":37.498095,\"geoLongitude\":127.027610}],\"aiResponse\":null}}"
                     )
             }))
-    public ResponseEntity<com.bridgework.common.dto.ApiResponse<Map<String, Object>>> recommendMap(
+    public ResponseEntity<com.bridgework.common.dto.ApiResponse<RecommendAsyncResponseDto>> recommendMap(
             Authentication authentication,
             @RequestBody(required = false) RecommendRequestDto request
     ) {
         Long userId = currentUserId(authentication);
-        return ResponseEntity.ok(com.bridgework.common.dto.ApiResponse.success(recommendGatewayService.recommendMap(userId, request)));
+        return ResponseEntity.ok(com.bridgework.common.dto.ApiResponse.success(recommendAsyncTaskService.requestMap(userId, request)));
+    }
+
+    @GetMapping("/tasks/{requestId}")
+    @Operation(summary = "추천 비동기 요청 상태 조회", description = "quick/map 비동기 요청의 진행 상태와 결과를 조회한다.")
+    public ResponseEntity<com.bridgework.common.dto.ApiResponse<RecommendAsyncResponseDto>> getRecommendTaskStatus(
+            Authentication authentication,
+            @PathVariable String requestId
+    ) {
+        Long userId = currentUserId(authentication);
+        return ResponseEntity.ok(com.bridgework.common.dto.ApiResponse.success(
+                recommendAsyncTaskService.getTaskStatus(userId, requestId)
+        ));
     }
 
     @PostMapping("/explain")

@@ -65,7 +65,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.DELETE, "/api/v1/auth/withdraw").hasRole("USER")
                         .requestMatchers(HttpMethod.GET,
                                 "/api/v1/options/**",
-                                "/api/v1/map/support-agencies").permitAll()
+                                "/api/v1/map/support-agencies",
+                                "/api/v1/postings/popular").permitAll()
                         .requestMatchers(HttpMethod.POST,
                                 "/api/v1/auth/admin/login",
                                 "/api/v1/auth/social/login",

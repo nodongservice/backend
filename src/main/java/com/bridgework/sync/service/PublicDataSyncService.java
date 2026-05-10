@@ -15,6 +15,7 @@ import com.bridgework.sync.entity.PublicDataRecord;
 import com.bridgework.sync.entity.PublicDataSourceSnapshot;
 import com.bridgework.sync.entity.PublicDataSourceType;
 import com.bridgework.sync.entity.PublicDataSyncLog;
+import com.bridgework.sync.entity.RecordSyncStatus;
 import com.bridgework.sync.entity.SyncRequestSource;
 import com.bridgework.sync.entity.SyncStatus;
 import com.bridgework.sync.exception.SyncSourceDisabledException;
@@ -238,6 +239,7 @@ public class PublicDataSyncService {
         int updatedCount = 0;
         int failedCount = 0;
         int deletedCount = 0;
+        int closedCount = 0;
         SyncStatus syncStatus = SyncStatus.SUCCESS;
         String message = "동기화 완료";
         Set<String> fetchedExternalIds = new HashSet<>();
@@ -302,10 +304,23 @@ public class PublicDataSyncService {
             }
 
             if (failedCount == 0) {
-                deletedCount = removeDeletedRecords(sourceType, fetchedExternalIds);
-                publicDataNormalizedStoreService.deleteMissing(sourceType, fetchedExternalIds);
-                if (deletedCount > 0) {
-                    message = "동기화 완료 (삭제 " + deletedCount + "건)";
+                if (sourceType == PublicDataSourceType.KEPAD_RECRUITMENT) {
+                    OffsetDateTime statusChangedAt = OffsetDateTime.now();
+                    int rawClosedCount = closeMissingRecords(sourceType, fetchedExternalIds, statusChangedAt);
+                    int normalizedClosedCount = publicDataNormalizedStoreService.closeMissingRecruitments(
+                            fetchedExternalIds,
+                            statusChangedAt
+                    );
+                    closedCount = Math.max(rawClosedCount, normalizedClosedCount);
+                    if (closedCount > 0) {
+                        message = "동기화 완료 (마감 전환 " + closedCount + "건)";
+                    }
+                } else {
+                    deletedCount = removeDeletedRecords(sourceType, fetchedExternalIds);
+                    publicDataNormalizedStoreService.deleteMissing(sourceType, fetchedExternalIds);
+                    if (deletedCount > 0) {
+                        message = "동기화 완료 (삭제 " + deletedCount + "건)";
+                    }
                 }
             }
 
@@ -314,8 +329,8 @@ public class PublicDataSyncService {
                 message = buildFailureSummaryMessage("일부 데이터 저장 실패", failureReasonCounts);
             }
 
-            if (failedCount > 0 && deletedCount == 0) {
-                log.warn("부분 실패로 삭제 동기화를 건너뜀 source={} failedCount={}", sourceType, failedCount);
+            if (failedCount > 0 && deletedCount == 0 && closedCount == 0) {
+                log.warn("부분 실패로 상태 동기화를 건너뜀 source={} failedCount={}", sourceType, failedCount);
             } else if (failedCount == 0 && latestRevisionDto != null) {
                 upsertSourceSnapshot(sourceType, latestRevisionDto);
             }
@@ -419,6 +434,25 @@ public class PublicDataSyncService {
         return idsToDelete.size();
     }
 
+    private int closeMissingRecords(PublicDataSourceType sourceType,
+                                    Set<String> fetchedExternalIds,
+                                    OffsetDateTime statusChangedAt) {
+        if (fetchedExternalIds == null || fetchedExternalIds.isEmpty()) {
+            return publicDataRecordRepository.markAllAsStatusBySourceType(
+                    sourceType,
+                    RecordSyncStatus.CLOSED,
+                    statusChangedAt
+            );
+        }
+
+        return publicDataRecordRepository.markMissingAsStatusBySourceType(
+                sourceType,
+                fetchedExternalIds,
+                RecordSyncStatus.CLOSED,
+                statusChangedAt
+        );
+    }
+
     private UpsertResult upsertRecord(PublicDataSourceType sourceType, PublicDataApiItemDto item) {
         Optional<PublicDataRecord> existingRecord = publicDataRecordRepository
                 .findBySourceTypeAndExternalId(sourceType, item.externalId());
@@ -432,6 +466,9 @@ public class PublicDataSyncService {
             record.setPayloadJson(item.payloadJson());
             record.setPayloadHash(item.payloadHash());
             record.setRawFetchedAt(now);
+            record.setSyncStatus(RecordSyncStatus.ACTIVE);
+            record.setClosedAt(null);
+            record.setStatusUpdatedAt(now);
             PublicDataRecord savedRecord = publicDataRecordRepository.save(record);
             publicDataRecordFieldService.replaceFields(savedRecord);
             return UpsertResult.INSERTED;
@@ -439,6 +476,9 @@ public class PublicDataSyncService {
 
         PublicDataRecord record = existingRecord.get();
         record.setRawFetchedAt(now);
+        record.setSyncStatus(RecordSyncStatus.ACTIVE);
+        record.setClosedAt(null);
+        record.setStatusUpdatedAt(now);
 
         // 동일 키 데이터는 해시를 비교해 변경 건만 업데이트한다.
         if (!record.getPayloadHash().equals(item.payloadHash())) {

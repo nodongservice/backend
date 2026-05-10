@@ -1,6 +1,7 @@
 package com.bridgework.sync.repository;
 
 import com.bridgework.sync.entity.PublicDataRecord;
+import com.bridgework.sync.entity.RecordSyncStatus;
 import com.bridgework.sync.entity.PublicDataSourceType;
 import java.util.Collection;
 import java.util.List;
@@ -33,4 +34,34 @@ public interface PublicDataRecordRepository extends JpaRepository<PublicDataReco
     @Transactional
     @Query(value = "DELETE FROM public_data_record WHERE id IN (:ids)", nativeQuery = true)
     int deleteAllByIdInNative(@Param("ids") Collection<Long> ids);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Transactional
+    @Query("""
+            UPDATE PublicDataRecord r
+            SET r.syncStatus = :syncStatus,
+                r.closedAt = :closedAt,
+                r.statusUpdatedAt = :closedAt
+            WHERE r.sourceType = :sourceType
+              AND r.syncStatus <> :syncStatus
+            """)
+    int markAllAsStatusBySourceType(@Param("sourceType") PublicDataSourceType sourceType,
+                                    @Param("syncStatus") RecordSyncStatus syncStatus,
+                                    @Param("closedAt") java.time.OffsetDateTime closedAt);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Transactional
+    @Query("""
+            UPDATE PublicDataRecord r
+            SET r.syncStatus = :syncStatus,
+                r.closedAt = :closedAt,
+                r.statusUpdatedAt = :closedAt
+            WHERE r.sourceType = :sourceType
+              AND r.syncStatus <> :syncStatus
+              AND r.externalId NOT IN :externalIds
+            """)
+    int markMissingAsStatusBySourceType(@Param("sourceType") PublicDataSourceType sourceType,
+                                        @Param("externalIds") Collection<String> externalIds,
+                                        @Param("syncStatus") RecordSyncStatus syncStatus,
+                                        @Param("closedAt") java.time.OffsetDateTime closedAt);
 }

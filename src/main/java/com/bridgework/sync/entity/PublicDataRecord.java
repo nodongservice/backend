@@ -43,6 +43,16 @@ public class PublicDataRecord {
     @Column(name = "raw_fetched_at", nullable = false)
     private OffsetDateTime rawFetchedAt;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "sync_status", nullable = false, length = 16)
+    private RecordSyncStatus syncStatus = RecordSyncStatus.ACTIVE;
+
+    @Column(name = "closed_at")
+    private OffsetDateTime closedAt;
+
+    @Column(name = "status_updated_at", nullable = false)
+    private OffsetDateTime statusUpdatedAt;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private OffsetDateTime createdAt;
 
@@ -54,6 +64,12 @@ public class PublicDataRecord {
         OffsetDateTime now = OffsetDateTime.now();
         createdAt = now;
         updatedAt = now;
+        if (syncStatus == null) {
+            syncStatus = RecordSyncStatus.ACTIVE;
+        }
+        if (statusUpdatedAt == null) {
+            statusUpdatedAt = now;
+        }
     }
 
     @PreUpdate
@@ -103,6 +119,30 @@ public class PublicDataRecord {
 
     public void setRawFetchedAt(OffsetDateTime rawFetchedAt) {
         this.rawFetchedAt = rawFetchedAt;
+    }
+
+    public RecordSyncStatus getSyncStatus() {
+        return syncStatus;
+    }
+
+    public void setSyncStatus(RecordSyncStatus syncStatus) {
+        this.syncStatus = syncStatus;
+    }
+
+    public OffsetDateTime getClosedAt() {
+        return closedAt;
+    }
+
+    public void setClosedAt(OffsetDateTime closedAt) {
+        this.closedAt = closedAt;
+    }
+
+    public OffsetDateTime getStatusUpdatedAt() {
+        return statusUpdatedAt;
+    }
+
+    public void setStatusUpdatedAt(OffsetDateTime statusUpdatedAt) {
+        this.statusUpdatedAt = statusUpdatedAt;
     }
 
     public OffsetDateTime getCreatedAt() {
