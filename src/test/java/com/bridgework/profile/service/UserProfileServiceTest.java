@@ -59,7 +59,7 @@ class UserProfileServiceTest {
 
     @Test
     void create_whenBirthDateAndAgeGroupAreMissing_thenThrows() {
-        UserProfileUpsertRequestDto request = baseRequest(null, null);
+        UserProfileUpsertRequestDto request = baseRequest(null, null, "테스트 프로필");
 
         assertThatThrownBy(() -> userProfileService.create(1L, request))
                 .isInstanceOf(BridgeWorkDomainException.class)
@@ -68,7 +68,7 @@ class UserProfileServiceTest {
 
     @Test
     void create_whenProfileCountReachedLimit_thenThrows() {
-        UserProfileUpsertRequestDto request = baseRequest(LocalDate.of(1995, 5, 10), null);
+        UserProfileUpsertRequestDto request = baseRequest(LocalDate.of(1995, 5, 10), null, "테스트 프로필");
         AppUser user = user(1L);
 
         when(appUserRepository.findByIdAndStatus(1L, UserStatus.ACTIVE)).thenReturn(Optional.of(user));
@@ -81,7 +81,7 @@ class UserProfileServiceTest {
 
     @Test
     void create_firstProfile_shouldBeDefault() {
-        UserProfileUpsertRequestDto request = baseRequest(LocalDate.of(1995, 5, 10), null);
+        UserProfileUpsertRequestDto request = baseRequest(LocalDate.of(1995, 5, 10), null, "테스트 프로필");
         AppUser user = user(1L);
         ProfileAiTags tags = new ProfileAiTags(
                 List.of("사무보조", "엑셀"),
@@ -103,7 +103,32 @@ class UserProfileServiceTest {
         assertThat(response.profileId()).isEqualTo(10L);
         assertThat(response.userId()).isEqualTo(1L);
         assertThat(response.isDefault()).isTrue();
+        assertThat(response.profileName()).isEqualTo("테스트 프로필");
         verify(userProfileRepository).save(any(UserProfile.class));
+    }
+
+    @Test
+    void create_firstProfile_whenProfileNameMissing_thenSetsDefaultGeneratedName() {
+        UserProfileUpsertRequestDto request = baseRequest(LocalDate.of(1995, 5, 10), null, null);
+        AppUser user = user(1L);
+        ProfileAiTags tags = new ProfileAiTags(
+                List.of("사무보조", "엑셀"),
+                List.of("주간", "실내"),
+                List.of("휠체어 접근")
+        );
+
+        when(appUserRepository.findByIdAndStatus(1L, UserStatus.ACTIVE)).thenReturn(Optional.of(user));
+        when(userProfileRepository.countByUser_Id(1L)).thenReturn(0L);
+        when(profileAiTagService.buildTags(request)).thenReturn(tags);
+        when(userProfileRepository.save(any(UserProfile.class))).thenAnswer(invocation -> {
+            UserProfile profile = invocation.getArgument(0, UserProfile.class);
+            ReflectionTestUtils.setField(profile, "id", 10L);
+            return profile;
+        });
+
+        UserProfileResponseDto response = userProfileService.create(1L, request);
+
+        assertThat(response.profileName()).isEqualTo("기본 생성 프로필");
     }
 
     @Test
@@ -157,7 +182,7 @@ class UserProfileServiceTest {
         profile.setUser(user);
         profile.setDefault(isDefault);
         profile.updateFromRequest(
-                baseRequest(LocalDate.of(1995, 5, 10), null),
+                baseRequest(LocalDate.of(1995, 5, 10), null, "테스트 프로필"),
                 "[]",
                 "[]",
                 "[]",
@@ -171,7 +196,7 @@ class UserProfileServiceTest {
         return profile;
     }
 
-    private UserProfileUpsertRequestDto baseRequest(LocalDate birthDate, String ageGroup) {
+    private UserProfileUpsertRequestDto baseRequest(LocalDate birthDate, String ageGroup, String profileName) {
         return new UserProfileUpsertRequestDto(
                 "사무보조",
                 "30분",
@@ -182,6 +207,7 @@ class UserProfileServiceTest {
                 "사무 경력 3년",
                 "대졸",
                 "정규직",
+                profileName,
 
                 "홍길동",
                 "010-1111-2222",

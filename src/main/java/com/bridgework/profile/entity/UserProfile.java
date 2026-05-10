@@ -61,6 +61,9 @@ public class UserProfile {
     @Column(name = "employment_type_summary", length = 200)
     private String employmentTypeSummary;
 
+    @Column(name = "profile_name", nullable = false, length = 100)
+    private String profileName;
+
     @Column(name = "full_name", nullable = false, length = 100)
     private String fullName;
 
@@ -323,6 +326,7 @@ public class UserProfile {
         this.jobFitDescription = null;
         this.careerGoal = null;
         this.strengthsWeaknesses = null;
+        this.profileName = "탈퇴회원";
 
         this.referrer = null;
         this.snsUrl = null;
@@ -382,6 +386,14 @@ public class UserProfile {
 
     public String getEmploymentTypeSummary() {
         return employmentTypeSummary;
+    }
+
+    public String getProfileName() {
+        return profileName;
+    }
+
+    public void setProfileName(String profileName) {
+        this.profileName = profileName;
     }
 
     public String getFullName() {

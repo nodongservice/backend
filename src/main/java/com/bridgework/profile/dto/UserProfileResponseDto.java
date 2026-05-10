@@ -18,6 +18,7 @@ public record UserProfileResponseDto(
         String careerSummary,
         String educationSummary,
         String employmentTypeSummary,
+        String profileName,
 
         String fullName,
         String contactPhone,

@@ -320,7 +320,7 @@ public class AuthService {
 
     private String resolveDefaultProfileName(Long userId) {
         return userProfileRepository.findByUser_IdAndIsDefaultTrue(userId)
-                .map(profile -> profile.getFullName())
+                .map(profile -> StringUtils.hasText(profile.getProfileName()) ? profile.getProfileName() : profile.getFullName())
                 .orElse(null);
     }
 

@@ -207,6 +207,7 @@ class RecommendGatewayServiceTest {
                 "사무 경력",
                 "대졸",
                 "정규직",
+                "기본 생성 프로필",
                 "홍길동",
                 "010-1111-1111",
                 "hong@example.com",

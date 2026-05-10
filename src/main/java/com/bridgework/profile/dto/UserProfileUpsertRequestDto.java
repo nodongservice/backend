@@ -51,6 +51,7 @@ public record UserProfileUpsertRequestDto(
         String careerSummary,
         String educationSummary,
         String employmentTypeSummary,
+        String profileName,
 
         @NotBlank(message = "이름은 필수입니다.")
         String fullName,

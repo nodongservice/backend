@@ -26,6 +26,7 @@ public class UserProfileService {
     private static final TypeReference<List<String>> STRING_LIST_TYPE_REFERENCE = new TypeReference<>() {
     };
     private static final int MAX_PROFILE_COUNT = 3;
+    private static final String DEFAULT_CREATED_PROFILE_NAME = "기본 생성 프로필";
 
     private final UserProfileRepository userProfileRepository;
     private final AppUserRepository appUserRepository;
@@ -58,7 +59,9 @@ public class UserProfileService {
 
         UserProfile profile = new UserProfile();
         profile.setUser(user);
-        profile.setDefault(profileCount == 0);
+        boolean isDefaultProfile = profileCount == 0;
+        profile.setDefault(isDefaultProfile);
+        profile.setProfileName(resolveProfileName(request.profileName(), isDefaultProfile, profileCount + 1, null));
         applyRequestToProfile(profile, request);
 
         UserProfile savedProfile = userProfileRepository.save(profile);
@@ -71,6 +74,7 @@ public class UserProfileService {
         UserProfile profile = userProfileRepository.findByIdAndUser_Id(profileId, userId)
                 .orElseThrow(() -> new UserProfileNotFoundException(profileId));
 
+        profile.setProfileName(resolveProfileName(request.profileName(), profile.isDefault(), null, profile.getProfileName()));
         applyRequestToProfile(profile, request);
         UserProfile savedProfile = userProfileRepository.save(profile);
         return toResponse(savedProfile);
@@ -196,6 +200,7 @@ public class UserProfileService {
                 profile.getCareerSummary(),
                 profile.getEducationSummary(),
                 profile.getEmploymentTypeSummary(),
+                profile.getProfileName(),
 
                 profile.getFullName(),
                 profile.getContactPhone(),
@@ -249,6 +254,30 @@ public class UserProfileService {
                 toStringList(profile.getAiSupportTagsJson()),
                 profile.getUpdatedAt()
         );
+    }
+
+    private String resolveProfileName(String rawProfileName,
+                                      boolean isDefaultProfile,
+                                      Long nextProfileOrder,
+                                      String currentProfileName) {
+        String trimmedProfileName = StringUtils.trimWhitespace(rawProfileName);
+        if (StringUtils.hasText(trimmedProfileName)) {
+            return trimmedProfileName;
+        }
+
+        if (StringUtils.hasText(currentProfileName)) {
+            return currentProfileName;
+        }
+
+        if (isDefaultProfile) {
+            return DEFAULT_CREATED_PROFILE_NAME;
+        }
+
+        if (nextProfileOrder != null && nextProfileOrder > 0) {
+            return "프로필 " + nextProfileOrder;
+        }
+
+        return "프로필";
     }
 
     private String toJson(List<String> values) {

@@ -293,6 +293,7 @@ class AuthServiceTest {
                 "사무보조 3년",
                 "대졸",
                 "정규직",
+                null,
                 "홍길동",
                 "010-1234-5678",
                 "social@example.com",
