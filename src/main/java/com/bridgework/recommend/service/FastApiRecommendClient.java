@@ -4,7 +4,9 @@ import com.bridgework.profile.dto.UserProfileResponseDto;
 import com.bridgework.recommend.config.BridgeWorkRecommendProperties;
 import com.bridgework.recommend.dto.RecommendExplainEvidenceItemDto;
 import com.bridgework.recommend.dto.RecommendExplainJobDto;
+import com.bridgework.recommend.dto.RecommendExplainProfileDto;
 import com.bridgework.recommend.dto.RecommendExplainRequestDto;
+import com.bridgework.recommend.dto.RecommendExplainSelectedResultDto;
 import com.bridgework.recommend.dto.RecommendExplainScoreDetailDto;
 import com.bridgework.recommend.exception.RecommendDomainException;
 import java.util.ArrayList;
@@ -48,10 +50,9 @@ public class FastApiRecommendClient {
     }
 
     public Map<String, Object> requestRecommendationExplain(
-            UserProfileResponseDto profile,
             RecommendExplainRequestDto request
     ) {
-        return post(recommendProperties.getExplainPath(), buildExplainPayload(profile, request));
+        return post(recommendProperties.getExplainPath(), buildExplainPayload(request));
     }
 
     private Map<String, Object> post(String path, Map<String, Object> payload) {
@@ -111,22 +112,82 @@ public class FastApiRecommendClient {
         return payload;
     }
 
-    private Map<String, Object> buildExplainPayload(UserProfileResponseDto profile, RecommendExplainRequestDto request) {
+    private Map<String, Object> buildExplainPayload(RecommendExplainRequestDto request) {
+        RecommendExplainSelectedResultDto selectedResult = request.selectedResult();
+        RecommendExplainJobDto job = request.job() != null
+                ? request.job()
+                : (selectedResult == null ? null : selectedResult.job());
+        if (job == null) {
+            throw new RecommendDomainException(
+                    "EXPLAIN_JOB_REQUIRED",
+                    HttpStatus.BAD_REQUEST,
+                    "job 또는 selectedResult.job이 필요합니다."
+            );
+        }
+
+        RecommendExplainScoreDetailDto scoreDetail = request.scoreDetail() != null
+                ? request.scoreDetail()
+                : (selectedResult == null ? null : selectedResult.scoreDetail());
+        Integer totalScore = request.totalScore() != null
+                ? request.totalScore()
+                : (selectedResult == null ? null : selectedResult.totalScore());
+        Integer jobFitScore = request.jobFitScore() != null
+                ? request.jobFitScore()
+                : (selectedResult == null ? null : selectedResult.jobFitScore());
+        List<String> reasons = request.reasons() != null
+                ? request.reasons()
+                : (selectedResult == null ? null : selectedResult.reasons());
+        List<String> riskFactors = request.riskFactors() != null
+                ? request.riskFactors()
+                : (selectedResult == null ? null : selectedResult.riskFactors());
+        List<RecommendExplainEvidenceItemDto> evidenceItems = request.evidenceItems() != null
+                ? request.evidenceItems()
+                : (selectedResult == null ? null : selectedResult.evidenceItems());
+
         Map<String, Object> payload = new LinkedHashMap<>();
-        payload.put("profile", buildScoreProfile(profile));
-        payload.put("job", toExplainJobPayload(request.job()));
-        payload.put("score_detail", toExplainScoreDetailPayload(request.scoreDetail()));
-        payload.put("total_score", request.totalScore());
-        payload.put("job_fit_score", request.jobFitScore());
-        payload.put("reasons", nullToEmpty(request.reasons()));
-        payload.put("risk_factors", nullToEmpty(request.riskFactors()));
-        payload.put("evidence_items", toExplainEvidencePayload(request.evidenceItems()));
+        payload.put("profile", toExplainProfilePayload(request.profile()));
+        payload.put("job", toExplainJobPayload(job));
+        payload.put("score_detail", toExplainScoreDetailPayload(scoreDetail));
+        payload.put("total_score", totalScore);
+        payload.put("job_fit_score", jobFitScore);
+        payload.put("reasons", nullToEmpty(reasons));
+        payload.put("risk_factors", nullToEmpty(riskFactors));
+        payload.put("evidence_items", toExplainEvidencePayload(evidenceItems));
+        return payload;
+    }
+
+    private Map<String, Object> toExplainProfilePayload(RecommendExplainProfileDto profile) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("profile_id", profile.profileId());
+        payload.put("user_id", profile.userId());
+        payload.put("name", profile.name());
+        payload.put("address", profile.address());
+        payload.put("home_lat", profile.homeLat());
+        payload.put("home_lng", profile.homeLng());
+        payload.put("desired_jobs", nullToEmpty(profile.desiredJobs()));
+        payload.put("skills", nullToEmpty(profile.skills()));
+        payload.put("education", profile.education());
+        payload.put("career", profile.career());
+        payload.put("major", profile.major());
+        payload.put("licenses", nullToEmpty(profile.licenses()));
+        payload.put("job_fit_statement", profile.jobFitStatement());
+        payload.put("available_employment_types", nullToEmpty(profile.availableEmploymentTypes()));
+        payload.put("desired_salary", profile.desiredSalary());
+        payload.put("time_preference", profile.timePreference());
+        payload.put("remote_work", profile.remoteWork());
+        payload.put("disability_types", nullToEmpty(profile.disabilityTypes()));
+        payload.put("disability_severity", profile.disabilitySeverity());
+        payload.put("is_registered_disabled", profile.isRegisteredDisabled());
+        payload.put("disability_description", profile.disabilityDescription());
+        payload.put("assistive_devices", nullToEmpty(profile.assistiveDevices()));
+        payload.put("required_supports", nullToEmpty(profile.requiredSupports()));
+        payload.put("mobility_range_km", profile.mobilityRangeKm());
         return payload;
     }
 
     private Map<String, Object> toExplainJobPayload(RecommendExplainJobDto job) {
         Map<String, Object> payload = new LinkedHashMap<>();
-        payload.put("job_post_id", job.jobPostId());
+        payload.put("job_post_id", resolveJobPostId(job));
         payload.put("company_name", job.companyName());
         payload.put("job_title", job.jobTitle());
         payload.put("work_address", job.workAddress());
@@ -146,8 +207,21 @@ public class FastApiRecommendClient {
         payload.put("registered_at", job.registeredAt());
         payload.put("source_table", job.sourceTable());
         payload.put("source_id", job.sourceId());
-        payload.put("external_id", job.externalId());
         return payload;
+    }
+
+    private Long resolveJobPostId(RecommendExplainJobDto job) {
+        if (job.jobPostId() != null) {
+            return job.jobPostId();
+        }
+        if (job.sourceId() != null) {
+            return job.sourceId();
+        }
+        throw new RecommendDomainException(
+                "JOB_POST_ID_REQUIRED",
+                HttpStatus.BAD_REQUEST,
+                "jobPostId 또는 sourceId가 필요합니다."
+        );
     }
 
     private Map<String, Object> toExplainScoreDetailPayload(RecommendExplainScoreDetailDto detail) {

@@ -4,8 +4,12 @@ import io.swagger.v3.oas.annotations.media.Schema;
 
 @Schema(description = "추천 공고 응답 항목 DTO")
 public record RecommendJobResponseDto(
-        @Schema(description = "외부 공고 식별자", example = "KEPAD-20260508-0001")
-        String externalId,
+        @Schema(description = "공고 ID(pd_kepad_recruitment.id)", example = "12345")
+        Long jobPostId,
+        @Schema(description = "원천 레코드 ID(현재 공고 ID와 동일)", example = "12345")
+        Long sourceId,
+        @Schema(description = "원천 테이블명", example = "pd_kepad_recruitment")
+        String sourceTable,
         @Schema(description = "사업장명", example = "브릿지웍스")
         String busplaName,
         @Schema(description = "직무명", example = "사무보조")
@@ -34,10 +38,11 @@ public record RecommendJobResponseDto(
         String reqMajor,
         @Schema(description = "요구자격증", example = "컴퓨터활용능력")
         String reqLicens,
+        @Schema(description = "담당기관", example = "서울강남고용센터")
+        String regagnName,
         @Schema(description = "위도", example = "37.498095")
         Double geoLatitude,
         @Schema(description = "경도", example = "127.027610")
         Double geoLongitude
 ) {
 }
-

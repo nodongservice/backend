@@ -14,7 +14,7 @@ public record RecommendResponseDto(
         List<RecommendJobResponseDto> jobs,
         @Schema(
                 description = "FastAPI 원본 응답. aiEnabled=true일 때만 포함된다.",
-                example = "{\"code\":\"SUCCESS\",\"message\":\"요청이 성공했습니다.\",\"result\":{\"results\":[{\"job\":{\"external_id\":\"KEPAD-20260508-0001\",\"company_name\":\"브릿지웍스\",\"job_title\":\"사무보조\"},\"total_score\":85,\"score_detail\":{\"job_fit_score\":90}}]}}"
+                example = "{\"code\":\"SUCCESS\",\"message\":\"요청이 성공했습니다.\",\"result\":{\"results\":[{\"job\":{\"job_post_id\":12345,\"company_name\":\"브릿지웍스\",\"job_title\":\"사무보조\"},\"total_score\":85,\"score_detail\":{\"job_fit_score\":90}}]}}"
         )
         Map<String, Object> aiResponse
 ) {
@@ -69,7 +69,9 @@ public record RecommendResponseDto(
     private static RecommendJobResponseDto toRecommendJob(Map<?, ?> job) {
         String registeredAt = asString(job.get("registered_at"));
         return new RecommendJobResponseDto(
-                asString(job.get("external_id")),
+                asLong(job.get("job_post_id")),
+                asLong(job.get("source_id")),
+                asString(job.get("source_table")),
                 asString(job.get("company_name")),
                 asString(job.get("job_title")),
                 asString(job.get("work_address")),
@@ -84,6 +86,7 @@ public record RecommendResponseDto(
                 asString(job.get("required_education")),
                 asString(job.get("required_major")),
                 asString(job.get("required_licenses")),
+                asString(job.get("agency_name")),
                 asDouble(job.get("work_lat")),
                 asDouble(job.get("work_lng"))
         );
@@ -105,6 +108,20 @@ public record RecommendResponseDto(
         }
         try {
             return Double.parseDouble(String.valueOf(value));
+        } catch (NumberFormatException ignored) {
+            return null;
+        }
+    }
+
+    private static Long asLong(Object value) {
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof Number number) {
+            return number.longValue();
+        }
+        try {
+            return Long.parseLong(String.valueOf(value));
         } catch (NumberFormatException ignored) {
             return null;
         }

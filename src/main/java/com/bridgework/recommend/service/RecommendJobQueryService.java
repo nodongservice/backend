@@ -19,7 +19,9 @@ public class RecommendJobQueryService {
 
     public List<RecommendJobResponseDto> getLatestRecruitments() {
         String sql = """
-                SELECT external_id,
+                SELECT id,
+                       id AS source_id,
+                       'pd_kepad_recruitment' AS source_table,
                        buspla_name,
                        job_nm,
                        comp_addr,
@@ -34,6 +36,7 @@ public class RecommendJobQueryService {
                        req_educ,
                        req_major,
                        req_licens,
+                       regagn_name,
                        geo_latitude,
                        geo_longitude
                 FROM pd_kepad_recruitment
@@ -41,7 +44,9 @@ public class RecommendJobQueryService {
                 """;
         try {
             return namedParameterJdbcTemplate.query(sql, (rs, rowNum) -> new RecommendJobResponseDto(
-                    rs.getString("external_id"),
+                    rs.getObject("id", Long.class),
+                    rs.getObject("source_id", Long.class),
+                    rs.getString("source_table"),
                     rs.getString("buspla_name"),
                     rs.getString("job_nm"),
                     rs.getString("comp_addr"),
@@ -56,6 +61,7 @@ public class RecommendJobQueryService {
                     rs.getString("req_educ"),
                     rs.getString("req_major"),
                     rs.getString("req_licens"),
+                    rs.getString("regagn_name"),
                     rs.getObject("geo_latitude", Double.class),
                     rs.getObject("geo_longitude", Double.class)
             ));
@@ -69,4 +75,3 @@ public class RecommendJobQueryService {
         }
     }
 }
-
