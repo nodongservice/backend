@@ -24,6 +24,10 @@ spring:
     baseline-on-migrate: true
   lifecycle:
     timeout-per-shutdown-phase: 20s
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 12MB
   mvc:
     async:
       # 대용량 응답/외부 연동 처리 시 응답 스트림이 조기 종료되지 않도록 요청 타임아웃을 상향한다.
