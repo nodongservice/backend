@@ -7,15 +7,18 @@ import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeoutException;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpStatusCode;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.MultipartBodyBuilder;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 import org.springframework.web.reactive.function.BodyInserters;
 import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.reactive.function.client.WebClientRequestException;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
 
 @Component
@@ -23,6 +26,11 @@ public class FastApiProfileOcrClient {
 
     private static final ParameterizedTypeReference<Map<String, Object>> MAP_TYPE = new ParameterizedTypeReference<>() {
     };
+    private static final List<String> RETRYABLE_MESSAGE_KEYWORDS = List.of(
+            "connection prematurely closed before response",
+            "connection reset by peer",
+            "broken pipe"
+    );
 
     private final WebClient webClient;
     private final BridgeWorkProfileOcrProperties profileOcrProperties;
@@ -39,67 +47,78 @@ public class FastApiProfileOcrClient {
     public Map<String, Object> extractProfileDraft(String filename, String contentType, byte[] payload) {
         List<String> candidateUris = resolveCandidateUris();
         List<String> attemptFailures = new ArrayList<>();
+        int maxAttemptsPerUri = Math.max(1, profileOcrProperties.getRetryAttemptsPerUri());
 
         for (int index = 0; index < candidateUris.size(); index++) {
             String uri = candidateUris.get(index);
-            boolean isLastAttempt = index == candidateUris.size() - 1;
+            boolean hasNextUri = index < candidateUris.size() - 1;
 
-            MultipartBodyBuilder multipartBodyBuilder = new MultipartBodyBuilder();
-            multipartBodyBuilder.part(
-                    "file",
-                    new InMemoryFileResource(payload, filename),
-                    MediaType.parseMediaType(contentType == null ? MediaType.APPLICATION_PDF_VALUE : contentType)
-            );
+            for (int attempt = 1; attempt <= maxAttemptsPerUri; attempt++) {
+                boolean hasNextAttempt = attempt < maxAttemptsPerUri;
 
-            try {
-                Map<String, Object> response = webClient.post()
-                        .uri(uri)
-                        .contentType(MediaType.MULTIPART_FORM_DATA)
-                        .body(BodyInserters.fromMultipartData(multipartBodyBuilder.build()))
-                        .retrieve()
-                        .bodyToMono(MAP_TYPE)
-                        .timeout(profileOcrProperties.getRequestTimeout())
-                        .block();
+                MultipartBodyBuilder multipartBodyBuilder = buildMultipartBody(filename, contentType, payload);
+                try {
+                    Map<String, Object> response = webClient.post()
+                            .uri(uri)
+                            .contentType(MediaType.MULTIPART_FORM_DATA)
+                            .body(BodyInserters.fromMultipartData(multipartBodyBuilder.build()))
+                            .retrieve()
+                            .bodyToMono(MAP_TYPE)
+                            .timeout(profileOcrProperties.getRequestTimeout())
+                            .block();
 
-                if (response == null) {
+                    if (response == null) {
+                        throw new ProfileOcrDomainException(
+                                "FASTAPI_OCR_EMPTY_RESPONSE",
+                                HttpStatus.BAD_GATEWAY,
+                                "FastAPI OCR 응답이 비어 있습니다."
+                        );
+                    }
+                    return response;
+                } catch (WebClientResponseException exception) {
+                    String redirectLocation = exception.getHeaders().getFirst("Location");
+                    String failureMessage = "status=" + exception.getStatusCode().value()
+                            + ", uri=" + uri
+                            + ", attempt=" + attempt
+                            + (StringUtils.hasText(redirectLocation) ? ", location=" + redirectLocation : "")
+                            + ", body=" + sanitizeErrorBody(exception.getResponseBodyAsString());
+                    attemptFailures.add(failureMessage);
+
+                    boolean retryableHttpStatus = isRetryableHttpStatus(exception.getStatusCode());
+                    if (retryableHttpStatus && hasNextAttempt) {
+                        continue;
+                    }
+                    if (retryableHttpStatus && hasNextUri) {
+                        break;
+                    }
+
                     throw new ProfileOcrDomainException(
-                            "FASTAPI_OCR_EMPTY_RESPONSE",
+                            "FASTAPI_OCR_HTTP_ERROR",
                             HttpStatus.BAD_GATEWAY,
-                            "FastAPI OCR 응답이 비어 있습니다."
+                            "FastAPI OCR 호출 실패: " + failureMessage
+                    );
+                } catch (ProfileOcrDomainException exception) {
+                    throw exception;
+                } catch (Exception exception) {
+                    String failureMessage = "uri=" + uri
+                            + ", attempt=" + attempt
+                            + ", reason=" + summarizeException(exception);
+                    attemptFailures.add(failureMessage);
+
+                    boolean retryableConnectionException = isRetryableConnectionException(exception);
+                    if (retryableConnectionException && hasNextAttempt) {
+                        continue;
+                    }
+                    if (retryableConnectionException && hasNextUri) {
+                        break;
+                    }
+
+                    throw new ProfileOcrDomainException(
+                            "FASTAPI_OCR_CALL_FAILED",
+                            HttpStatus.BAD_GATEWAY,
+                            "FastAPI OCR 호출 중 오류가 발생했습니다: " + summarizeException(exception)
                     );
                 }
-                return response;
-            } catch (WebClientResponseException exception) {
-                String redirectLocation = exception.getHeaders().getFirst("Location");
-                String failureMessage = "status=" + exception.getStatusCode().value()
-                        + ", uri=" + uri
-                        + (StringUtils.hasText(redirectLocation) ? ", location=" + redirectLocation : "")
-                        + ", body=" + sanitizeErrorBody(exception.getResponseBodyAsString());
-                attemptFailures.add(failureMessage);
-
-                // 3xx/5xx는 내부 포트 폴백을 위해 다음 후보로 재시도한다.
-                if (!isLastAttempt && (exception.getStatusCode().is3xxRedirection() || exception.getStatusCode().is5xxServerError())) {
-                    continue;
-                }
-
-                // 4xx는 즉시 클라이언트 오류로 간주하고 중단한다.
-                throw new ProfileOcrDomainException(
-                        "FASTAPI_OCR_HTTP_ERROR",
-                        HttpStatus.BAD_GATEWAY,
-                        "FastAPI OCR 호출 실패: " + failureMessage
-                );
-            } catch (ProfileOcrDomainException exception) {
-                throw exception;
-            } catch (Exception exception) {
-                attemptFailures.add("uri=" + uri + ", reason=" + exception.getMessage());
-                if (!isLastAttempt) {
-                    continue;
-                }
-                throw new ProfileOcrDomainException(
-                        "FASTAPI_OCR_CALL_FAILED",
-                        HttpStatus.BAD_GATEWAY,
-                        "FastAPI OCR 호출 중 오류가 발생했습니다: " + exception.getMessage()
-                );
             }
         }
 
@@ -112,18 +131,94 @@ public class FastApiProfileOcrClient {
 
     private List<String> resolveCandidateUris() {
         LinkedHashSet<String> candidates = new LinkedHashSet<>();
-        String extractPath = profileOcrProperties.getExtractPath();
-        candidates.add(joinBaseUrlAndPath(profileOcrProperties.getFastapiBaseUrl(), extractPath));
 
         for (String healthUrl : healthMonitorProperties.getFastapiHealthUrls()) {
             String baseUrl = toBaseUrlFromHealthUrl(healthUrl);
             if (!StringUtils.hasText(baseUrl)) {
                 continue;
             }
-            candidates.add(joinBaseUrlAndPath(baseUrl, extractPath));
+            candidates.add(joinBaseUrlAndPath(baseUrl, profileOcrProperties.getExtractPath()));
         }
 
+        candidates.add(joinBaseUrlAndPath(profileOcrProperties.getFastapiBaseUrl(), profileOcrProperties.getExtractPath()));
         return List.copyOf(candidates);
+    }
+
+    private MultipartBodyBuilder buildMultipartBody(String filename, String contentType, byte[] payload) {
+        MultipartBodyBuilder multipartBodyBuilder = new MultipartBodyBuilder();
+        multipartBodyBuilder.part(
+                "file",
+                new InMemoryFileResource(payload, filename),
+                resolveContentType(contentType)
+        );
+        return multipartBodyBuilder;
+    }
+
+    private MediaType resolveContentType(String contentType) {
+        if (!StringUtils.hasText(contentType)) {
+            return MediaType.APPLICATION_PDF;
+        }
+        try {
+            return MediaType.parseMediaType(contentType);
+        } catch (Exception ignored) {
+            return MediaType.APPLICATION_PDF;
+        }
+    }
+
+    private boolean isRetryableHttpStatus(HttpStatusCode statusCode) {
+        int status = statusCode.value();
+        return (status >= 300 && status < 400) || status >= 500;
+    }
+
+    private boolean isRetryableConnectionException(Exception exception) {
+        if (exception instanceof WebClientRequestException || hasCauseOfType(exception, TimeoutException.class)) {
+            return true;
+        }
+
+        for (String keyword : RETRYABLE_MESSAGE_KEYWORDS) {
+            if (containsKeywordInCauseChain(exception, keyword)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean hasCauseOfType(Throwable throwable, Class<? extends Throwable> expectedType) {
+        Throwable current = throwable;
+        while (current != null) {
+            if (expectedType.isInstance(current)) {
+                return true;
+            }
+            current = current.getCause();
+        }
+        return false;
+    }
+
+    private boolean containsKeywordInCauseChain(Throwable throwable, String keyword) {
+        Throwable current = throwable;
+        while (current != null) {
+            String message = current.getMessage();
+            if (StringUtils.hasText(message) && message.toLowerCase().contains(keyword)) {
+                return true;
+            }
+            current = current.getCause();
+        }
+        return false;
+    }
+
+    private String summarizeException(Exception exception) {
+        Throwable rootCause = exception;
+        while (rootCause.getCause() != null && rootCause.getCause() != rootCause) {
+            rootCause = rootCause.getCause();
+        }
+        String message = rootCause.getMessage();
+        if (!StringUtils.hasText(message)) {
+            message = exception.getMessage();
+        }
+        if (!StringUtils.hasText(message)) {
+            return rootCause.getClass().getSimpleName();
+        }
+        return rootCause.getClass().getSimpleName() + ": " + message;
     }
 
     private String toBaseUrlFromHealthUrl(String healthUrl) {

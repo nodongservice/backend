@@ -23,6 +23,9 @@ public class BridgeWorkProfileOcrProperties {
     private Duration requestTimeout = Duration.ofSeconds(120);
 
     @Min(1)
+    private int retryAttemptsPerUri = 2;
+
+    @Min(1)
     private long maxUploadBytes = 10 * 1024 * 1024;
 
     @NotEmpty
@@ -58,6 +61,14 @@ public class BridgeWorkProfileOcrProperties {
 
     public void setMaxUploadBytes(long maxUploadBytes) {
         this.maxUploadBytes = maxUploadBytes;
+    }
+
+    public int getRetryAttemptsPerUri() {
+        return retryAttemptsPerUri;
+    }
+
+    public void setRetryAttemptsPerUri(int retryAttemptsPerUri) {
+        this.retryAttemptsPerUri = retryAttemptsPerUri;
     }
 
     public List<String> getAllowedContentTypes() {

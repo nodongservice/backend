@@ -78,6 +78,8 @@ bridgework:
     extract-path: /api/v1/profile-draft/from-portfolio
     # OCR + LLM 처리 시간을 고려해 게이트웨이 타임아웃을 길게 잡는다.
     request-timeout: 180s
+    # 연결 조기 종료 같은 일시 오류를 URI별로 재시도한다.
+    retry-attempts-per-uri: 2
     max-upload-bytes: 10485760
     allowed-content-types:
       - application/pdf
