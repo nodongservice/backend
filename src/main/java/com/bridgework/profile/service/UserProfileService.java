@@ -10,12 +10,16 @@ import com.bridgework.profile.enums.LabeledEnum;
 import com.bridgework.profile.exception.ProfileDomainException;
 import com.bridgework.profile.exception.UserProfileNotFoundException;
 import com.bridgework.profile.repository.UserProfileRepository;
+import com.bridgework.sync.config.BridgeWorkSyncProperties;
+import com.bridgework.sync.normalized.NaverGeocodingService;
+import com.bridgework.sync.normalized.NormalizedGeoPoint;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.transaction.Transactional;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
@@ -32,15 +36,21 @@ public class UserProfileService {
     private final AppUserRepository appUserRepository;
     private final ProfileAiTagService profileAiTagService;
     private final ObjectMapper objectMapper;
+    private final NaverGeocodingService naverGeocodingService;
+    private final BridgeWorkSyncProperties syncProperties;
 
     public UserProfileService(UserProfileRepository userProfileRepository,
                               AppUserRepository appUserRepository,
                               ProfileAiTagService profileAiTagService,
-                              ObjectMapper objectMapper) {
+                              ObjectMapper objectMapper,
+                              NaverGeocodingService naverGeocodingService,
+                              BridgeWorkSyncProperties syncProperties) {
         this.userProfileRepository = userProfileRepository;
         this.appUserRepository = appUserRepository;
         this.profileAiTagService = profileAiTagService;
         this.objectMapper = objectMapper;
+        this.naverGeocodingService = naverGeocodingService;
+        this.syncProperties = syncProperties;
     }
 
     @Transactional
@@ -174,6 +184,26 @@ public class UserProfileService {
                 aiEnvironmentTagsJson,
                 aiSupportTagsJson
         );
+        applyHomeCoordinates(profile, request.detailAddress());
+    }
+
+    private void applyHomeCoordinates(UserProfile profile, String detailAddress) {
+        Optional<NormalizedGeoPoint> geoPoint;
+        try {
+            geoPoint = naverGeocodingService.geocode(
+                    syncProperties.getNaverGeocodeApiKeyId(),
+                    syncProperties.getNaverGeocodeApiKey(),
+                    detailAddress
+            );
+        } catch (RuntimeException ignored) {
+            geoPoint = Optional.empty();
+        }
+        if (geoPoint.isPresent()) {
+            NormalizedGeoPoint point = geoPoint.get();
+            profile.updateHomeCoordinates(point.latitude(), point.longitude(), point.matchedAddress());
+            return;
+        }
+        profile.updateHomeCoordinates(null, null, null);
     }
 
     private void validateBirthDateOrAgeGroup(UserProfileUpsertRequestDto request) {
@@ -251,6 +281,9 @@ public class UserProfileService {
                 toStringList(profile.getAiJobTagsJson()),
                 toStringList(profile.getAiEnvironmentTagsJson()),
                 toStringList(profile.getAiSupportTagsJson()),
+                profile.getHomeLat(),
+                profile.getHomeLng(),
+                profile.getHomeGeocodedAddress(),
                 profile.getUpdatedAt()
         );
     }

@@ -278,6 +278,9 @@ class RecommendGatewayServiceTest {
                 List.of(),
                 List.of(),
                 List.of(),
+                37.5665,
+                126.978,
+                "서울특별시 중구 세종대로 110",
                 OffsetDateTime.now()
         );
     }

@@ -24,6 +24,8 @@ import com.bridgework.profile.enums.ProfileWorkTimePreference;
 import com.bridgework.profile.enums.ProfileWorkType;
 import com.bridgework.profile.exception.UserProfileNotFoundException;
 import com.bridgework.profile.repository.UserProfileRepository;
+import com.bridgework.sync.config.BridgeWorkSyncProperties;
+import com.bridgework.sync.normalized.NaverGeocodingService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.LocalDate;
 import java.util.List;
@@ -53,7 +55,9 @@ class UserProfileServiceTest {
                 userProfileRepository,
                 appUserRepository,
                 profileAiTagService,
-                new ObjectMapper()
+                new ObjectMapper(),
+                new NaverGeocodingService(null, new ObjectMapper()),
+                new BridgeWorkSyncProperties()
         );
     }
 

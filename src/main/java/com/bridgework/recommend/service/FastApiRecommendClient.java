@@ -362,8 +362,8 @@ public class FastApiRecommendClient {
         scoreProfile.put("user_id", profile.userId());
         scoreProfile.put("name", profile.fullName());
         scoreProfile.put("address", profile.detailAddress());
-        scoreProfile.put("home_lat", null);
-        scoreProfile.put("home_lng", null);
+        scoreProfile.put("home_lat", profile.homeLat());
+        scoreProfile.put("home_lng", profile.homeLng());
         scoreProfile.put("desired_jobs", desiredJobs(profile));
         scoreProfile.put("skills", nullToEmpty(profile.skills()));
         scoreProfile.put("education", firstNotBlank(profile.highestEducation(), profile.educationSummary()));
@@ -382,6 +382,7 @@ public class FastApiRecommendClient {
         scoreProfile.put("assistive_devices", splitToList(profile.assistiveDevices()));
         scoreProfile.put("required_supports", mergeRequiredSupports(profile.requiredSupports(), profile.workSupportRequirements()));
         scoreProfile.put("mobility_range_km", parseMobilityRangeKm(profile.commuteRange()));
+        scoreProfile.put("commute_limit_minutes", parseCommuteLimitMinutes(profile.commuteRange()));
         return scoreProfile;
     }
 
@@ -458,6 +459,27 @@ public class FastApiRecommendClient {
         }
         if (normalized.contains("m") || normalized.contains("미터")) {
             return value / 1000.0;
+        }
+        return null;
+    }
+
+    private Integer parseCommuteLimitMinutes(String commuteRange) {
+        if (!StringUtils.hasText(commuteRange)) {
+            return null;
+        }
+
+        String normalized = commuteRange.trim().toLowerCase();
+        Matcher matcher = DECIMAL_PATTERN.matcher(normalized);
+        if (!matcher.find()) {
+            return null;
+        }
+
+        double value = Double.parseDouble(matcher.group(1));
+        if (normalized.contains("시간")) {
+            return (int) Math.round(value * 60);
+        }
+        if (normalized.contains("분") || normalized.contains("minute") || normalized.contains("min")) {
+            return (int) Math.round(value);
         }
         return null;
     }
