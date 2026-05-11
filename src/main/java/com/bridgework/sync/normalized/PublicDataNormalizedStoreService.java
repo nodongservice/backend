@@ -28,7 +28,15 @@ public class PublicDataNormalizedStoreService {
     private static final Pattern DECIMAL_PATTERN = Pattern.compile("^[+-]?(?:\\d+(?:\\.\\d+)?|\\.\\d+)$");
     private static final Pattern INTEGER_PATTERN = Pattern.compile("^[+-]?\\d+$");
     private static final Set<String> COORDINATE_COLUMNS = Set.of("latitude", "longitude", "geo_latitude", "geo_longitude");
-    private static final Set<String> INTEGER_COLUMNS = Set.of("slope_vhcle_co", "lift_vhcle_co");
+    private static final Set<String> INTEGER_COLUMNS = Set.of(
+            "slope_vhcle_co",
+            "lift_vhcle_co",
+            "car_hold_co",
+            "whlch_liftt_cnt",
+            "authorized_count",
+            "low_floor_bus_count",
+            "cartrk_co"
+    );
     private static final String RECRUITMENT_STATUS_ACTIVE = "ACTIVE";
     private static final String RECRUITMENT_STATUS_CLOSED = "CLOSED";
 
