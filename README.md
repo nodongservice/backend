@@ -1,10 +1,10 @@
 # BridgeWork Backend
 
-브릿지워크 인증/프로필/공공데이터 동기화 백엔드입니다.
+브릿지워크 인증/프로필/추천/공공데이터/공고/관리자 백엔드입니다.
 
 ## 기술 스택
 - Java 17
-- Spring Boot 3.3
+- Spring Boot 3.3.6
 - Spring Data JPA + Flyway
 - PostgreSQL
 - Spring Security + JWT
@@ -12,6 +12,10 @@
 - ShedLock(분산 스케줄 중복 방지)
 
 ## 도메인 구조
+`com.bridgework.admin`
+- `auth`
+- `dummy`
+
 `com.bridgework.auth`
 - `controller`
 - `service`
@@ -19,6 +23,12 @@
 - `entity`
 - `dto`
 - `exception`
+
+`com.bridgework.common`
+- `config`
+- `dto`
+- `exception`
+- `notification`
 
 `com.bridgework.profile`
 - `controller`
@@ -45,13 +55,22 @@
 - `service`
 - `dto`
 
-`com.bridgework.sync`
+`com.bridgework.posting`
 - `controller`
 - `service`
 - `repository`
 - `entity`
 - `dto`
 - `exception`
+
+`com.bridgework.sync`
+- `admin/controller`
+- `service`
+- `repository`
+- `entity`
+- `dto`
+- `exception`
+- `normalized`
 
 ## 현재 구현 범위
 - 기능 0: 소셜 로그인/회원가입 완료, JWT 재발급/로그아웃/내 정보 조회
@@ -61,6 +80,8 @@
 - 기능 2: 퀵 맞춤 추천 게이트웨이(`aiEnabled` ON/OFF)
 - 기능 3: 지도 추천 게이트웨이(`aiEnabled` ON/OFF)
 - 기능 3-1: 추천 설명 생성 게이트웨이
+- 기능 4: 공고 상세/인기 공고 조회, 공고 스크랩/해제/내 스크랩 목록
+- 기능 5: 관리자 로그인, 더미 사용자 케이스 조회/로그인
 - 공공데이터: 스케줄러 동기화 + 수동 실행 + 원본/정규화 저장
 - 화면 옵션/지도 레이어: 직무 트리, 지역/고용형태/급여방식 옵션, 근로지원인 수행기관 마커 조회
 
@@ -160,9 +181,10 @@
 ## CI/CD (main -> EC2 무중단 배포)
 - 워크플로우: `.github/workflows/cicd-main-ec2.yml`
 - 트리거: `main` 브랜치 push
-- 방식: `Blue/Green` 컨테이너(`19000`, `19001`) 전환
+- 방식: `Blue/Green` 컨테이너(`18080`, `18081`) 전환
 - DB: 컨테이너 DB 미사용, `RDS PostgreSQL` 접속(`application-prod.yml` 외부 파일 마운트)
 - Nginx 라우팅/업스트림 전환: `backend-infra` 레포에서 관리
+- Spring 트래픽 전환 스크립트: `~/bridgework-infra/deploy/spring_blue_green_switch.sh`
 - FastAPI 트래픽 전환 스크립트: `~/bridgework-infra/deploy/fastapi_blue_green_switch.sh`
 - Redis: 배포 스크립트에서 `bridgework-redis` 컨테이너를 자동 생성/기동(동일 Docker network)
 
@@ -187,12 +209,10 @@
 - `BRIDGEWORK_AUTH_JWT_SECRET`
 - `KAKAO_CLIENT_SECRET`
 - `NAVER_CLIENT_SECRET`
-- `BRIDGEWORK_FASTAPI_HEALTH_URL` (선택)
-- `BRIDGEWORK_RECOMMEND_FASTAPI_BASE_URL` (선택)
 
 ### 생성 방식
 - GitHub Actions가 위 개별 Secrets를 읽어 `application-prod.yml`을 런타임에 생성
-- 생성 파일을 EC2 `~/bridgework/aiserver/application-prod.yml`로 업로드
+- 생성 파일을 EC2 `~/bridgework/backend/application-prod.yml`로 업로드
 - 컨테이너 실행 시 `/app/config/application-prod.yml`로 read-only 마운트
 
 ### EC2 선행 작업
