@@ -75,6 +75,34 @@ class RecommendGatewayServiceTest {
     }
 
     @Test
+    void recommendMap_whenAiDisabled_thenReturnsFallbackScoreAndEvidence() {
+        RecommendJobResponseDto job = new RecommendJobResponseDto(
+                1L, 1L, "pd_kepad_recruitment", "사업장", "사무보조", "서울", "정규직", "신입",
+                "월급", "300만원", "20261231", "20260504", "20260504",
+                "무관", "고졸", "무관", "무관", "담당기관", 37.5, 127.0
+        );
+        when(recommendJobQueryService.getLatestRecruitments()).thenReturn(List.of(job));
+
+        Map<String, Object> response = recommendGatewayService.recommendMap(
+                1L,
+                new RecommendRequestDto(false, null)
+        );
+
+        List<?> results = (List<?>) response.get("results");
+        assertThat(results).hasSize(1);
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> first = (Map<String, Object>) results.get(0);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> scoreDetail = (Map<String, Object>) first.get("score_detail");
+        List<?> evidenceItems = (List<?>) first.get("evidence_items");
+
+        assertThat(first.get("total_score")).isEqualTo(45);
+        assertThat(scoreDetail.get("accessibility_score")).isEqualTo(45);
+        assertThat(evidenceItems).hasSize(1);
+    }
+
+    @Test
     void recommendMap_whenAiEnabledAndProfileIdMissing_thenUsesDefaultProfileAndCallsFastApi() {
         UserProfileResponseDto defaultProfile = profile(11L, true);
         Map<String, Object> aiResponse = Map.of(

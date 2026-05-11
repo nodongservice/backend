@@ -36,6 +36,7 @@ public class FastApiRecommendClient {
     private static final ParameterizedTypeReference<Map<String, Object>> MAP_TYPE = new ParameterizedTypeReference<>() {
     };
     private static final Pattern INTEGER_PATTERN = Pattern.compile("(\\d+)");
+    private static final Pattern DECIMAL_PATTERN = Pattern.compile("(\\d+(?:\\.\\d+)?)");
     private static final List<String> RETRYABLE_MESSAGE_KEYWORDS = List.of(
             "connection prematurely closed before response",
             "connection reset by peer",
@@ -361,6 +362,8 @@ public class FastApiRecommendClient {
         scoreProfile.put("user_id", profile.userId());
         scoreProfile.put("name", profile.fullName());
         scoreProfile.put("address", profile.detailAddress());
+        scoreProfile.put("home_lat", null);
+        scoreProfile.put("home_lng", null);
         scoreProfile.put("desired_jobs", desiredJobs(profile));
         scoreProfile.put("skills", nullToEmpty(profile.skills()));
         scoreProfile.put("education", firstNotBlank(profile.highestEducation(), profile.educationSummary()));
@@ -378,6 +381,7 @@ public class FastApiRecommendClient {
         scoreProfile.put("disability_description", profile.disabilityDescription());
         scoreProfile.put("assistive_devices", splitToList(profile.assistiveDevices()));
         scoreProfile.put("required_supports", mergeRequiredSupports(profile.requiredSupports(), profile.workSupportRequirements()));
+        scoreProfile.put("mobility_range_km", parseMobilityRangeKm(profile.commuteRange()));
         return scoreProfile;
     }
 
@@ -435,6 +439,27 @@ public class FastApiRecommendClient {
         } catch (NumberFormatException ignored) {
             return null;
         }
+    }
+
+    private Double parseMobilityRangeKm(String commuteRange) {
+        if (!StringUtils.hasText(commuteRange)) {
+            return null;
+        }
+
+        String normalized = commuteRange.trim().toLowerCase();
+        Matcher matcher = DECIMAL_PATTERN.matcher(normalized);
+        if (!matcher.find()) {
+            return null;
+        }
+
+        double value = Double.parseDouble(matcher.group(1));
+        if (normalized.contains("km") || normalized.contains("킬로")) {
+            return value;
+        }
+        if (normalized.contains("m") || normalized.contains("미터")) {
+            return value / 1000.0;
+        }
+        return null;
     }
 
     private String firstNotBlank(String first, String second) {

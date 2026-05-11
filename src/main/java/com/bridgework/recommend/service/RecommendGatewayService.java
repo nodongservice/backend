@@ -103,11 +103,11 @@ public class RecommendGatewayService {
                 .map(job -> {
                     Map<String, Object> item = new LinkedHashMap<>();
                     item.put("job", toFastApiJob(job));
-                    item.put("score_detail", null);
-                    item.put("total_score", null);
+                    item.put("score_detail", buildFallbackMapScoreDetail(job));
+                    item.put("total_score", fallbackAccessibilityScore(job));
                     item.put("reasons", List.of());
-                    item.put("risk_factors", List.of());
-                    item.put("evidence_items", List.of());
+                    item.put("risk_factors", buildFallbackMapRisks(job));
+                    item.put("evidence_items", buildFallbackEvidenceItems(job));
                     return item;
                 })
                 .toList();
@@ -115,6 +115,47 @@ public class RecommendGatewayService {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("results", results);
         return result;
+    }
+
+    private Map<String, Object> buildFallbackMapScoreDetail(RecommendJobResponseDto job) {
+        Map<String, Object> scoreDetail = new LinkedHashMap<>();
+        scoreDetail.put("job_fit_score", null);
+        scoreDetail.put("work_condition_score", null);
+        scoreDetail.put("disability_support_score", null);
+        scoreDetail.put("work_environment_score", null);
+        scoreDetail.put("company_stability_score", null);
+        scoreDetail.put("accessibility_score", fallbackAccessibilityScore(job));
+        return scoreDetail;
+    }
+
+    private Integer fallbackAccessibilityScore(RecommendJobResponseDto job) {
+        return job.geoLatitude() == null || job.geoLongitude() == null ? null : 45;
+    }
+
+    private List<String> buildFallbackMapRisks(RecommendJobResponseDto job) {
+        if (job.geoLatitude() == null || job.geoLongitude() == null) {
+            return List.of("근무지 좌표가 없어 접근성 평가는 추가 확인이 필요합니다.");
+        }
+        return List.of("AI 접근성 근거 조회가 비활성화되어 상세 근거는 추가 확인이 필요합니다.");
+    }
+
+    private List<Map<String, Object>> buildFallbackEvidenceItems(RecommendJobResponseDto job) {
+        Map<String, Object> evidence = new LinkedHashMap<>();
+        evidence.put("source_type", "KEPAD_RECRUITMENT");
+        evidence.put("source_name", "한국장애인고용공단 장애인 구인 실시간 현황");
+        evidence.put("description", "공고 원천 데이터와 근무지 좌표를 기준으로 표시했습니다.");
+        evidence.put("distance_meters", null);
+        evidence.put("source_table", job.sourceTable());
+        evidence.put("record_id", job.sourceId());
+
+        Map<String, Object> fields = new LinkedHashMap<>();
+        fields.put("company_name", job.busplaName());
+        fields.put("job_title", job.jobNm());
+        fields.put("work_address", job.compAddr());
+        fields.put("work_lat", job.geoLatitude());
+        fields.put("work_lng", job.geoLongitude());
+        evidence.put("fields", fields);
+        return List.of(evidence);
     }
 
     private Map<String, Object> toFastApiJob(RecommendJobResponseDto job) {
