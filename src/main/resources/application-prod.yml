@@ -24,6 +24,9 @@ bridgework:
     spring-bot-webhook-url: ${SPRING_BOT_DISCORD_WEBHOOK_URL}
   health-monitor:
     fastapi-health-url: ${BRIDGEWORK_FASTAPI_HEALTH_URL:http://host.docker.internal:19000/health,http://host.docker.internal:19001/health}
+  rate-limit:
+    enabled: ${BRIDGEWORK_RATE_LIMIT_ENABLED:true}
+    fail-open: ${BRIDGEWORK_RATE_LIMIT_FAIL_OPEN:true}
   recommend:
     fastapi-base-url: ${BRIDGEWORK_RECOMMEND_FASTAPI_BASE_URL:http://host.docker.internal/api/py}
     quick-path: /api/v1/score/quick
