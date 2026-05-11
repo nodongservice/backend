@@ -66,6 +66,75 @@ bridgework:
     request-timeout: 5s
     fastapi-health-url: http://localhost:8000/health
     alert-reminder-interval: 10m
+  rate-limit:
+    enabled: true
+    # Redis 장애가 API 전체 장애로 번지지 않도록 기본은 fail-open으로 둔다.
+    fail-open: true
+    redis-key-prefix: bridgework:rate-limit
+    excluded-path-patterns:
+      - /actuator/**
+      - /swagger-ui/**
+      - /swagger-ui.html
+      - /v3/api-docs/**
+      - /error
+    policies:
+      - id: auth-sensitive
+        methods: [POST]
+        path-patterns:
+          - /api/v1/auth/admin/login
+          - /api/v1/auth/social/login
+          - /api/v1/auth/social/signup/complete
+          - /api/v1/auth/token/refresh
+          - /api/v1/auth/withdraw/cancel
+        key-scope: IP
+        capacity: 10
+        refill-tokens: 10
+        refill-period: 1m
+      - id: admin-mutating
+        methods: [POST, DELETE, PUT, PATCH]
+        path-patterns:
+          - /api/v1/admin/**
+        key-scope: USER_OR_IP
+        capacity: 20
+        refill-tokens: 20
+        refill-period: 1m
+      - id: heavy-ai
+        methods: [POST]
+        path-patterns:
+          - /api/v1/recommend/quick
+          - /api/v1/recommend/map
+          - /api/v1/recommend/explain
+          - /api/v1/profiles/ocr/extract
+        key-scope: USER_OR_IP
+        capacity: 10
+        refill-tokens: 10
+        refill-period: 1m
+      - id: write-api
+        methods: [POST, PUT, PATCH, DELETE]
+        path-patterns:
+          - /api/v1/**
+        key-scope: USER_OR_IP
+        capacity: 60
+        refill-tokens: 60
+        refill-period: 1m
+      - id: public-read
+        methods: [GET]
+        path-patterns:
+          - /api/v1/options/**
+          - /api/v1/map/support-agencies
+          - /api/v1/postings/popular
+        key-scope: IP
+        capacity: 300
+        refill-tokens: 300
+        refill-period: 1m
+      - id: read-api
+        methods: [GET]
+        path-patterns:
+          - /api/v1/**
+        key-scope: USER_OR_IP
+        capacity: 180
+        refill-tokens: 180
+        refill-period: 1m
   recommend:
     fastapi-base-url: http://localhost:8000
     quick-path: /api/v1/score/quick
