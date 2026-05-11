@@ -69,6 +69,9 @@ public record UserProfileResponseDto(
         List<String> aiJobTags,
         List<String> aiEnvironmentTags,
         List<String> aiSupportTags,
+        Double homeLat,
+        Double homeLng,
+        String homeGeocodedAddress,
         OffsetDateTime updatedAt
 ) {
 }

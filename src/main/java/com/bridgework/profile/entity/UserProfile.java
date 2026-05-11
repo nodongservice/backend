@@ -86,6 +86,15 @@ public class UserProfile {
     @Column(name = "detail_address", length = 300)
     private String detailAddress;
 
+    @Column(name = "home_lat")
+    private Double homeLat;
+
+    @Column(name = "home_lng")
+    private Double homeLng;
+
+    @Column(name = "home_geocoded_address", length = 300)
+    private String homeGeocodedAddress;
+
     @Column(name = "emergency_contact", length = 100)
     private String emergencyContact;
 
@@ -292,6 +301,9 @@ public class UserProfile {
         this.contactEmail = anonymizedContactEmail;
         this.birthDate = LocalDate.of(1900, 1, 1);
         this.detailAddress = "탈퇴회원";
+        this.homeLat = null;
+        this.homeLng = null;
+        this.homeGeocodedAddress = null;
         this.emergencyContact = null;
 
         this.careerSummary = null;
@@ -417,6 +429,24 @@ public class UserProfile {
 
     public String getDetailAddress() {
         return detailAddress;
+    }
+
+    public Double getHomeLat() {
+        return homeLat;
+    }
+
+    public Double getHomeLng() {
+        return homeLng;
+    }
+
+    public String getHomeGeocodedAddress() {
+        return homeGeocodedAddress;
+    }
+
+    public void updateHomeCoordinates(Double homeLat, Double homeLng, String homeGeocodedAddress) {
+        this.homeLat = homeLat;
+        this.homeLng = homeLng;
+        this.homeGeocodedAddress = homeGeocodedAddress;
     }
 
     public String getEmergencyContact() {
