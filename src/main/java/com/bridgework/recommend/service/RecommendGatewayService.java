@@ -58,6 +58,8 @@ public class RecommendGatewayService {
                 asStringList(result.get("recommendation_reasons")),
                 asStringList(result.get("caution_points")),
                 asStringList(result.get("checklist")),
+                asString(result.get("next_step_summary")),
+                asMapList(result.get("recommended_programs")),
                 asBoolean(result.get("used_llm")),
                 aiResponse
         );
@@ -202,6 +204,17 @@ public class RecommendGatewayService {
         }
         return values.stream()
                 .map(String::valueOf)
+                .toList();
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<Map<String, Object>> asMapList(Object value) {
+        if (!(value instanceof List<?> values)) {
+            return List.of();
+        }
+        return values.stream()
+                .filter(Map.class::isInstance)
+                .<Map<String, Object>>map(item -> new LinkedHashMap<>((Map<String, Object>) item))
                 .toList();
     }
 
