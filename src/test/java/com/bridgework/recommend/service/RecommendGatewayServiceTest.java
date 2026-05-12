@@ -203,6 +203,12 @@ class RecommendGatewayServiceTest {
                         "recommendation_reasons", List.of("직무 유사도 높음"),
                         "caution_points", List.of("출퇴근 시간 혼잡 가능"),
                         "checklist", List.of("면접 전 근무지 동선을 확인하세요."),
+                        "next_step_summary", "비슷한 직무를 준비할 때 아래 프로그램이 도움이 될 수 있어요.",
+                        "recommended_programs", List.of(Map.of(
+                                "title", "직업 적응 훈련 프로그램",
+                                "reason", "작업 적응에 도움이 될 수 있어요.",
+                                "source_type", "JOBSEEKER_COMPETENCY_PROGRAM"
+                        )),
                         "used_llm", false
                 )
         );
@@ -216,6 +222,9 @@ class RecommendGatewayServiceTest {
         assertThat(response.recommendationReasons()).containsExactly("직무 유사도 높음");
         assertThat(response.cautionPoints()).containsExactly("출퇴근 시간 혼잡 가능");
         assertThat(response.checklist()).containsExactly("면접 전 근무지 동선을 확인하세요.");
+        assertThat(response.nextStepSummary()).isEqualTo("비슷한 직무를 준비할 때 아래 프로그램이 도움이 될 수 있어요.");
+        assertThat(response.recommendedPrograms()).hasSize(1);
+        assertThat(response.recommendedPrograms().get(0).get("title")).isEqualTo("직업 적응 훈련 프로그램");
         assertThat(response.usedLlm()).isFalse();
         assertThat(response.aiResponse()).isEqualTo(aiResponse);
         verify(userProfileService, never()).getProfile(org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.anyLong());

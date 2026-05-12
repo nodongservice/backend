@@ -16,6 +16,10 @@ public record RecommendExplainResponseDto(
         List<String> cautionPoints,
         @Schema(description = "체크리스트", example = "[\"면접 전 근무지 접근 경로를 확인하세요.\"]")
         List<String> checklist,
+        @Schema(description = "다음 단계 준비 요약", example = "비슷한 직무를 준비할 때 아래 프로그램이 도움이 될 수 있어요.")
+        String nextStepSummary,
+        @Schema(description = "추천 프로그램", example = "[{\"title\":\"직업 적응 훈련 프로그램\",\"reason\":\"작업 적응에 도움이 될 수 있어요.\",\"sourceType\":\"JOBSEEKER_COMPETENCY_PROGRAM\"}]")
+        List<Map<String, Object>> recommendedPrograms,
         @Schema(description = "LLM 사용 여부", example = "false")
         Boolean usedLlm,
         @Schema(
