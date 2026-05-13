@@ -25,6 +25,12 @@ public record RecommendExplainScoreDetailDto(
         Integer companyStabilityScore,
         @JsonAlias({"accessibility_score"})
         @Schema(description = "접근성 요약 점수", example = "88")
-        Integer accessibilityScore
+        Integer accessibilityScore,
+        @JsonAlias({"distance_score"})
+        @Schema(description = "집-근무지 직선거리 점수", example = "76")
+        Integer distanceScore,
+        @JsonAlias({"commute_score"})
+        @Schema(description = "대중교통 통근시간 점수", example = "72")
+        Integer commuteScore
 ) {
 }
