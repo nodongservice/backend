@@ -30,6 +30,7 @@ import org.springframework.stereotype.Service;
 public class RecommendAsyncTaskService {
 
     private static final ZoneId SEOUL_ZONE = ZoneId.of("Asia/Seoul");
+    private static final int DAILY_CACHE_BOUNDARY_HOUR = 2;
     private static final String TASK_KEY_PREFIX = "recommend:task:";
     private static final String TASK_LOCK_KEY_PREFIX = "recommend:task:lock:";
 
@@ -204,8 +205,11 @@ public class RecommendAsyncTaskService {
     }
 
     private Duration ttlUntilNextCacheBoundary() {
-        LocalDateTime now = LocalDateTime.now(SEOUL_ZONE);
-        LocalDateTime boundary = now.withHour(2).withMinute(0).withSecond(0).withNano(0);
+        return ttlUntilNextCacheBoundary(LocalDateTime.now(SEOUL_ZONE));
+    }
+
+    static Duration ttlUntilNextCacheBoundary(LocalDateTime now) {
+        LocalDateTime boundary = now.withHour(DAILY_CACHE_BOUNDARY_HOUR).withMinute(0).withSecond(0).withNano(0);
         if (!now.isBefore(boundary)) {
             boundary = boundary.plusDays(1);
         }
