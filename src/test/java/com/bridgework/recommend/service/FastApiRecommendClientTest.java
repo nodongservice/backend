@@ -6,6 +6,7 @@ import com.bridgework.auth.entity.GenderType;
 import com.bridgework.common.config.BridgeWorkHealthMonitorProperties;
 import com.bridgework.profile.dto.UserProfileResponseDto;
 import com.bridgework.recommend.config.BridgeWorkRecommendProperties;
+import com.bridgework.sync.config.BridgeWorkSyncProperties;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.List;
@@ -21,7 +22,9 @@ class FastApiRecommendClientTest {
         FastApiRecommendClient client = new FastApiRecommendClient(
                 null,
                 new BridgeWorkRecommendProperties(),
-                new BridgeWorkHealthMonitorProperties()
+                new BridgeWorkHealthMonitorProperties(),
+                new BridgeWorkSyncProperties(),
+                null
         );
 
         Map<String, Object> payload = ReflectionTestUtils.invokeMethod(

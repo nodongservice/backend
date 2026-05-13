@@ -373,14 +373,14 @@ public class FastApiRecommendClient {
     }
 
     private Map<String, Object> buildScoreProfile(UserProfileResponseDto profile) {
-        Optional<NormalizedGeoPoint> homePoint = resolveHomeGeoPoint(profile.detailAddress());
+        NormalizedGeoPoint homePoint = resolveHomeGeoPoint(profile).orElse(null);
         Map<String, Object> scoreProfile = new LinkedHashMap<>();
         scoreProfile.put("profile_id", profile.profileId());
         scoreProfile.put("user_id", profile.userId());
         scoreProfile.put("name", profile.fullName());
         scoreProfile.put("address", profile.detailAddress());
-        scoreProfile.put("home_lat", homePoint.map(NormalizedGeoPoint::latitude).orElse(null));
-        scoreProfile.put("home_lng", homePoint.map(NormalizedGeoPoint::longitude).orElse(null));
+        scoreProfile.put("home_lat", homePoint == null ? null : homePoint.latitude());
+        scoreProfile.put("home_lng", homePoint == null ? null : homePoint.longitude());
         scoreProfile.put("desired_jobs", desiredJobs(profile));
         scoreProfile.put("skills", nullToEmpty(profile.skills()));
         scoreProfile.put("education", firstNotBlank(profile.highestEducation(), profile.educationSummary()));
@@ -401,6 +401,17 @@ public class FastApiRecommendClient {
         scoreProfile.put("mobility_range_km", parseMobilityRangeKm(profile.commuteRange()));
         scoreProfile.put("commute_limit_minutes", parseCommuteLimitMinutes(profile.commuteRange()));
         return scoreProfile;
+    }
+
+    private Optional<NormalizedGeoPoint> resolveHomeGeoPoint(UserProfileResponseDto profile) {
+        if (profile.homeLat() != null && profile.homeLng() != null) {
+            return Optional.of(new NormalizedGeoPoint(
+                    profile.homeLat(),
+                    profile.homeLng(),
+                    profile.homeGeocodedAddress()
+            ));
+        }
+        return resolveHomeGeoPoint(profile.detailAddress());
     }
 
     private Optional<NormalizedGeoPoint> resolveHomeGeoPoint(String address) {
