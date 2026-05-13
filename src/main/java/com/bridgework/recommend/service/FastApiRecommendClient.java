@@ -10,14 +10,19 @@ import com.bridgework.recommend.dto.RecommendExplainRequestDto;
 import com.bridgework.recommend.dto.RecommendExplainSelectedResultDto;
 import com.bridgework.recommend.dto.RecommendExplainScoreDetailDto;
 import com.bridgework.recommend.exception.RecommendDomainException;
+import com.bridgework.sync.config.BridgeWorkSyncProperties;
+import com.bridgework.sync.normalized.NaverGeocodingService;
+import com.bridgework.sync.normalized.NormalizedGeoPoint;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.springframework.core.ParameterizedTypeReference;
@@ -37,6 +42,8 @@ public class FastApiRecommendClient {
     };
     private static final Pattern INTEGER_PATTERN = Pattern.compile("(\\d+)");
     private static final Pattern DECIMAL_PATTERN = Pattern.compile("(\\d+(?:\\.\\d+)?)");
+    private static final Pattern HOUR_PATTERN = Pattern.compile("(\\d+(?:\\.\\d+)?)\\s*시간");
+    private static final Pattern MINUTE_PATTERN = Pattern.compile("(\\d+(?:\\.\\d+)?)\\s*분");
     private static final List<String> RETRYABLE_MESSAGE_KEYWORDS = List.of(
             "connection prematurely closed before response",
             "connection reset by peer",
@@ -46,15 +53,22 @@ public class FastApiRecommendClient {
     private final WebClient webClient;
     private final BridgeWorkRecommendProperties recommendProperties;
     private final BridgeWorkHealthMonitorProperties healthMonitorProperties;
+    private final BridgeWorkSyncProperties syncProperties;
+    private final NaverGeocodingService naverGeocodingService;
+    private final Map<String, Optional<NormalizedGeoPoint>> homeGeoCache = new ConcurrentHashMap<>();
 
     public FastApiRecommendClient(
             WebClient webClient,
             BridgeWorkRecommendProperties recommendProperties,
-            BridgeWorkHealthMonitorProperties healthMonitorProperties
+            BridgeWorkHealthMonitorProperties healthMonitorProperties,
+            BridgeWorkSyncProperties syncProperties,
+            NaverGeocodingService naverGeocodingService
     ) {
         this.webClient = webClient;
         this.recommendProperties = recommendProperties;
         this.healthMonitorProperties = healthMonitorProperties;
+        this.syncProperties = syncProperties;
+        this.naverGeocodingService = naverGeocodingService;
     }
 
     public Map<String, Object> requestQuickScore(UserProfileResponseDto profile) {
@@ -332,6 +346,8 @@ public class FastApiRecommendClient {
         payload.put("work_environment_score", detail.workEnvironmentScore());
         payload.put("company_stability_score", detail.companyStabilityScore());
         payload.put("accessibility_score", detail.accessibilityScore());
+        payload.put("distance_score", detail.distanceScore());
+        payload.put("commute_score", detail.commuteScore());
         return payload;
     }
 
@@ -357,13 +373,14 @@ public class FastApiRecommendClient {
     }
 
     private Map<String, Object> buildScoreProfile(UserProfileResponseDto profile) {
+        Optional<NormalizedGeoPoint> homePoint = resolveHomeGeoPoint(profile.detailAddress());
         Map<String, Object> scoreProfile = new LinkedHashMap<>();
         scoreProfile.put("profile_id", profile.profileId());
         scoreProfile.put("user_id", profile.userId());
         scoreProfile.put("name", profile.fullName());
         scoreProfile.put("address", profile.detailAddress());
-        scoreProfile.put("home_lat", profile.homeLat());
-        scoreProfile.put("home_lng", profile.homeLng());
+        scoreProfile.put("home_lat", homePoint.map(NormalizedGeoPoint::latitude).orElse(null));
+        scoreProfile.put("home_lng", homePoint.map(NormalizedGeoPoint::longitude).orElse(null));
         scoreProfile.put("desired_jobs", desiredJobs(profile));
         scoreProfile.put("skills", nullToEmpty(profile.skills()));
         scoreProfile.put("education", firstNotBlank(profile.highestEducation(), profile.educationSummary()));
@@ -384,6 +401,24 @@ public class FastApiRecommendClient {
         scoreProfile.put("mobility_range_km", parseMobilityRangeKm(profile.commuteRange()));
         scoreProfile.put("commute_limit_minutes", parseCommuteLimitMinutes(profile.commuteRange()));
         return scoreProfile;
+    }
+
+    private Optional<NormalizedGeoPoint> resolveHomeGeoPoint(String address) {
+        if (!StringUtils.hasText(address)) {
+            return Optional.empty();
+        }
+        String normalizedAddress = address.trim();
+        return homeGeoCache.computeIfAbsent(normalizedAddress, value -> {
+            try {
+                return naverGeocodingService.geocode(
+                        syncProperties.getNaverGeocodeApiKeyId(),
+                        syncProperties.getNaverGeocodeApiKey(),
+                        value
+                );
+            } catch (Exception ignored) {
+                return Optional.empty();
+            }
+        });
     }
 
     private List<String> desiredJobs(UserProfileResponseDto profile) {
@@ -469,6 +504,19 @@ public class FastApiRecommendClient {
         }
 
         String normalized = commuteRange.trim().toLowerCase();
+        Matcher hourMatcher = HOUR_PATTERN.matcher(normalized);
+        Matcher minuteMatcher = MINUTE_PATTERN.matcher(normalized);
+        double totalMinutes = 0;
+        if (hourMatcher.find()) {
+            totalMinutes += Double.parseDouble(hourMatcher.group(1)) * 60;
+        }
+        if (minuteMatcher.find()) {
+            totalMinutes += Double.parseDouble(minuteMatcher.group(1));
+        }
+        if (totalMinutes > 0) {
+            return (int) Math.round(totalMinutes);
+        }
+
         Matcher matcher = DECIMAL_PATTERN.matcher(normalized);
         if (!matcher.find()) {
             return null;
