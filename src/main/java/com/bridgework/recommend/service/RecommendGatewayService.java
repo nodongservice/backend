@@ -127,6 +127,8 @@ public class RecommendGatewayService {
         scoreDetail.put("work_environment_score", null);
         scoreDetail.put("company_stability_score", null);
         scoreDetail.put("accessibility_score", fallbackAccessibilityScore(job));
+        scoreDetail.put("distance_score", null);
+        scoreDetail.put("commute_score", null);
         return scoreDetail;
     }
 
