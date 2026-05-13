@@ -131,7 +131,7 @@ public class RecommendGatewayService {
     }
 
     private Integer fallbackAccessibilityScore(RecommendJobResponseDto job) {
-        return job.geoLatitude() == null || job.geoLongitude() == null ? null : 45;
+        return job.geoLatitude() == null || job.geoLongitude() == null ? null : 50;
     }
 
     private List<String> buildFallbackMapRisks(RecommendJobResponseDto job) {

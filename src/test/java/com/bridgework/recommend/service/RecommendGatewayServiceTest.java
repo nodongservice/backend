@@ -97,8 +97,8 @@ class RecommendGatewayServiceTest {
         Map<String, Object> scoreDetail = (Map<String, Object>) first.get("score_detail");
         List<?> evidenceItems = (List<?>) first.get("evidence_items");
 
-        assertThat(first.get("total_score")).isEqualTo(45);
-        assertThat(scoreDetail.get("accessibility_score")).isEqualTo(45);
+        assertThat(first.get("total_score")).isEqualTo(50);
+        assertThat(scoreDetail.get("accessibility_score")).isEqualTo(50);
         assertThat(evidenceItems).hasSize(1);
     }
 

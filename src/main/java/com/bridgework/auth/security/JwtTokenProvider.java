@@ -87,7 +87,7 @@ public class JwtTokenProvider {
                     tokenType
             );
         } catch (JwtException | IllegalArgumentException exception) {
-            throw new InvalidJwtException("JWT가 유효하지 않습니다.");
+            throw new InvalidJwtException("페이지가 유효하지 않습니다 다시 로그인 해주세요.");
         }
     }
 
