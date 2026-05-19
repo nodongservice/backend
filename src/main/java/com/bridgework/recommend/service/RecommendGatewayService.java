@@ -16,6 +16,8 @@ import org.springframework.stereotype.Service;
 @Service
 public class RecommendGatewayService {
 
+    private static final int PUBLIC_RECOMMENDATION_LIMIT = 100;
+
     private final UserProfileService userProfileService;
     private final RecommendJobQueryService recommendJobQueryService;
     private final FastApiRecommendClient fastApiRecommendClient;
@@ -30,7 +32,7 @@ public class RecommendGatewayService {
 
     public Map<String, Object> recommendQuick(Long userId, RecommendRequestDto request) {
         if (request == null || !request.useAi()) {
-            return buildQuickFallbackResult(recommendJobQueryService.getLatestRecruitments());
+            return buildQuickFallbackResult(recommendJobQueryService.getLatestActiveRecruitments(PUBLIC_RECOMMENDATION_LIMIT));
         }
 
         UserProfileResponseDto profile = resolveSelectedProfile(userId, request.profileId());
@@ -40,7 +42,7 @@ public class RecommendGatewayService {
 
     public Map<String, Object> recommendMap(Long userId, RecommendRequestDto request) {
         if (request == null || !request.useAi()) {
-            return buildMapFallbackResult(recommendJobQueryService.getLatestRecruitments());
+            return buildMapFallbackResult(recommendJobQueryService.getLatestActiveRecruitments(PUBLIC_RECOMMENDATION_LIMIT));
         }
 
         UserProfileResponseDto profile = resolveSelectedProfile(userId, request.profileId());

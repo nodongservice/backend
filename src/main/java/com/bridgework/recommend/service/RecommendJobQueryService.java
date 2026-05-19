@@ -5,6 +5,7 @@ import com.bridgework.recommend.exception.RecommendDomainException;
 import java.util.List;
 import org.springframework.dao.DataAccessException;
 import org.springframework.http.HttpStatus;
+import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Service;
 
@@ -18,6 +19,11 @@ public class RecommendJobQueryService {
     }
 
     public List<RecommendJobResponseDto> getLatestRecruitments() {
+        return getLatestActiveRecruitments(100);
+    }
+
+    public List<RecommendJobResponseDto> getLatestActiveRecruitments(int limit) {
+        int safeLimit = Math.max(1, Math.min(limit, 100));
         String sql = """
                 SELECT id,
                        id AS source_id,
@@ -40,31 +46,37 @@ public class RecommendJobQueryService {
                        geo_latitude,
                        geo_longitude
                 FROM pd_kepad_recruitment
+                WHERE posting_status = 'ACTIVE'
                 ORDER BY reg_dt DESC NULLS LAST, updated_at DESC, external_id ASC
+                LIMIT :limit
                 """;
         try {
-            return namedParameterJdbcTemplate.query(sql, (rs, rowNum) -> new RecommendJobResponseDto(
-                    rs.getObject("id", Long.class),
-                    rs.getObject("source_id", Long.class),
-                    rs.getString("source_table"),
-                    rs.getString("buspla_name"),
-                    rs.getString("job_nm"),
-                    rs.getString("comp_addr"),
-                    rs.getString("emp_type"),
-                    rs.getString("enter_type"),
-                    rs.getString("salary_type"),
-                    rs.getString("salary"),
-                    rs.getString("term_date"),
-                    rs.getString("offerreg_dt"),
-                    rs.getString("reg_dt"),
-                    rs.getString("req_career"),
-                    rs.getString("req_educ"),
-                    rs.getString("req_major"),
-                    rs.getString("req_licens"),
-                    rs.getString("regagn_name"),
-                    rs.getObject("geo_latitude", Double.class),
-                    rs.getObject("geo_longitude", Double.class)
-            ));
+            return namedParameterJdbcTemplate.query(
+                    sql,
+                    new MapSqlParameterSource("limit", safeLimit),
+                    (rs, rowNum) -> new RecommendJobResponseDto(
+                            rs.getObject("id", Long.class),
+                            rs.getObject("source_id", Long.class),
+                            rs.getString("source_table"),
+                            rs.getString("buspla_name"),
+                            rs.getString("job_nm"),
+                            rs.getString("comp_addr"),
+                            rs.getString("emp_type"),
+                            rs.getString("enter_type"),
+                            rs.getString("salary_type"),
+                            rs.getString("salary"),
+                            rs.getString("term_date"),
+                            rs.getString("offerreg_dt"),
+                            rs.getString("reg_dt"),
+                            rs.getString("req_career"),
+                            rs.getString("req_educ"),
+                            rs.getString("req_major"),
+                            rs.getString("req_licens"),
+                            rs.getString("regagn_name"),
+                            rs.getObject("geo_latitude", Double.class),
+                            rs.getObject("geo_longitude", Double.class)
+                    )
+            );
         } catch (DataAccessException exception) {
             throw new RecommendDomainException(
                     "RECOMMEND_QUERY_FAILED",

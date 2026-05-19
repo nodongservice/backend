@@ -119,13 +119,14 @@ public class PostingService {
 
     @Transactional(readOnly = true)
     public PostingDetailDto getPostingDetail(Long postingId, Long userId) {
+        boolean authenticated = userId != null;
         String sql = """
                 SELECT p.id AS posting_id,
                        p.external_id,
                        p.buspla_name,
                        p.job_nm,
                        p.comp_addr,
-                       p.cntct_no,
+                       CASE WHEN :authenticated THEN p.cntct_no ELSE NULL END AS cntct_no,
                        p.emp_type,
                        p.enter_type,
                        p.env_both_hands,
@@ -144,12 +145,12 @@ public class PostingService {
                        p.req_major,
                        p.req_licens,
                        p.regagn_name,
-                       p.rno,
-                       p.rnum,
-                       p.geo_original_address,
-                       p.geo_matched_address,
-                       p.geo_latitude,
-                       p.geo_longitude,
+                       CASE WHEN :authenticated THEN p.rno ELSE NULL END AS rno,
+                       CASE WHEN :authenticated THEN p.rnum ELSE NULL END AS rnum,
+                       CASE WHEN :authenticated THEN p.geo_original_address ELSE NULL END AS geo_original_address,
+                       CASE WHEN :authenticated THEN p.geo_matched_address ELSE NULL END AS geo_matched_address,
+                       CASE WHEN :authenticated THEN p.geo_latitude ELSE NULL END AS geo_latitude,
+                       CASE WHEN :authenticated THEN p.geo_longitude ELSE NULL END AS geo_longitude,
                        p.posting_status,
                        p.closed_at,
                        p.status_updated_at,
@@ -169,6 +170,7 @@ public class PostingService {
                        ON my_scrap.posting_id = p.id
                       AND my_scrap.user_id = :userId
                 WHERE p.id = :postingId
+                  AND (:authenticated = TRUE OR p.posting_status = 'ACTIVE')
                 """;
 
         try {
@@ -176,7 +178,8 @@ public class PostingService {
                     sql,
                     new MapSqlParameterSource()
                             .addValue("postingId", postingId)
-                            .addValue("userId", userId),
+                            .addValue("userId", userId)
+                            .addValue("authenticated", authenticated),
                     (resultSet) -> resultSet.next() ? toPostingDetail(resultSet) : null
             );
 
