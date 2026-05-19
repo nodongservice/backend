@@ -19,6 +19,11 @@ public class BridgeWorkProfileOcrProperties {
     @NotBlank
     private String extractPath = "/api/v1/profile-draft/from-portfolio";
 
+    @NotBlank
+    private String internalApiKeyHeader = "X-Internal-Api-Key";
+
+    private String internalApiKey = "";
+
     @NotNull
     private Duration requestTimeout = Duration.ofSeconds(120);
 
@@ -45,6 +50,22 @@ public class BridgeWorkProfileOcrProperties {
 
     public void setExtractPath(String extractPath) {
         this.extractPath = extractPath;
+    }
+
+    public String getInternalApiKeyHeader() {
+        return internalApiKeyHeader;
+    }
+
+    public void setInternalApiKeyHeader(String internalApiKeyHeader) {
+        this.internalApiKeyHeader = internalApiKeyHeader;
+    }
+
+    public String getInternalApiKey() {
+        return internalApiKey;
+    }
+
+    public void setInternalApiKey(String internalApiKey) {
+        this.internalApiKey = internalApiKey;
     }
 
     public Duration getRequestTimeout() {

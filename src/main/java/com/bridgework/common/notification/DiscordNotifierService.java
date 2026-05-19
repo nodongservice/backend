@@ -1,6 +1,7 @@
 package com.bridgework.common.notification;
 
 import com.bridgework.common.config.BridgeWorkDiscordProperties;
+import com.bridgework.common.logging.LogSanitizer;
 import com.bridgework.sync.dto.SourceSyncResultDto;
 import com.bridgework.sync.dto.SyncRunResponseDto;
 import com.bridgework.sync.entity.PublicDataSourceType;
@@ -121,9 +122,9 @@ public class DiscordNotifierService {
     }
 
     public void notifyUnhandledException(String requestUri, String errorCode, String message, Throwable throwable) {
-        String safeRequestUri = (requestUri == null || requestUri.isBlank()) ? "(unknown)" : requestUri;
+        String safeRequestUri = (requestUri == null || requestUri.isBlank()) ? "(unknown)" : LogSanitizer.sanitizeSingleLine(requestUri);
         String safeErrorCode = (errorCode == null || errorCode.isBlank()) ? "INTERNAL_SERVER_ERROR" : errorCode;
-        String safeMessage = (message == null || message.isBlank()) ? "(메시지 없음)" : message;
+        String safeMessage = (message == null || message.isBlank()) ? "(메시지 없음)" : LogSanitizer.sanitizeSingleLine(message);
 
         String rootCause = extractRootCauseMessage(throwable);
         String exceptionType = throwable == null ? "(unknown)" : throwable.getClass().getSimpleName();
@@ -316,7 +317,7 @@ public class DiscordNotifierService {
     }
 
     private String normalizeFailureMessage(String message) {
-        return message.replace('\n', ' ').replace('\r', ' ').trim();
+        return LogSanitizer.sanitizeSingleLine(message);
     }
 
     private String resolveSyncFinishedHeader(SyncRunResponseDto result) {
@@ -396,7 +397,7 @@ public class DiscordNotifierService {
         if (message == null || message.isBlank()) {
             message = throwable == null ? "unknown" : throwable.getClass().getSimpleName();
         }
-        return message.replace('\n', ' ').replace('\r', ' ').trim();
+        return LogSanitizer.sanitizeSingleLine(message);
     }
 
     private String extractRootCauseMessage(Throwable throwable) {
@@ -413,6 +414,6 @@ public class DiscordNotifierService {
         if (message == null || message.isBlank()) {
             message = current.getClass().getSimpleName();
         }
-        return message.replace('\n', ' ').replace('\r', ' ').trim();
+        return LogSanitizer.sanitizeSingleLine(message);
     }
 }

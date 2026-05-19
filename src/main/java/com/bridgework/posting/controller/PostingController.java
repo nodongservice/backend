@@ -40,13 +40,21 @@ public class PostingController {
         return ResponseEntity.ok(ApiResponse.success(postingService.getPopularPostings(limit)));
     }
 
+    @GetMapping("/postings/public-index")
+    @Operation(summary = "공개 색인용 공고 목록 조회", description = "검색엔진 sitemap 생성에 사용할 ACTIVE 공고를 최신순으로 조회한다.")
+    public ResponseEntity<ApiResponse<List<PostingListItemDto>>> getPublicIndexPostings(
+            @RequestParam(name = "limit", defaultValue = "100") int limit
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(postingService.getPublicIndexPostings(limit)));
+    }
+
     @GetMapping("/postings/{postingId}")
     @Operation(summary = "공고 상세 조회", description = "공고 상세와 전체 스크랩 수를 조회한다.")
     public ResponseEntity<ApiResponse<PostingDetailDto>> getPostingDetail(
             @PathVariable Long postingId,
             Authentication authentication
     ) {
-        return ResponseEntity.ok(ApiResponse.success(postingService.getPostingDetail(postingId, currentUserId(authentication))));
+        return ResponseEntity.ok(ApiResponse.success(postingService.getPostingDetail(postingId, optionalCurrentUserId(authentication))));
     }
 
     @PostMapping("/postings/{postingId}/scraps")
@@ -79,6 +87,13 @@ public class PostingController {
     private Long currentUserId(Authentication authentication) {
         if (authentication == null || !(authentication.getPrincipal() instanceof UserPrincipal principal)) {
             throw new UnauthorizedException();
+        }
+        return principal.getUserId();
+    }
+
+    private Long optionalCurrentUserId(Authentication authentication) {
+        if (authentication == null || !(authentication.getPrincipal() instanceof UserPrincipal principal)) {
+            return null;
         }
         return principal.getUserId();
     }

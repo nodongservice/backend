@@ -79,8 +79,12 @@ jobs:
           NAVER_GEOCODE_API_KEY_ID: ${{ secrets.NAVER_GEOCODE_API_KEY_ID }}
           NAVER_GEOCODE_API_KEY: ${{ secrets.NAVER_GEOCODE_API_KEY }}
           BRIDGEWORK_AUTH_JWT_SECRET: ${{ secrets.BRIDGEWORK_AUTH_JWT_SECRET }}
+          KAKAO_CLIENT_ID: ${{ secrets.KAKAO_CLIENT_ID }}
           KAKAO_CLIENT_SECRET: ${{ secrets.KAKAO_CLIENT_SECRET }}
+          KAKAO_REDIRECT_URI: ${{ secrets.KAKAO_REDIRECT_URI }}
+          NAVER_CLIENT_ID: ${{ secrets.NAVER_CLIENT_ID }}
           NAVER_CLIENT_SECRET: ${{ secrets.NAVER_CLIENT_SECRET }}
+          NAVER_REDIRECT_URI: ${{ secrets.NAVER_REDIRECT_URI }}
         run: |
           mkdir -p .cicd
           python3 - <<'PY'
@@ -101,8 +105,12 @@ jobs:
               "NAVER_GEOCODE_API_KEY_ID",
               "NAVER_GEOCODE_API_KEY",
               "BRIDGEWORK_AUTH_JWT_SECRET",
+              "KAKAO_CLIENT_ID",
               "KAKAO_CLIENT_SECRET",
+              "KAKAO_REDIRECT_URI",
+              "NAVER_CLIENT_ID",
               "NAVER_CLIENT_SECRET",
+              "NAVER_REDIRECT_URI",
           ]
 
           missing = [key for key in required_keys if not os.environ.get(key, "").strip()]
@@ -159,18 +167,17 @@ jobs:
               "    allowed-origins:",
               "      - 'https://bridgework.cloud'",
               "      - 'https://www.bridgework.cloud'",
-              "      - 'http://localhost:3000'",
               "    jwt:",
               f"      secret: {q(val('BRIDGEWORK_AUTH_JWT_SECRET'))}",
               "    oauth2:",
               "      kakao:",
-              "        client-id: '0d5fffe82670b3aba1f9c1c2e551dbee'",
+              f"        client-id: {q(val('KAKAO_CLIENT_ID'))}",
               f"        client-secret: {q(val('KAKAO_CLIENT_SECRET'))}",
-              "        redirect-uri: 'http://localhost:3000/auth/kakao/callback'",
+              f"        redirect-uri: {q(val('KAKAO_REDIRECT_URI'))}",
               "      naver:",
-              "        client-id: 'sk1Y_ivVnHWKz59glY0x'",
+              f"        client-id: {q(val('NAVER_CLIENT_ID'))}",
               f"        client-secret: {q(val('NAVER_CLIENT_SECRET'))}",
-              "        redirect-uri: 'http://localhost:3000/auth/naver/callback'",
+              f"        redirect-uri: {q(val('NAVER_REDIRECT_URI'))}",
               "",
           ]
 

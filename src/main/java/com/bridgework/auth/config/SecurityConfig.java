@@ -58,6 +58,11 @@ public class SecurityConfig {
                         .httpStrictTransportSecurity(hsts -> hsts
                                 .includeSubDomains(true)
                                 .maxAgeInSeconds(Duration.ofDays(365).toSeconds()))
+                        .addHeaderWriter((request, response) -> {
+                            response.setHeader("Content-Security-Policy", "frame-ancestors 'none'");
+                            response.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+                            response.setHeader("Permissions-Policy", "camera=(), microphone=(), payment=(), geolocation=()");
+                        })
                 )
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/error").permitAll()
@@ -70,8 +75,12 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET,
                                 "/api/v1/options/**",
                                 "/api/v1/map/support-agencies",
-                                "/api/v1/postings/popular").permitAll()
+                                "/api/v1/postings/popular",
+                                "/api/v1/postings/public-index",
+                                "/api/v1/postings/*").permitAll()
                         .requestMatchers(HttpMethod.POST,
+                                "/api/v1/recommend/quick",
+                                "/api/v1/recommend/map",
                                 "/api/v1/auth/admin/login",
                                 "/api/v1/auth/social/login",
                                 "/api/v1/auth/social/signup/complete",

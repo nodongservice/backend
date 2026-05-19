@@ -1,6 +1,7 @@
 package com.bridgework.sync.service;
 
 import com.bridgework.sync.config.BridgeWorkSyncProperties;
+import com.bridgework.common.logging.LogSanitizer;
 import com.bridgework.common.notification.DiscordNotifierService;
 import com.bridgework.sync.dto.PublicDataApiItemDto;
 import com.bridgework.sync.dto.PublicDataApiPageResponseDto;
@@ -341,8 +342,11 @@ public class PublicDataSyncService {
             } else {
                 syncStatus = processedCount > 0 ? SyncStatus.PARTIAL_SUCCESS : SyncStatus.FAILED;
             }
-            message = exception.getMessage();
-            log.error("동기화 실패 source={} reason={}", sourceType, exception.getMessage(), exception);
+            message = LogSanitizer.summarizeThrowable(exception);
+            log.error("동기화 실패 source={} type={} reason={}",
+                    sourceType,
+                    exception.getClass().getSimpleName(),
+                    message);
         }
 
         finishSyncLog(syncLog, syncStatus, processedCount, newCount, updatedCount, failedCount, message);
@@ -363,7 +367,7 @@ public class PublicDataSyncService {
             reasonText = exception.getClass().getSimpleName();
         }
 
-        return reasonText.replace('\n', ' ').replace('\r', ' ').trim();
+        return LogSanitizer.sanitizeSingleLine(reasonText);
     }
 
     private boolean isGeocodingFailure(Exception exception) {

@@ -22,6 +22,11 @@ public class BridgeWorkRecommendProperties {
     @NotBlank
     private String explainPath = "/api/v1/explain/recommendation";
 
+    @NotBlank
+    private String internalApiKeyHeader = "X-Internal-Api-Key";
+
+    private String internalApiKey = "";
+
     @NotNull
     private Duration requestTimeout = Duration.ofSeconds(20);
 
@@ -55,6 +60,22 @@ public class BridgeWorkRecommendProperties {
 
     public void setExplainPath(String explainPath) {
         this.explainPath = explainPath;
+    }
+
+    public String getInternalApiKeyHeader() {
+        return internalApiKeyHeader;
+    }
+
+    public void setInternalApiKeyHeader(String internalApiKeyHeader) {
+        this.internalApiKeyHeader = internalApiKeyHeader;
+    }
+
+    public String getInternalApiKey() {
+        return internalApiKey;
+    }
+
+    public void setInternalApiKey(String internalApiKey) {
+        this.internalApiKey = internalApiKey;
     }
 
     public Duration getRequestTimeout() {

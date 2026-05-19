@@ -62,6 +62,14 @@ public class FastApiProfileOcrClient {
                 try {
                     Map<String, Object> response = webClient.post()
                             .uri(uri)
+                            .headers(headers -> {
+                                if (StringUtils.hasText(profileOcrProperties.getInternalApiKey())) {
+                                    headers.set(
+                                            profileOcrProperties.getInternalApiKeyHeader(),
+                                            profileOcrProperties.getInternalApiKey()
+                                    );
+                                }
+                            })
                             .contentType(MediaType.MULTIPART_FORM_DATA)
                             .body(BodyInserters.fromMultipartData(multipartBodyBuilder.build()))
                             .retrieve()

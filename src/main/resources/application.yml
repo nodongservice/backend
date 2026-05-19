@@ -123,6 +123,8 @@ bridgework:
           - /api/v1/options/**
           - /api/v1/map/support-agencies
           - /api/v1/postings/popular
+          - /api/v1/postings/public-index
+          - /api/v1/postings/*
         key-scope: IP
         capacity: 300
         refill-tokens: 300
@@ -140,11 +142,15 @@ bridgework:
     quick-path: /api/v1/score/quick
     map-path: /api/v1/score/map
     explain-path: /api/v1/explain/recommendation
+    internal-api-key-header: X-Internal-Api-Key
+    internal-api-key: ""
     # FastAPI 스코어링/설명 생성 지연을 감안해 클라이언트 타임아웃을 상향한다.
     request-timeout: 120s
   profile-ocr:
     fastapi-base-url: ${bridgework.recommend.fastapi-base-url:http://localhost:8000}
     extract-path: /api/v1/profile-draft/from-portfolio
+    internal-api-key-header: ${bridgework.recommend.internal-api-key-header:X-Internal-Api-Key}
+    internal-api-key: ${bridgework.recommend.internal-api-key:}
     # OCR + LLM 처리 시간을 고려해 게이트웨이 타임아웃을 길게 잡는다.
     request-timeout: 180s
     # 연결 조기 종료 같은 일시 오류를 URI별로 재시도한다.

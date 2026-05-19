@@ -154,6 +154,7 @@
 - `NAVER_GEOCODE_API_KEY`
 - `SPRING_BOT_DISCORD_WEBHOOK_URL`
 - `BRIDGEWORK_AUTH_JWT_SECRET`
+- `BRIDGEWORK_FASTAPI_INTERNAL_API_KEY`
 - `KAKAO_CLIENT_SECRET`
 - `NAVER_CLIENT_SECRET`
 - `BRIDGEWORK_FASTAPI_HEALTH_URL` (선택, 미지정 시 기본 내부 URL 사용)
@@ -174,6 +175,8 @@
 
 - `fastapi-base-url` (기본: `http://localhost:8000`)
 - `extract-path` (기본: `/api/v1/profile-draft/from-portfolio`)
+- `internal-api-key-header` (기본: `X-Internal-Api-Key`)
+- `internal-api-key` (운영: `BRIDGEWORK_FASTAPI_INTERNAL_API_KEY`)
 - `request-timeout` (기본: `180s`)
 - `max-upload-bytes` (기본: `10485760`)
 - `allowed-content-types` (기본: `application/pdf`)

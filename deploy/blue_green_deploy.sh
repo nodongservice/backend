@@ -57,6 +57,7 @@ HEALTH_TIMEOUT_SECONDS="${HEALTH_TIMEOUT_SECONDS:-120}"
 HEALTH_INTERVAL_SECONDS="${HEALTH_INTERVAL_SECONDS:-2}"
 HEALTH_CONNECT_TIMEOUT_SECONDS="${HEALTH_CONNECT_TIMEOUT_SECONDS:-2}"
 HEALTH_REQUEST_TIMEOUT_SECONDS="${HEALTH_REQUEST_TIMEOUT_SECONDS:-3}"
+SHOW_FAILURE_CONTAINER_LOGS="${SHOW_FAILURE_CONTAINER_LOGS:-false}"
 
 IMAGE_URI="${IMAGE_URI:-}"
 IMAGE_RETENTION_COUNT="${IMAGE_RETENTION_COUNT:-5}"
@@ -71,6 +72,18 @@ fi
 
 require_command docker
 require_command curl
+
+print_failure_container_logs() {
+  local container_name="$1"
+  if [[ "$SHOW_FAILURE_CONTAINER_LOGS" != "true" ]]; then
+    log "컨테이너 로그 출력 생략: SHOW_FAILURE_CONTAINER_LOGS=true 설정 시 마스킹된 tail 로그를 출력합니다."
+    return 0
+  fi
+
+  docker logs --tail 120 "$container_name" 2>&1 \
+    | sed -E 's/(Bearer|Basic)[[:space:]]+[A-Za-z0-9._~+\/=-]+/\1 [REDACTED]/Ig; s/([?&](code|token|access_token|refresh_token|signupToken|withdrawalCancelToken|serviceKey|apiKey|apikey|key|secret|password)=)[^&[:space:]]+/\1[REDACTED]/Ig; s/(authorization|password|passwd|token|accessToken|refreshToken|signupToken|withdrawalCancelToken|secret|credential|api[-_]?key|serviceKey|session|jwt)[[:space:]]*[:=][[:space:]]*[^[:space:],;]+/\1=[REDACTED]/Ig' \
+    || true
+}
 
 if [[ ! -f "$CONFIG_FILE" ]]; then
   log "외부 설정 파일이 없습니다: $CONFIG_FILE"
@@ -175,7 +188,7 @@ cleanup_old_app_images() {
 
 if ! wait_for_redis 30; then
   log "Redis 헬스체크 실패. 배포를 중단합니다."
-  docker logs --tail 120 "$REDIS_CONTAINER_NAME" || true
+  print_failure_container_logs "$REDIS_CONTAINER_NAME"
   exit 1
 fi
 
@@ -285,7 +298,7 @@ log "헬스체크 대기: $HEALTH_URL"
 if ! wait_for_health "$HEALTH_URL" "$HEALTH_TIMEOUT_SECONDS" "$HEALTH_INTERVAL_SECONDS" "$TARGET_CONTAINER"; then
   log "헬스체크 실패. 새 컨테이너를 제거하고 배포를 중단합니다."
   docker ps -a --filter "name=${TARGET_CONTAINER}" --format 'table {{.Names}}\t{{.Status}}' || true
-  docker logs --tail 120 "$TARGET_CONTAINER" || true
+  print_failure_container_logs "$TARGET_CONTAINER"
   docker rm -f "$TARGET_CONTAINER" >/dev/null 2>&1 || true
   exit 1
 fi

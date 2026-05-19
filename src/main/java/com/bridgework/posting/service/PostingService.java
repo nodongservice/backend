@@ -74,6 +74,50 @@ public class PostingService {
     }
 
     @Transactional(readOnly = true)
+    public List<PostingListItemDto> getPublicIndexPostings(int limit) {
+        int safeLimit = Math.max(1, Math.min(limit, MAX_POPULAR_LIMIT));
+        String sql = """
+                SELECT p.id AS posting_id,
+                       p.external_id,
+                       p.buspla_name,
+                       p.job_nm,
+                       p.comp_addr,
+                       p.emp_type,
+                       p.salary_type,
+                       p.salary,
+                       p.term_date,
+                       COALESCE(p.offerreg_dt, p.reg_dt) AS registered_at,
+                       p.posting_status,
+                       COALESCE(scrap_stats.scrap_count, 0) AS scrap_count
+                FROM pd_kepad_recruitment p
+                LEFT JOIN (
+                    SELECT posting_id, COUNT(*) AS scrap_count
+                    FROM job_scrap
+                    GROUP BY posting_id
+                ) scrap_stats ON scrap_stats.posting_id = p.id
+                WHERE p.posting_status = 'ACTIVE'
+                ORDER BY COALESCE(p.offerreg_dt, p.reg_dt) DESC NULLS LAST,
+                         p.id DESC
+                LIMIT :limit
+                """;
+
+        try {
+            return namedParameterJdbcTemplate.query(
+                    sql,
+                    new MapSqlParameterSource("limit", safeLimit),
+                    (resultSet, rowNum) -> toPostingListItem(resultSet, null)
+            );
+        } catch (DataAccessException exception) {
+            throw new PostingDomainException(
+                    "PUBLIC_INDEX_POSTING_QUERY_FAILED",
+                    HttpStatus.INTERNAL_SERVER_ERROR,
+                    "공개 색인용 공고 조회에 실패했습니다.",
+                    exception
+            );
+        }
+    }
+
+    @Transactional(readOnly = true)
     public PostingDetailDto getPostingDetail(Long postingId, Long userId) {
         String sql = """
                 SELECT p.id AS posting_id,

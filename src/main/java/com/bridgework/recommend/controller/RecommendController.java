@@ -6,6 +6,7 @@ import com.bridgework.recommend.dto.RecommendAsyncResponseDto;
 import com.bridgework.recommend.dto.RecommendExplainRequestDto;
 import com.bridgework.recommend.dto.RecommendExplainResponseDto;
 import com.bridgework.recommend.dto.RecommendRequestDto;
+import com.bridgework.recommend.dto.RecommendTaskStatus;
 import com.bridgework.recommend.service.RecommendAsyncTaskService;
 import com.bridgework.recommend.service.RecommendGatewayService;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -15,6 +16,9 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+import java.util.Map;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -66,7 +70,12 @@ public class RecommendController {
             Authentication authentication,
             @RequestBody(required = false) RecommendRequestDto request
     ) {
-        Long userId = currentUserId(authentication);
+        Long userId = optionalCurrentUserId(authentication);
+        if (userId == null) {
+            return ResponseEntity.ok(com.bridgework.common.dto.ApiResponse.success(
+                    publicCompletedResponse("quick", recommendGatewayService.recommendQuick(null, publicRequest(request)))
+            ));
+        }
         return ResponseEntity.ok(com.bridgework.common.dto.ApiResponse.success(recommendAsyncTaskService.requestQuick(userId, request)));
     }
 
@@ -97,7 +106,12 @@ public class RecommendController {
             Authentication authentication,
             @RequestBody(required = false) RecommendRequestDto request
     ) {
-        Long userId = currentUserId(authentication);
+        Long userId = optionalCurrentUserId(authentication);
+        if (userId == null) {
+            return ResponseEntity.ok(com.bridgework.common.dto.ApiResponse.success(
+                    publicCompletedResponse("map", recommendGatewayService.recommendMap(null, publicRequest(request)))
+            ));
+        }
         return ResponseEntity.ok(com.bridgework.common.dto.ApiResponse.success(recommendAsyncTaskService.requestMap(userId, request)));
     }
 
@@ -153,5 +167,29 @@ public class RecommendController {
             throw new UnauthorizedException();
         }
         return principal.getUserId();
+    }
+
+    private Long optionalCurrentUserId(Authentication authentication) {
+        if (authentication == null || !(authentication.getPrincipal() instanceof UserPrincipal principal)) {
+            return null;
+        }
+        return principal.getUserId();
+    }
+
+    private RecommendRequestDto publicRequest(RecommendRequestDto request) {
+        return new RecommendRequestDto(false, null);
+    }
+
+    private RecommendAsyncResponseDto publicCompletedResponse(String requestType, Map<String, Object> result) {
+        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+        return new RecommendAsyncResponseDto(
+                null,
+                requestType,
+                RecommendTaskStatus.COMPLETED,
+                result,
+                null,
+                now,
+                now
+        );
     }
 }

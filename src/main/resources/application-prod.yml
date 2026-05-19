@@ -17,6 +17,12 @@ spring:
 server:
   forward-headers-strategy: framework
 
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
+
 bridgework:
   openapi:
     server-url: /
@@ -28,13 +34,17 @@ bridgework:
     enabled: ${BRIDGEWORK_RATE_LIMIT_ENABLED:true}
     fail-open: ${BRIDGEWORK_RATE_LIMIT_FAIL_OPEN:true}
   recommend:
-    fastapi-base-url: ${BRIDGEWORK_RECOMMEND_FASTAPI_BASE_URL:http://host.docker.internal/api/py}
+    fastapi-base-url: ${BRIDGEWORK_RECOMMEND_FASTAPI_BASE_URL:http://host.docker.internal:19000}
     quick-path: /api/v1/score/quick
     map-path: /api/v1/score/map
     explain-path: /api/v1/explain/recommendation
+    internal-api-key-header: ${BRIDGEWORK_FASTAPI_INTERNAL_API_KEY_HEADER:X-Internal-Api-Key}
+    internal-api-key: ${BRIDGEWORK_FASTAPI_INTERNAL_API_KEY}
   profile-ocr:
-    fastapi-base-url: ${bridgework.recommend.fastapi-base-url:http://host.docker.internal/api/py}
+    fastapi-base-url: ${bridgework.recommend.fastapi-base-url:http://host.docker.internal:19000}
     extract-path: /api/v1/profile-draft/from-portfolio
+    internal-api-key-header: ${bridgework.recommend.internal-api-key-header:X-Internal-Api-Key}
+    internal-api-key: ${bridgework.recommend.internal-api-key}
   sync:
     kric-station-code-file-path: /app/resources/reference/operating_agency_station_codes_2026-02-28.xlsx
     data-go-kr-service-key: ${DATA_GO_KR_SERVICE_KEY}
@@ -50,15 +60,14 @@ bridgework:
     allowed-origins:
       - https://bridgework.cloud
       - https://www.bridgework.cloud
-      - http://localhost:3000
     jwt:
       secret: ${BRIDGEWORK_AUTH_JWT_SECRET}
     oauth2:
       kakao:
-        client-id: 0d5fffe82670b3aba1f9c1c2e551dbee
+        client-id: ${KAKAO_CLIENT_ID}
         client-secret: ${KAKAO_CLIENT_SECRET}
-        redirect-uri: http://localhost:3000/auth/kakao/callback
+        redirect-uri: ${KAKAO_REDIRECT_URI}
       naver:
-        client-id: sk1Y_ivVnHWKz59glY0x
+        client-id: ${NAVER_CLIENT_ID}
         client-secret: ${NAVER_CLIENT_SECRET}
-        redirect-uri: http://localhost:3000/auth/naver/callback
+        redirect-uri: ${NAVER_REDIRECT_URI}

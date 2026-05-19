@@ -167,6 +167,11 @@ public class FastApiRecommendClient {
     private Map<String, Object> executePost(String uri, Map<String, Object> payload) {
         Map<String, Object> response = webClient.post()
                 .uri(uri)
+                .headers(headers -> {
+                    if (StringUtils.hasText(recommendProperties.getInternalApiKey())) {
+                        headers.set(recommendProperties.getInternalApiKeyHeader(), recommendProperties.getInternalApiKey());
+                    }
+                })
                 .bodyValue(payload)
                 .retrieve()
                 .bodyToMono(MAP_TYPE)

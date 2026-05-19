@@ -1,6 +1,7 @@
 package com.bridgework.common.exception;
 
 import com.bridgework.common.dto.ApiResponse;
+import com.bridgework.common.logging.LogSanitizer;
 import com.bridgework.common.notification.DiscordNotifierService;
 import com.bridgework.sync.exception.SyncDomainException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -62,13 +63,17 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<ApiResponse<Object>> handleHttpMessageNotReadableException(HttpMessageNotReadableException exception) {
-        log.warn("요청 본문 파싱 실패", exception);
+        log.warn("요청 본문 파싱 실패 type={} reason={}",
+                exception.getClass().getSimpleName(),
+                LogSanitizer.summarizeThrowable(exception));
         return ResponseEntity.badRequest().body(ApiResponse.error("VALIDATION_ERROR", "요청 본문 JSON 형식이 올바르지 않습니다."));
     }
 
     @ExceptionHandler(MaxUploadSizeExceededException.class)
     public ResponseEntity<ApiResponse<Object>> handleMaxUploadSizeExceededException(MaxUploadSizeExceededException exception) {
-        log.warn("업로드 파일 크기 제한 초과", exception);
+        log.warn("업로드 파일 크기 제한 초과 type={} reason={}",
+                exception.getClass().getSimpleName(),
+                LogSanitizer.summarizeThrowable(exception));
         return ResponseEntity
                 .status(413)
                 .body(ApiResponse.error("FILE_TOO_LARGE", "업로드 파일 용량 제한을 초과했습니다."));
@@ -76,7 +81,9 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponse<Object>> handleUnexpectedException(Exception exception, HttpServletRequest request) {
-        log.error("처리되지 않은 예외 발생", exception);
+        log.error("처리되지 않은 예외 발생 type={} reason={}",
+                exception.getClass().getSimpleName(),
+                LogSanitizer.summarizeThrowable(exception));
         try {
             String requestUri = request == null ? null : request.getRequestURI();
             discordNotifierService.notifyUnhandledException(
