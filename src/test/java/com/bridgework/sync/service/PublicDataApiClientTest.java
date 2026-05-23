@@ -214,6 +214,66 @@ class PublicDataApiClientTest {
     }
 
     @Test
+    void fetchPage_whenSeoulWalkingNetwork_thenBuildsStableExternalIdByNodeTypeAndId() {
+        mockWebServer.enqueue(new MockResponse()
+                .setHeader("Content-Type", "application/json")
+                .setBody("""
+                        {
+                          "TbTraficWlkNet": {
+                            "list_total_count": 2,
+                            "row": [
+                              {"NODE_TYPE":"LINK","NODE_ID":"0.0","LNKG_ID":"173357.0"},
+                              {"NODE_TYPE":"NODE","NODE_ID":"148651.0","LNKG_ID":"0.0"}
+                            ]
+                          }
+                        }
+                        """));
+
+        BridgeWorkSyncProperties.SourceConfig sourceConfig = new BridgeWorkSyncProperties.SourceConfig();
+        sourceConfig.setEnabled(true);
+        sourceConfig.setSourceType(PublicDataSourceType.SEOUL_WALKING_NETWORK);
+        sourceConfig.setBaseUrl(mockWebServer.url("/seoul").toString());
+        sourceConfig.setServiceKey("test-key");
+        sourceConfig.setPageSize(1000);
+        sourceConfig.setMaxPages(1);
+        sourceConfig.setQueryParams(Map.of("serviceName", "TbTraficWlkNet"));
+
+        PublicDataApiPageResponseDto response = publicDataApiClient.fetchPage(sourceConfig, 1);
+        assertThat(response.items()).hasSize(2);
+        assertThat(response.items().get(0).externalId()).isEqualTo("seoul_walking_network:LINK:173357");
+        assertThat(response.items().get(1).externalId()).isEqualTo("seoul_walking_network:NODE:148651");
+    }
+
+    @Test
+    void fetchPage_whenSeoulWalkingNetworkIdMissing_thenFallsBackToGeometryKey() {
+        mockWebServer.enqueue(new MockResponse()
+                .setHeader("Content-Type", "application/json")
+                .setBody("""
+                        {
+                          "TbTraficWlkNet": {
+                            "list_total_count": 1,
+                            "row": [
+                              {"NODE_TYPE":"LINK","NODE_ID":"0.0","LNKG_ID":"0.0","LNKG_WKT":"LINESTRING(127.0 37.5,127.1 37.6)"}
+                            ]
+                          }
+                        }
+                        """));
+
+        BridgeWorkSyncProperties.SourceConfig sourceConfig = new BridgeWorkSyncProperties.SourceConfig();
+        sourceConfig.setEnabled(true);
+        sourceConfig.setSourceType(PublicDataSourceType.SEOUL_WALKING_NETWORK);
+        sourceConfig.setBaseUrl(mockWebServer.url("/seoul").toString());
+        sourceConfig.setServiceKey("test-key");
+        sourceConfig.setPageSize(1000);
+        sourceConfig.setMaxPages(1);
+        sourceConfig.setQueryParams(Map.of("serviceName", "TbTraficWlkNet"));
+
+        PublicDataApiPageResponseDto response = publicDataApiClient.fetchPage(sourceConfig, 1);
+        assertThat(response.items()).hasSize(1);
+        assertThat(response.items().get(0).externalId()).startsWith("seoul_walking_network:GEOM:");
+    }
+
+    @Test
     void fetchPage_whenServiceKeyIsDecodingForm_thenEncodesExactlyOnce() throws InterruptedException {
         mockWebServer.enqueue(new MockResponse()
                 .setHeader("Content-Type", "application/json")

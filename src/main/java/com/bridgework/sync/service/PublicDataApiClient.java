@@ -14,6 +14,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.dataformat.xml.XmlMapper;
 import java.io.ByteArrayInputStream;
 import java.io.StringReader;
+import java.math.BigDecimal;
 import java.time.Duration;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -2049,10 +2050,73 @@ public class PublicDataApiClient {
         try {
             String payloadJson = objectMapper.writeValueAsString(itemNode);
             String payloadHash = sha256(payloadJson);
-            String externalId = extractExternalId(itemNode, sourceConfig.getItemIdField()).orElse(payloadHash);
+            String externalId = resolveExternalId(itemNode, sourceConfig, payloadHash);
             return new PublicDataApiItemDto(externalId, payloadJson, payloadHash);
         } catch (JsonProcessingException exception) {
             throw new PayloadParseException("공공데이터 응답 직렬화 실패", exception);
+        }
+    }
+
+    private String resolveExternalId(JsonNode itemNode,
+                                     BridgeWorkSyncProperties.SourceConfig sourceConfig,
+                                     String payloadHash) {
+        if (sourceConfig.getSourceType() == PublicDataSourceType.SEOUL_WALKING_NETWORK) {
+            return buildSeoulWalkingNetworkExternalId(itemNode, payloadHash);
+        }
+        return extractExternalId(itemNode, sourceConfig.getItemIdField()).orElse(payloadHash);
+    }
+
+    private String buildSeoulWalkingNetworkExternalId(JsonNode itemNode, String payloadHash) {
+        String nodeType = itemNode.path("NODE_TYPE").asText("").trim().toUpperCase(Locale.ROOT);
+        String nodeId = normalizeWalkingNetworkIdToken(itemNode.path("NODE_ID").asText(""));
+        String lnkgId = normalizeWalkingNetworkIdToken(itemNode.path("LNKG_ID").asText(""));
+
+        if ("LINK".equals(nodeType) && !lnkgId.isBlank()) {
+            return "seoul_walking_network:LINK:" + lnkgId;
+        }
+        if ("NODE".equals(nodeType) && !nodeId.isBlank()) {
+            return "seoul_walking_network:NODE:" + nodeId;
+        }
+        if (!lnkgId.isBlank()) {
+            return "seoul_walking_network:LINK:" + lnkgId;
+        }
+        if (!nodeId.isBlank()) {
+            return "seoul_walking_network:NODE:" + nodeId;
+        }
+
+        // 식별자 결측 시 WKT 기반 키로 고정해 재수집마다 신규로 쌓이는 현상을 막는다.
+        String lnkgWkt = itemNode.path("LNKG_WKT").asText("").trim();
+        if (!lnkgWkt.isBlank()) {
+            return "seoul_walking_network:GEOM:" + sha256("LINK|" + lnkgWkt);
+        }
+        String nodeWkt = itemNode.path("NODE_WKT").asText("").trim();
+        if (!nodeWkt.isBlank()) {
+            return "seoul_walking_network:GEOM:" + sha256("NODE|" + nodeWkt);
+        }
+        return payloadHash;
+    }
+
+    private String normalizeWalkingNetworkIdToken(String rawValue) {
+        if (rawValue == null) {
+            return "";
+        }
+
+        String trimmed = rawValue.trim();
+        if (trimmed.isBlank()) {
+            return "";
+        }
+
+        try {
+            BigDecimal decimal = new BigDecimal(trimmed).stripTrailingZeros();
+            if (decimal.compareTo(BigDecimal.ZERO) == 0) {
+                return "";
+            }
+            if (decimal.scale() < 0) {
+                decimal = decimal.setScale(0);
+            }
+            return decimal.toPlainString();
+        } catch (NumberFormatException exception) {
+            return trimmed.matches("0+(?:\\.0+)?") ? "" : trimmed;
         }
     }
 
