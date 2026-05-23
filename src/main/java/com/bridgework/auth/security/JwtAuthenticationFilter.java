@@ -1,5 +1,7 @@
 package com.bridgework.auth.security;
 
+import com.bridgework.admin.auth.repository.AdminAccountRepository;
+import com.bridgework.auth.entity.UserRole;
 import com.bridgework.auth.entity.UserStatus;
 import com.bridgework.auth.exception.InvalidJwtException;
 import com.bridgework.auth.repository.AppUserRepository;
@@ -27,13 +29,16 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtTokenProvider jwtTokenProvider;
     private final AppUserRepository appUserRepository;
+    private final AdminAccountRepository adminAccountRepository;
     private final ObjectMapper objectMapper;
 
     public JwtAuthenticationFilter(JwtTokenProvider jwtTokenProvider,
                                    AppUserRepository appUserRepository,
+                                   AdminAccountRepository adminAccountRepository,
                                    ObjectMapper objectMapper) {
         this.jwtTokenProvider = jwtTokenProvider;
         this.appUserRepository = appUserRepository;
+        this.adminAccountRepository = adminAccountRepository;
         this.objectMapper = objectMapper;
     }
 
@@ -58,8 +63,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             if (!JwtTokenProvider.TOKEN_TYPE_ACCESS.equals(parsedToken.tokenType())) {
                 throw new InvalidJwtException("액세스 토큰이 아닙니다.");
             }
-            boolean isActiveUser = appUserRepository.findByIdAndStatus(parsedToken.userId(), UserStatus.ACTIVE).isPresent();
-            if (!isActiveUser) {
+            if (!isActiveAccount(parsedToken)) {
                 throw new InvalidJwtException("비활성화된 계정입니다.");
             }
 
@@ -75,6 +79,16 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             SecurityContextHolder.clearContext();
             writeUnauthorized(response, exception.getErrorCode(), exception.getMessage());
         }
+    }
+
+    private boolean isActiveAccount(ParsedJwtToken parsedToken) {
+        if (parsedToken.role() == UserRole.ADMIN) {
+            return adminAccountRepository.existsByIdAndActiveTrue(parsedToken.userId());
+        }
+        if (parsedToken.role() == UserRole.USER) {
+            return appUserRepository.findByIdAndStatus(parsedToken.userId(), UserStatus.ACTIVE).isPresent();
+        }
+        return false;
     }
 
     private void writeUnauthorized(HttpServletResponse response, String code, String message) throws IOException {

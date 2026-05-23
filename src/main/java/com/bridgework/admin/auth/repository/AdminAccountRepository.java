@@ -13,4 +13,6 @@ public interface AdminAccountRepository extends JpaRepository<AdminAccount, Long
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select admin from AdminAccount admin where admin.loginId = :loginId")
     Optional<AdminAccount> findForUpdateByLoginId(@Param("loginId") String loginId);
+
+    boolean existsByIdAndActiveTrue(Long id);
 }
