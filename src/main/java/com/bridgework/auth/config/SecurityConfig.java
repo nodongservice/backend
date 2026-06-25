@@ -72,6 +72,11 @@ public class SecurityConfig {
                                 "/api/v1/map/support-agencies",
                                 "/api/v1/notices/**",
                                 "/api/v1/postings/popular").permitAll()
+                        .requestMatchers(
+                                "/api/v1/profiles/**",
+                                "/api/v1/recommend/**",
+                                "/api/v1/me/**",
+                                "/api/v1/postings/**").hasRole("USER")
                         .requestMatchers(HttpMethod.POST,
                                 "/api/v1/auth/admin/login",
                                 "/api/v1/auth/social/login",
