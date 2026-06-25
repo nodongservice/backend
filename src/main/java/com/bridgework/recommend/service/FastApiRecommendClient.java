@@ -71,12 +71,12 @@ public class FastApiRecommendClient {
         this.naverGeocodingService = naverGeocodingService;
     }
 
-    public Map<String, Object> requestQuickScore(UserProfileResponseDto profile) {
-        return post(recommendProperties.getQuickPath(), buildProfilePayload(profile));
+    public Map<String, Object> requestQuickScore(UserProfileResponseDto profile, int limit, int offset) {
+        return post(recommendProperties.getQuickPath(), buildProfilePayload(profile, limit, offset));
     }
 
-    public Map<String, Object> requestMapScore(UserProfileResponseDto profile) {
-        return post(recommendProperties.getMapPath(), buildProfilePayload(profile));
+    public Map<String, Object> requestMapScore(UserProfileResponseDto profile, int limit, int offset) {
+        return post(recommendProperties.getMapPath(), buildProfilePayload(profile, limit, offset));
     }
 
     public Map<String, Object> requestRecommendationExplain(
@@ -218,9 +218,11 @@ public class FastApiRecommendClient {
         return normalized.substring(0, healthPathIndex);
     }
 
-    private Map<String, Object> buildProfilePayload(UserProfileResponseDto profile) {
+    private Map<String, Object> buildProfilePayload(UserProfileResponseDto profile, int limit, int offset) {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("profile", buildScoreProfile(profile));
+        payload.put("limit", limit);
+        payload.put("offset", offset);
         return payload;
     }
 
