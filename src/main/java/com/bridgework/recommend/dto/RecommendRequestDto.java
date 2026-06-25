@@ -15,10 +15,40 @@ public record RecommendRequestDto(
                 example = "3",
                 requiredMode = Schema.RequiredMode.NOT_REQUIRED
         )
-        Long profileId
+        Long profileId,
+        @Schema(
+                description = "추천 후보 조회 개수. 미지정 시 20개, 최대 100개까지 허용한다.",
+                example = "20",
+                requiredMode = Schema.RequiredMode.NOT_REQUIRED
+        )
+        Integer limit,
+        @Schema(
+                description = "추천 후보 조회 시작 위치. 미지정 시 0부터 조회한다.",
+                example = "0",
+                requiredMode = Schema.RequiredMode.NOT_REQUIRED
+        )
+        Integer offset
 ) {
+
+    public RecommendRequestDto(Boolean aiEnabled, Long profileId) {
+        this(aiEnabled, profileId, null, null);
+    }
 
     public boolean useAi() {
         return aiEnabled == null || aiEnabled;
+    }
+
+    public int safeLimit(int defaultLimit, int maxLimit) {
+        if (limit == null) {
+            return defaultLimit;
+        }
+        return Math.max(1, Math.min(limit, maxLimit));
+    }
+
+    public int safeOffset(int maxOffset) {
+        if (offset == null) {
+            return 0;
+        }
+        return Math.max(0, Math.min(offset, maxOffset));
     }
 }
