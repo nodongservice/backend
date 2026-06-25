@@ -5,6 +5,7 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.eq;
 
 import com.bridgework.auth.entity.GenderType;
 import com.bridgework.recommend.dto.RecommendExplainJobDto;
@@ -72,7 +73,7 @@ class RecommendGatewayServiceTest {
         assertThat(jobPayload.get("job_post_id")).isEqualTo(1L);
         assertThat(jobPayload.get("company_name")).isEqualTo("사업장");
         assertThat(first.get("job_fit_score")).isNull();
-        verify(fastApiRecommendClient, never()).requestQuickScore(org.mockito.ArgumentMatchers.any());
+        verify(fastApiRecommendClient, never()).requestQuickScore(org.mockito.ArgumentMatchers.any(), anyInt(), anyInt());
     }
 
     @Test
@@ -136,7 +137,7 @@ class RecommendGatewayServiceTest {
         );
 
         when(userProfileService.getProfiles(1L)).thenReturn(List.of(defaultProfile));
-        when(fastApiRecommendClient.requestMapScore(defaultProfile)).thenReturn(aiResponse);
+        when(fastApiRecommendClient.requestMapScore(defaultProfile, 20, 0)).thenReturn(aiResponse);
 
         Map<String, Object> response = recommendGatewayService.recommendMap(
                 1L,
@@ -155,6 +156,27 @@ class RecommendGatewayServiceTest {
         assertThat(jobPayload.get("company_name")).isEqualTo("사업장");
         assertThat(jobPayload.get("job_title")).isEqualTo("사무보조");
         assertThat(first.get("total_score")).isEqualTo(88);
+    }
+
+    @Test
+    void recommendQuick_whenAiEnabled_thenPassesPageToFastApi() {
+        UserProfileResponseDto selectedProfile = profile(11L, true);
+        Map<String, Object> aiResponse = Map.of(
+                "code", "SUCCESS",
+                "message", "요청이 성공했습니다.",
+                "result", Map.of("results", List.of())
+        );
+
+        when(userProfileService.getProfile(1L, 11L)).thenReturn(selectedProfile);
+        when(fastApiRecommendClient.requestQuickScore(selectedProfile, 20, 40)).thenReturn(aiResponse);
+
+        Map<String, Object> response = recommendGatewayService.recommendQuick(
+                1L,
+                new RecommendRequestDto(true, 11L, 20, 40)
+        );
+
+        assertThat(response).isEqualTo(aiResponse.get("result"));
+        verify(fastApiRecommendClient).requestQuickScore(eq(selectedProfile), eq(20), eq(40));
     }
 
     @Test

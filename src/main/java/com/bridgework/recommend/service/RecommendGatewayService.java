@@ -41,7 +41,7 @@ public class RecommendGatewayService {
         }
 
         UserProfileResponseDto profile = resolveSelectedProfile(userId, request.profileId());
-        Map<String, Object> aiResponse = fastApiRecommendClient.requestQuickScore(profile);
+        Map<String, Object> aiResponse = fastApiRecommendClient.requestQuickScore(profile, safeLimit(request), safeOffset(request));
         return extractResult(aiResponse);
     }
 
@@ -54,7 +54,7 @@ public class RecommendGatewayService {
         }
 
         UserProfileResponseDto profile = resolveSelectedProfile(userId, request.profileId());
-        Map<String, Object> aiResponse = fastApiRecommendClient.requestMapScore(profile);
+        Map<String, Object> aiResponse = fastApiRecommendClient.requestMapScore(profile, safeLimit(request), safeOffset(request));
         return extractResult(aiResponse);
     }
 
