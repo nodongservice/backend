@@ -132,8 +132,10 @@ public class AuthController {
                     value = "{\"code\":\"SUCCESS\",\"message\":\"요청이 성공했습니다.\",\"result\":{\"userId\":6,\"provider\":\"KAKAO\",\"email\":\"dummy.service.1@bridgework.local\",\"role\":\"USER\",\"signupCompleted\":true}}"
             )))
     public ResponseEntity<com.bridgework.common.dto.ApiResponse<AuthMeResponseDto>> me(Authentication authentication) {
-        Long userId = currentUserId(authentication);
-        return ResponseEntity.ok(com.bridgework.common.dto.ApiResponse.success(authService.getMe(userId)));
+        UserPrincipal principal = currentPrincipal(authentication);
+        return ResponseEntity.ok(com.bridgework.common.dto.ApiResponse.success(
+                authService.getMe(principal.getUserId(), principal.getRole())
+        ));
     }
 
     @DeleteMapping("/withdraw")
@@ -168,9 +170,13 @@ public class AuthController {
     }
 
     private Long currentUserId(Authentication authentication) {
+        return currentPrincipal(authentication).getUserId();
+    }
+
+    private UserPrincipal currentPrincipal(Authentication authentication) {
         if (authentication == null || !(authentication.getPrincipal() instanceof UserPrincipal principal)) {
             throw new UnauthorizedException();
         }
-        return principal.getUserId();
+        return principal;
     }
 }

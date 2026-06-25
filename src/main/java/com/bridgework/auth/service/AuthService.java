@@ -1,5 +1,7 @@
 package com.bridgework.auth.service;
 
+import com.bridgework.admin.auth.entity.AdminAccount;
+import com.bridgework.admin.auth.repository.AdminAccountRepository;
 import com.bridgework.auth.config.BridgeWorkAuthProperties;
 import com.bridgework.auth.dto.AuthMeResponseDto;
 import com.bridgework.auth.dto.SignupCompleteRequestDto;
@@ -44,6 +46,7 @@ public class AuthService {
     private final UserProfileRepository userProfileRepository;
     private final DiscordNotifierService discordNotifierService;
     private final WithdrawalCancelTokenStoreService withdrawalCancelTokenStoreService;
+    private final AdminAccountRepository adminAccountRepository;
 
     public AuthService(AppUserRepository appUserRepository,
                        SocialOAuthService socialOAuthService,
@@ -54,7 +57,8 @@ public class AuthService {
                        UserProfileService userProfileService,
                        UserProfileRepository userProfileRepository,
                        DiscordNotifierService discordNotifierService,
-                       WithdrawalCancelTokenStoreService withdrawalCancelTokenStoreService) {
+                       WithdrawalCancelTokenStoreService withdrawalCancelTokenStoreService,
+                       AdminAccountRepository adminAccountRepository) {
         this.appUserRepository = appUserRepository;
         this.socialOAuthService = socialOAuthService;
         this.signupSessionStoreService = signupSessionStoreService;
@@ -65,6 +69,7 @@ public class AuthService {
         this.userProfileRepository = userProfileRepository;
         this.discordNotifierService = discordNotifierService;
         this.withdrawalCancelTokenStoreService = withdrawalCancelTokenStoreService;
+        this.adminAccountRepository = adminAccountRepository;
     }
 
     @Transactional
@@ -217,7 +222,21 @@ public class AuthService {
         refreshTokenStoreService.delete(parsedJwtToken.userId(), parsedJwtToken.tokenId());
     }
 
-    public AuthMeResponseDto getMe(Long userId) {
+    public AuthMeResponseDto getMe(Long userId, UserRole role) {
+        if (role == UserRole.ADMIN) {
+            AdminAccount adminAccount = adminAccountRepository.findById(userId)
+                    .filter(AdminAccount::isActive)
+                    .orElseThrow(UserNotFoundException::new);
+
+            return new AuthMeResponseDto(
+                    adminAccount.getId(),
+                    null,
+                    adminAccount.getLoginId() + "@admin.bridgework.local",
+                    adminAccount.getRole(),
+                    true
+            );
+        }
+
         AppUser user = appUserRepository.findByIdAndStatus(userId, UserStatus.ACTIVE)
                 .orElseThrow(UserNotFoundException::new);
 

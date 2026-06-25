@@ -8,7 +8,10 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.bridgework.admin.auth.entity.AdminAccount;
+import com.bridgework.admin.auth.repository.AdminAccountRepository;
 import com.bridgework.auth.config.BridgeWorkAuthProperties;
+import com.bridgework.auth.dto.AuthMeResponseDto;
 import com.bridgework.auth.dto.SignupCompleteRequestDto;
 import com.bridgework.auth.dto.SocialLoginAccountStatus;
 import com.bridgework.auth.dto.SocialLoginRequestDto;
@@ -67,6 +70,8 @@ class AuthServiceTest {
     private DiscordNotifierService discordNotifierService;
     @Mock
     private WithdrawalCancelTokenStoreService withdrawalCancelTokenStoreService;
+    @Mock
+    private AdminAccountRepository adminAccountRepository;
     private AuthService authService;
 
     @BeforeEach
@@ -84,8 +89,27 @@ class AuthServiceTest {
                 userProfileService,
                 userProfileRepository,
                 discordNotifierService,
-                withdrawalCancelTokenStoreService
+                withdrawalCancelTokenStoreService,
+                adminAccountRepository
         );
+    }
+
+    @Test
+    void getMe_whenAdminToken_thenReturnsAdminRole() {
+        AdminAccount adminAccount = new AdminAccount();
+        ReflectionTestUtils.setField(adminAccount, "id", 9L);
+        adminAccount.setLoginId("admin01");
+        adminAccount.setActive(true);
+        adminAccount.setRole(UserRole.ADMIN);
+        when(adminAccountRepository.findById(9L)).thenReturn(Optional.of(adminAccount));
+
+        AuthMeResponseDto response = authService.getMe(9L, UserRole.ADMIN);
+
+        assertThat(response.userId()).isEqualTo(9L);
+        assertThat(response.provider()).isNull();
+        assertThat(response.email()).isEqualTo("admin01@admin.bridgework.local");
+        assertThat(response.role()).isEqualTo(UserRole.ADMIN);
+        assertThat(response.signupCompleted()).isTrue();
     }
 
     @Test
