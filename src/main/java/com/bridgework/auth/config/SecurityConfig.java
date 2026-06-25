@@ -70,6 +70,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET,
                                 "/api/v1/options/**",
                                 "/api/v1/map/support-agencies",
+                                "/api/v1/notices/**",
                                 "/api/v1/postings/popular").permitAll()
                         .requestMatchers(HttpMethod.POST,
                                 "/api/v1/auth/admin/login",

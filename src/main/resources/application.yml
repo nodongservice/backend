@@ -122,6 +122,7 @@ bridgework:
         path-patterns:
           - /api/v1/options/**
           - /api/v1/map/support-agencies
+          - /api/v1/notices/**
           - /api/v1/postings/popular
         key-scope: IP
         capacity: 300
