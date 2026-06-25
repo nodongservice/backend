@@ -40,7 +40,20 @@ public class RecommendJobQueryService {
                        geo_latitude,
                        geo_longitude
                 FROM pd_kepad_recruitment
-                ORDER BY reg_dt DESC NULLS LAST, updated_at DESC, external_id ASC
+                WHERE (posting_status = 'ACTIVE' OR posting_status IS NULL)
+                  AND job_nm IS NOT NULL
+                  AND buspla_name IS NOT NULL
+                  AND (
+                      LENGTH(REGEXP_REPLACE(COALESCE(term_date, ''), '[^0-9]', '', 'g')) < 8
+                      OR RIGHT(REGEXP_REPLACE(COALESCE(term_date, ''), '[^0-9]', '', 'g'), 8) >= TO_CHAR(CURRENT_DATE, 'YYYYMMDD')
+                  )
+                ORDER BY CASE
+                             WHEN geo_latitude IS NOT NULL AND geo_longitude IS NOT NULL THEN 0
+                             ELSE 1
+                         END ASC,
+                         reg_dt DESC NULLS LAST,
+                         updated_at DESC,
+                         external_id ASC
                 """;
         try {
             return namedParameterJdbcTemplate.query(sql, (rs, rowNum) -> new RecommendJobResponseDto(
