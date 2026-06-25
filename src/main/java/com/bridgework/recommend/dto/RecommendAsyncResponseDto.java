@@ -10,6 +10,7 @@ public record RecommendAsyncResponseDto(
         Map<String, Object> result,
         String errorMessage,
         OffsetDateTime expiresAt,
-        OffsetDateTime updatedAt
+        OffsetDateTime updatedAt,
+        boolean cached
 ) {
 }
