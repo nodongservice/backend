@@ -16,7 +16,9 @@ import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
 import java.util.HexFormat;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -90,20 +92,20 @@ public class RecommendAsyncTaskService {
 
         RecommendTaskEnvelope existingEnvelope = readEnvelope(taskKey).orElse(null);
         if (existingEnvelope != null && existingEnvelope.status() == RecommendTaskStatus.COMPLETED) {
-            return toResponse(existingEnvelope);
+            return toResponse(existingEnvelope, true);
         }
 
         if (existingEnvelope != null && existingEnvelope.status() == RecommendTaskStatus.PROCESSING) {
             boolean lockAlive = Boolean.TRUE.equals(stringRedisTemplate.hasKey(lockKey));
             Duration processingAge = Duration.between(existingEnvelope.updatedAt(), OffsetDateTime.now(ZoneOffset.UTC));
-            if (lockAlive || processingAge.compareTo(recommendProperties.getRequestTimeout().plusSeconds(30)) <= 0) {
+            if (lockAlive || processingAge.compareTo(taskLockTtl(request)) <= 0) {
                 return toResponse(existingEnvelope);
             }
         }
 
         Duration cacheTtl = ttlUntilNextCacheBoundary();
         OffsetDateTime expiresAt = OffsetDateTime.now(ZoneOffset.UTC).plus(cacheTtl);
-        Duration lockTtl = recommendProperties.getRequestTimeout().plusSeconds(30);
+        Duration lockTtl = taskLockTtl(request);
 
         Boolean acquired = stringRedisTemplate.opsForValue().setIfAbsent(lockKey, "1", lockTtl);
         if (!Boolean.TRUE.equals(acquired)) {
@@ -133,9 +135,9 @@ public class RecommendAsyncTaskService {
 
         recommendTaskExecutor.execute(() -> {
             try {
-                Map<String, Object> result = "quick".equals(requestType)
-                        ? recommendGatewayService.recommendQuick(userId, request)
-                        : recommendGatewayService.recommendMap(userId, request);
+                Map<String, Object> result = shouldStreamPartialResults(request)
+                        ? processTaskWithPartialResults(requestType, userId, request, processingEnvelope, taskKey, cacheTtl)
+                        : requestRecommendation(requestType, userId, request);
 
                 RecommendTaskEnvelope completedEnvelope = processingEnvelope.complete(result, OffsetDateTime.now(ZoneOffset.UTC));
                 writeEnvelope(taskKey, completedEnvelope, cacheTtl);
@@ -151,6 +153,71 @@ public class RecommendAsyncTaskService {
         });
 
         return toResponse(processingEnvelope);
+    }
+
+    private boolean shouldStreamPartialResults(RecommendRequestDto request) {
+        return (request == null || request.useAi()) && safeLimit(request) > 1;
+    }
+
+    private Duration taskLockTtl(RecommendRequestDto request) {
+        int requestUnits = shouldStreamPartialResults(request) ? safeLimit(request) : 1;
+        return recommendProperties.getRequestTimeout().multipliedBy(requestUnits).plusSeconds(30);
+    }
+
+    private Map<String, Object> processTaskWithPartialResults(String requestType,
+                                                              Long userId,
+                                                              RecommendRequestDto request,
+                                                              RecommendTaskEnvelope processingEnvelope,
+                                                              String taskKey,
+                                                              Duration cacheTtl) {
+        int limit = safeLimit(request);
+        int offset = safeOffset(request);
+        List<Object> accumulatedResults = new ArrayList<>();
+        Map<String, Object> accumulatedResult = new LinkedHashMap<>();
+        accumulatedResult.put("results", accumulatedResults);
+
+        for (int index = 0; index < limit; index++) {
+            RecommendRequestDto singleRequest = new RecommendRequestDto(
+                    request == null ? true : request.aiEnabled(),
+                    request == null ? null : request.profileId(),
+                    1,
+                    offset + index
+            );
+            Map<String, Object> singleResult = requestRecommendation(requestType, userId, singleRequest);
+            List<?> singleResults = extractResults(singleResult);
+            if (singleResults.isEmpty()) {
+                break;
+            }
+
+            accumulatedResults.addAll(singleResults);
+            RecommendTaskEnvelope progressEnvelope = processingEnvelope.progress(
+                    copyResult(accumulatedResult),
+                    OffsetDateTime.now(ZoneOffset.UTC)
+            );
+            writeEnvelope(taskKey, progressEnvelope, cacheTtl);
+        }
+
+        return copyResult(accumulatedResult);
+    }
+
+    private Map<String, Object> requestRecommendation(String requestType, Long userId, RecommendRequestDto request) {
+        return "quick".equals(requestType)
+                ? recommendGatewayService.recommendQuick(userId, request)
+                : recommendGatewayService.recommendMap(userId, request);
+    }
+
+    private List<?> extractResults(Map<String, Object> result) {
+        Object results = result == null ? null : result.get("results");
+        return results instanceof List<?> list ? list : List.of();
+    }
+
+    private Map<String, Object> copyResult(Map<String, Object> result) {
+        Map<String, Object> copy = new LinkedHashMap<>(result);
+        Object results = result.get("results");
+        if (results instanceof List<?> list) {
+            copy.put("results", new ArrayList<>(list));
+        }
+        return copy;
     }
 
     private RecommendationKeyContext buildKeyContext(Long userId, RecommendRequestDto request) {
@@ -265,6 +332,10 @@ public class RecommendAsyncTaskService {
     }
 
     private RecommendAsyncResponseDto toResponse(RecommendTaskEnvelope envelope) {
+        return toResponse(envelope, false);
+    }
+
+    private RecommendAsyncResponseDto toResponse(RecommendTaskEnvelope envelope, boolean cached) {
         return new RecommendAsyncResponseDto(
                 envelope.requestId(),
                 envelope.requestType(),
@@ -272,7 +343,8 @@ public class RecommendAsyncTaskService {
                 envelope.result(),
                 envelope.errorMessage(),
                 envelope.expiresAt(),
-                envelope.updatedAt()
+                envelope.updatedAt(),
+                cached
         );
     }
 
@@ -334,6 +406,19 @@ public class RecommendAsyncTaskService {
                     requestType,
                     userId,
                     RecommendTaskStatus.COMPLETED,
+                    result,
+                    null,
+                    expiresAt,
+                    updatedAt
+            );
+        }
+
+        RecommendTaskEnvelope progress(Map<String, Object> result, OffsetDateTime updatedAt) {
+            return new RecommendTaskEnvelope(
+                    requestId,
+                    requestType,
+                    userId,
+                    RecommendTaskStatus.PROCESSING,
                     result,
                     null,
                     expiresAt,
