@@ -16,6 +16,10 @@ import org.springframework.stereotype.Service;
 @Service
 public class RecommendGatewayService {
 
+    private static final int DEFAULT_PAGE_LIMIT = 20;
+    private static final int MAX_PAGE_LIMIT = 100;
+    private static final int MAX_PAGE_OFFSET = 100;
+
     private final UserProfileService userProfileService;
     private final RecommendJobQueryService recommendJobQueryService;
     private final FastApiRecommendClient fastApiRecommendClient;
@@ -30,7 +34,10 @@ public class RecommendGatewayService {
 
     public Map<String, Object> recommendQuick(Long userId, RecommendRequestDto request) {
         if (request == null || !request.useAi()) {
-            return buildQuickFallbackResult(recommendJobQueryService.getLatestRecruitments());
+            return buildQuickFallbackResult(recommendJobQueryService.getLatestRecruitments(
+                    safeLimit(request),
+                    safeOffset(request)
+            ));
         }
 
         UserProfileResponseDto profile = resolveSelectedProfile(userId, request.profileId());
@@ -40,7 +47,10 @@ public class RecommendGatewayService {
 
     public Map<String, Object> recommendMap(Long userId, RecommendRequestDto request) {
         if (request == null || !request.useAi()) {
-            return buildMapFallbackResult(recommendJobQueryService.getLatestRecruitments());
+            return buildMapFallbackResult(recommendJobQueryService.getLatestRecruitments(
+                    safeLimit(request),
+                    safeOffset(request)
+            ));
         }
 
         UserProfileResponseDto profile = resolveSelectedProfile(userId, request.profileId());
@@ -80,6 +90,14 @@ public class RecommendGatewayService {
         }
 
         return profiles.get(0);
+    }
+
+    private int safeLimit(RecommendRequestDto request) {
+        return request == null ? DEFAULT_PAGE_LIMIT : request.safeLimit(DEFAULT_PAGE_LIMIT, MAX_PAGE_LIMIT);
+    }
+
+    private int safeOffset(RecommendRequestDto request) {
+        return request == null ? 0 : request.safeOffset(MAX_PAGE_OFFSET);
     }
 
     private Map<String, Object> buildQuickFallbackResult(List<RecommendJobResponseDto> jobs) {

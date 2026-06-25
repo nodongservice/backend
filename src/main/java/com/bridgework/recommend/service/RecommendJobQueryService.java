@@ -5,6 +5,7 @@ import com.bridgework.recommend.exception.RecommendDomainException;
 import java.util.List;
 import org.springframework.dao.DataAccessException;
 import org.springframework.http.HttpStatus;
+import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Service;
 
@@ -18,6 +19,12 @@ public class RecommendJobQueryService {
     }
 
     public List<RecommendJobResponseDto> getLatestRecruitments() {
+        return getLatestRecruitments(20, 0);
+    }
+
+    public List<RecommendJobResponseDto> getLatestRecruitments(int limit, int offset) {
+        int safeLimit = Math.max(1, Math.min(limit, 100));
+        int safeOffset = Math.max(0, offset);
         String sql = """
                 SELECT id,
                        id AS source_id,
@@ -54,9 +61,15 @@ public class RecommendJobQueryService {
                          reg_dt DESC NULLS LAST,
                          updated_at DESC,
                          external_id ASC
+                LIMIT :limit OFFSET :offset
                 """;
         try {
-            return namedParameterJdbcTemplate.query(sql, (rs, rowNum) -> new RecommendJobResponseDto(
+            return namedParameterJdbcTemplate.query(
+                    sql,
+                    new MapSqlParameterSource()
+                            .addValue("limit", safeLimit)
+                            .addValue("offset", safeOffset),
+                    (rs, rowNum) -> new RecommendJobResponseDto(
                     rs.getObject("id", Long.class),
                     rs.getObject("source_id", Long.class),
                     rs.getString("source_table"),

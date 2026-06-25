@@ -156,7 +156,7 @@ public class RecommendAsyncTaskService {
     private RecommendationKeyContext buildKeyContext(Long userId, RecommendRequestDto request) {
         boolean aiEnabled = request == null || request.useAi();
         if (!aiEnabled) {
-            return new RecommendationKeyContext(false, null, null);
+            return new RecommendationKeyContext(false, null, null, safeLimit(request), safeOffset(request));
         }
 
         UserProfileResponseDto profile;
@@ -177,7 +177,9 @@ public class RecommendAsyncTaskService {
         return new RecommendationKeyContext(
                 true,
                 profile.profileId(),
-                profile.updatedAt()
+                profile.updatedAt(),
+                safeLimit(request),
+                safeOffset(request)
         );
     }
 
@@ -187,7 +189,9 @@ public class RecommendAsyncTaskService {
                 String.valueOf(userId),
                 keyContext.aiEnabled() ? "ai" : "basic",
                 String.valueOf(keyContext.profileId() == null ? 0L : keyContext.profileId()),
-                String.valueOf(keyContext.profileUpdatedAt() == null ? 0L : keyContext.profileUpdatedAt().toInstant().toEpochMilli())
+                String.valueOf(keyContext.profileUpdatedAt() == null ? 0L : keyContext.profileUpdatedAt().toInstant().toEpochMilli()),
+                String.valueOf(keyContext.limit()),
+                String.valueOf(keyContext.offset())
         );
 
         try {
@@ -280,10 +284,20 @@ public class RecommendAsyncTaskService {
         return message;
     }
 
+    private int safeLimit(RecommendRequestDto request) {
+        return request == null ? 20 : request.safeLimit(20, 100);
+    }
+
+    private int safeOffset(RecommendRequestDto request) {
+        return request == null ? 0 : request.safeOffset(100);
+    }
+
     private record RecommendationKeyContext(
             boolean aiEnabled,
             Long profileId,
-            OffsetDateTime profileUpdatedAt
+            OffsetDateTime profileUpdatedAt,
+            int limit,
+            int offset
     ) {
     }
 
