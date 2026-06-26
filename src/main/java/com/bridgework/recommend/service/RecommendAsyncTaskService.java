@@ -170,26 +170,14 @@ public class RecommendAsyncTaskService {
                                                               RecommendTaskEnvelope processingEnvelope,
                                                               String taskKey,
                                                               Duration cacheTtl) {
-        int limit = safeLimit(request);
-        int offset = safeOffset(request);
+        Map<String, Object> pageResult = requestRecommendation(requestType, userId, request);
+        List<?> pageResults = extractResults(pageResult);
         List<Object> accumulatedResults = new ArrayList<>();
-        Map<String, Object> accumulatedResult = new LinkedHashMap<>();
+        Map<String, Object> accumulatedResult = copyResult(pageResult);
         accumulatedResult.put("results", accumulatedResults);
 
-        for (int index = 0; index < limit; index++) {
-            RecommendRequestDto singleRequest = new RecommendRequestDto(
-                    request == null ? true : request.aiEnabled(),
-                    request == null ? null : request.profileId(),
-                    1,
-                    offset + index
-            );
-            Map<String, Object> singleResult = requestRecommendation(requestType, userId, singleRequest);
-            List<?> singleResults = extractResults(singleResult);
-            if (singleResults.isEmpty()) {
-                break;
-            }
-
-            accumulatedResults.addAll(singleResults);
+        for (Object pageItem : pageResults) {
+            accumulatedResults.add(pageItem);
             RecommendTaskEnvelope progressEnvelope = processingEnvelope.progress(
                     copyResult(accumulatedResult),
                     OffsetDateTime.now(ZoneOffset.UTC)
