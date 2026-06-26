@@ -92,7 +92,7 @@ public class RecommendAsyncTaskService {
 
         RecommendTaskEnvelope existingEnvelope = readEnvelope(taskKey).orElse(null);
         if (existingEnvelope != null && existingEnvelope.status() == RecommendTaskStatus.COMPLETED) {
-            return toResponse(existingEnvelope, true);
+            return toResponse(aggregateCompletedCachedPages(requestType, userId, keyContext, existingEnvelope), true);
         }
 
         if (existingEnvelope != null && existingEnvelope.status() == RecommendTaskStatus.PROCESSING) {
@@ -212,12 +212,73 @@ public class RecommendAsyncTaskService {
     }
 
     private Map<String, Object> copyResult(Map<String, Object> result) {
+        if (result == null) {
+            return new LinkedHashMap<>();
+        }
         Map<String, Object> copy = new LinkedHashMap<>(result);
         Object results = result.get("results");
         if (results instanceof List<?> list) {
             copy.put("results", new ArrayList<>(list));
         }
         return copy;
+    }
+
+    private RecommendTaskEnvelope aggregateCompletedCachedPages(String requestType,
+                                                                Long userId,
+                                                                RecommendationKeyContext firstPageContext,
+                                                                RecommendTaskEnvelope firstPageEnvelope) {
+        if (!firstPageContext.aiEnabled() || firstPageContext.offset() != 0) {
+            return firstPageEnvelope;
+        }
+
+        int pageLimit = firstPageContext.limit();
+        if (pageLimit <= 0) {
+            return firstPageEnvelope;
+        }
+
+        Map<String, Object> mergedResult = copyResult(firstPageEnvelope.result());
+        List<Object> mergedResults = new ArrayList<>(extractResults(mergedResult));
+        if (mergedResults.isEmpty() || mergedResults.size() < pageLimit) {
+            return firstPageEnvelope;
+        }
+
+        OffsetDateTime latestUpdatedAt = firstPageEnvelope.updatedAt() == null
+                ? OffsetDateTime.now(ZoneOffset.UTC)
+                : firstPageEnvelope.updatedAt();
+        for (int offset = pageLimit; offset < 100; offset += pageLimit) {
+            RecommendationKeyContext pageContext = new RecommendationKeyContext(
+                    true,
+                    firstPageContext.profileId(),
+                    firstPageContext.profileUpdatedAt(),
+                    pageLimit,
+                    offset
+            );
+            String pageRequestId = buildRequestId(requestType, userId, pageContext);
+            RecommendTaskEnvelope pageEnvelope = readEnvelope(taskKey(pageRequestId)).orElse(null);
+            if (pageEnvelope == null || pageEnvelope.status() != RecommendTaskStatus.COMPLETED) {
+                break;
+            }
+
+            List<?> pageResults = extractResults(pageEnvelope.result());
+            if (pageResults.isEmpty()) {
+                break;
+            }
+
+            mergedResults.addAll(pageResults);
+            if (pageEnvelope.updatedAt() != null && pageEnvelope.updatedAt().isAfter(latestUpdatedAt)) {
+                latestUpdatedAt = pageEnvelope.updatedAt();
+            }
+            if (pageResults.size() < pageLimit || mergedResults.size() >= 100) {
+                break;
+            }
+        }
+
+        if (mergedResults.size() <= extractResults(firstPageEnvelope.result()).size()) {
+            return firstPageEnvelope;
+        }
+
+        mergedResult.put("results", mergedResults.stream().limit(100).toList());
+        return firstPageEnvelope.complete(mergedResult, latestUpdatedAt);
     }
 
     private RecommendationKeyContext buildKeyContext(Long userId, RecommendRequestDto request) {
