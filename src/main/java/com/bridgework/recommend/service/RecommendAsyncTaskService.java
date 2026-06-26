@@ -156,7 +156,11 @@ public class RecommendAsyncTaskService {
     }
 
     private boolean shouldStreamPartialResults(RecommendRequestDto request) {
-        return (request == null || request.useAi()) && safeLimit(request) > 1;
+        return useAiOrDefault(request) && safeLimit(request) > 1;
+    }
+
+    static boolean useAiOrDefault(RecommendRequestDto request) {
+        return request == null || request.useAi();
     }
 
     private Duration taskLockTtl(RecommendRequestDto request) {
@@ -170,14 +174,26 @@ public class RecommendAsyncTaskService {
                                                               RecommendTaskEnvelope processingEnvelope,
                                                               String taskKey,
                                                               Duration cacheTtl) {
-        Map<String, Object> pageResult = requestRecommendation(requestType, userId, request);
-        List<?> pageResults = extractResults(pageResult);
+        int limit = safeLimit(request);
+        int offset = safeOffset(request);
         List<Object> accumulatedResults = new ArrayList<>();
-        Map<String, Object> accumulatedResult = copyResult(pageResult);
+        Map<String, Object> accumulatedResult = new LinkedHashMap<>();
         accumulatedResult.put("results", accumulatedResults);
 
-        for (Object pageItem : pageResults) {
-            accumulatedResults.add(pageItem);
+        for (int index = 0; index < limit; index++) {
+            RecommendRequestDto singleRequest = new RecommendRequestDto(
+                    useAiOrDefault(request),
+                    request == null ? null : request.profileId(),
+                    1,
+                    offset + index
+            );
+            Map<String, Object> singleResult = requestPartialRecommendation(requestType, userId, singleRequest);
+            List<?> singleResults = extractResults(singleResult);
+            if (singleResults.isEmpty()) {
+                break;
+            }
+
+            accumulatedResults.addAll(singleResults);
             RecommendTaskEnvelope progressEnvelope = processingEnvelope.progress(
                     copyResult(accumulatedResult),
                     OffsetDateTime.now(ZoneOffset.UTC)
@@ -192,6 +208,12 @@ public class RecommendAsyncTaskService {
         return "quick".equals(requestType)
                 ? recommendGatewayService.recommendQuick(userId, request)
                 : recommendGatewayService.recommendMap(userId, request);
+    }
+
+    private Map<String, Object> requestPartialRecommendation(String requestType, Long userId, RecommendRequestDto request) {
+        return "quick".equals(requestType)
+                ? recommendGatewayService.recommendQuickPartial(userId, request)
+                : recommendGatewayService.recommendMapPartial(userId, request);
     }
 
     private List<?> extractResults(Map<String, Object> result) {
@@ -270,7 +292,7 @@ public class RecommendAsyncTaskService {
     }
 
     private RecommendationKeyContext buildKeyContext(Long userId, RecommendRequestDto request) {
-        boolean aiEnabled = request == null || request.useAi();
+        boolean aiEnabled = useAiOrDefault(request);
         if (!aiEnabled) {
             return new RecommendationKeyContext(false, null, null, safeLimit(request), safeOffset(request));
         }

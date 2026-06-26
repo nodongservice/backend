@@ -45,6 +45,16 @@ public class RecommendGatewayService {
         return extractResult(aiResponse);
     }
 
+    public Map<String, Object> recommendQuickPartial(Long userId, RecommendRequestDto request) {
+        if (request == null || !request.useAi()) {
+            return recommendQuick(userId, request);
+        }
+
+        UserProfileResponseDto profile = resolveSelectedProfile(userId, request.profileId());
+        Map<String, Object> aiResponse = fastApiRecommendClient.requestQuickScore(profile, safeLimit(request), safeOffset(request), true);
+        return extractResult(aiResponse);
+    }
+
     public Map<String, Object> recommendMap(Long userId, RecommendRequestDto request) {
         if (request == null || !request.useAi()) {
             return buildMapFallbackResult(recommendJobQueryService.getLatestRecruitments(
@@ -55,6 +65,16 @@ public class RecommendGatewayService {
 
         UserProfileResponseDto profile = resolveSelectedProfile(userId, request.profileId());
         Map<String, Object> aiResponse = fastApiRecommendClient.requestMapScore(profile, safeLimit(request), safeOffset(request));
+        return extractResult(aiResponse);
+    }
+
+    public Map<String, Object> recommendMapPartial(Long userId, RecommendRequestDto request) {
+        if (request == null || !request.useAi()) {
+            return recommendMap(userId, request);
+        }
+
+        UserProfileResponseDto profile = resolveSelectedProfile(userId, request.profileId());
+        Map<String, Object> aiResponse = fastApiRecommendClient.requestMapScore(profile, safeLimit(request), safeOffset(request), true);
         return extractResult(aiResponse);
     }
 

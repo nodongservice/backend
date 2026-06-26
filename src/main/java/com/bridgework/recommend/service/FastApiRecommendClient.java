@@ -72,11 +72,19 @@ public class FastApiRecommendClient {
     }
 
     public Map<String, Object> requestQuickScore(UserProfileResponseDto profile, int limit, int offset) {
-        return post(recommendProperties.getQuickPath(), buildProfilePayload(profile, limit, offset));
+        return requestQuickScore(profile, limit, offset, false);
+    }
+
+    public Map<String, Object> requestQuickScore(UserProfileResponseDto profile, int limit, int offset, boolean streamMode) {
+        return post(recommendProperties.getQuickPath(), buildProfilePayload(profile, limit, offset, streamMode));
     }
 
     public Map<String, Object> requestMapScore(UserProfileResponseDto profile, int limit, int offset) {
-        return post(recommendProperties.getMapPath(), buildProfilePayload(profile, limit, offset));
+        return requestMapScore(profile, limit, offset, false);
+    }
+
+    public Map<String, Object> requestMapScore(UserProfileResponseDto profile, int limit, int offset, boolean streamMode) {
+        return post(recommendProperties.getMapPath(), buildProfilePayload(profile, limit, offset, streamMode));
     }
 
     public Map<String, Object> requestRecommendationExplain(
@@ -219,10 +227,17 @@ public class FastApiRecommendClient {
     }
 
     private Map<String, Object> buildProfilePayload(UserProfileResponseDto profile, int limit, int offset) {
+        return buildProfilePayload(profile, limit, offset, false);
+    }
+
+    private Map<String, Object> buildProfilePayload(UserProfileResponseDto profile, int limit, int offset, boolean streamMode) {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("profile", buildScoreProfile(profile));
         payload.put("limit", limit);
         payload.put("offset", offset);
+        if (streamMode) {
+            payload.put("streamMode", true);
+        }
         return payload;
     }
 

@@ -2,6 +2,7 @@ package com.bridgework.recommend.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.bridgework.recommend.dto.RecommendRequestDto;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import org.junit.jupiter.api.Test;
@@ -33,5 +34,12 @@ class RecommendAsyncTaskServiceTest {
         );
 
         assertThat(ttl).isEqualTo(Duration.ofHours(22).plusMinutes(45));
+    }
+
+    @Test
+    void useAiOrDefault_whenAiEnabledMissing_thenTreatsAsAiEnabled() {
+        assertThat(RecommendAsyncTaskService.useAiOrDefault(null)).isTrue();
+        assertThat(RecommendAsyncTaskService.useAiOrDefault(new RecommendRequestDto(null, 1L))).isTrue();
+        assertThat(RecommendAsyncTaskService.useAiOrDefault(new RecommendRequestDto(false, 1L))).isFalse();
     }
 }
