@@ -55,6 +55,14 @@
 - `service`
 - `dto`
 
+`com.bridgework.notice`
+- `controller`
+- `service`
+- `repository`
+- `entity`
+- `dto`
+- `exception`
+
 `com.bridgework.posting`
 - `controller`
 - `service`
@@ -82,8 +90,53 @@
 - 기능 3-1: 추천 설명 생성 게이트웨이
 - 기능 4: 공고 상세/인기 공고 조회, 공고 스크랩/해제/내 스크랩 목록
 - 기능 5: 관리자 로그인, 더미 사용자 케이스 조회/로그인
+- 기능 6: 공지사항 공개 조회, 관리자 공지사항 CRUD
 - 공공데이터: 스케줄러 동기화 + 수동 실행 + 원본/정규화 저장
 - 화면 옵션/지도 레이어: 직무 트리, 지역/고용형태/급여방식 옵션, 근로지원인 수행기관 마커 조회
+
+## 추천 비동기 게이트웨이
+
+퀵공고와 접근성지도 추천은 Spring Backend가 단일 진입점입니다. 프론트엔드는 FastAPI를 직접 호출하지 않습니다.
+
+### API
+
+- `POST /api/v1/recommend/quick`
+- `POST /api/v1/recommend/map`
+- `GET /api/v1/recommend/tasks/{requestId}`
+- `POST /api/v1/recommend/explain`
+
+### 요청 규칙
+
+- `aiEnabled=true`: 선택 프로필 1개를 검증한 뒤 FastAPI AI/GIS Service로 전달합니다.
+- `aiEnabled=false`: FastAPI를 호출하지 않고 Spring DB 공고를 최신순으로 반환합니다.
+- `limit`은 1~100 범위이며 프론트 표준 배치 크기는 20입니다.
+- `offset`은 페이지네이션 시작 위치입니다.
+
+### 응답/캐시 규칙
+
+- 새 AI 계산은 `PROCESSING` task를 만들고 `requestId`를 반환합니다.
+- 같은 사용자/요청 키의 계산이 완료되어 있으면 `COMPLETED`, `cached=true`, `result`를 즉시 반환합니다.
+- 계산 중인 task는 `/tasks/{requestId}`에서 상태를 조회합니다.
+- AI ON의 20개 배치 계산은 내부적으로 1개 단위 FastAPI 요청을 순차 실행하고, 각 항목 완료 시 `PROCESSING` envelope의 `result`에 누적 부분 결과를 저장합니다.
+- 프론트는 `PROCESSING` 부분 결과를 polling마다 반영하고, 완료 후 같은 결과를 캐시해 불필요한 재계산을 줄입니다.
+
+### 공고 후보 기준
+
+FastAPI 후보 조회는 모집 중인 공고와 마감일이 지나지 않은 공고를 기준으로 하며, 좌표가 있는 공고를 우선 정렬합니다. Spring은 이 기준을 깨지 않고 FastAPI 또는 DB 조회 결과를 전달합니다.
+
+## 공지사항/관리자 API
+
+공개 공지사항은 비로그인 사용자도 읽을 수 있고, 관리자 공지사항 API는 관리자 JWT가 필요합니다.
+
+- `GET /api/v1/notices?limit=20`: 공개 공지사항 목록
+- `GET /api/v1/notices/{noticeId}`: 공개 공지사항 상세
+- `GET /api/v1/admin/notices?limit=100`: 관리자 공지사항 목록
+- `GET /api/v1/admin/notices/{noticeId}`: 관리자 공지사항 상세
+- `POST /api/v1/admin/notices`: 공지사항 생성
+- `PUT /api/v1/admin/notices/{noticeId}`: 공지사항 수정
+- `DELETE /api/v1/admin/notices/{noticeId}`: 공지사항 삭제
+
+관리자 계정은 일반 사용자 기능을 사용할 수 없도록 프론트 라우트에서 관리자 화면으로 분리하고, 백엔드는 관리자 토큰을 `ADMIN`/`ROLE_ADMIN` 권한으로 검증합니다.
 
 ## 프로필 OCR 게이트웨이 API
 
