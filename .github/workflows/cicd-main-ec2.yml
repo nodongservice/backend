@@ -140,7 +140,7 @@ jobs:
               "  discord:",
               f"    spring-bot-webhook-url: {q(val('SPRING_BOT_DISCORD_WEBHOOK_URL'))}",
               "  health-monitor:",
-              "    fastapi-health-url: 'http://host.docker.internal:19000/health,http://host.docker.internal:19001/health'",
+              "    fastapi-health-url: 'http://host.docker.internal/api/py/health'",
               "  recommend:",
               "    fastapi-base-url: 'http://host.docker.internal/api/py'",
               "  profile-ocr:",
