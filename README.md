@@ -116,9 +116,9 @@
 
 - 새 AI 계산은 `PROCESSING` task를 만들고 `requestId`를 반환합니다.
 - 같은 사용자/요청 키의 계산이 완료되어 있으면 `COMPLETED`, `cached=true`, `result`를 즉시 반환합니다.
-- 첫 페이지 요청 시 같은 조건으로 이전에 더 불러온 연속 페이지 캐시가 있으면 최대 100개까지 합쳐 `cached=true`로 즉시 반환합니다.
+- 첫 페이지 요청 시 같은 조건으로 이전에 더 불러온 연속 페이지 캐시가 있으면 최대 1000개까지 합쳐 `cached=true`로 즉시 반환합니다.
 - 계산 중인 task는 `/tasks/{requestId}`에서 상태를 조회합니다.
-- AI ON의 20개 배치 계산은 내부적으로 1개 단위 FastAPI 요청을 순차 실행하고, 각 항목 완료 시 `PROCESSING` envelope의 `result`에 누적 부분 결과를 저장합니다.
+- AI ON의 100개 배치 계산은 내부적으로 1개 단위 FastAPI 요청을 순차 실행하고, 각 항목 완료 시 `PROCESSING` envelope의 `result`에 누적 부분 결과를 저장합니다.
 - 프론트는 `PROCESSING` 부분 결과를 polling마다 반영하고, 완료 후 같은 결과를 캐시해 불필요한 재계산을 줄입니다.
 
 ### 공고 후보 기준

@@ -17,8 +17,8 @@ public record RecommendRequestDto(
         )
         Long profileId,
         @Schema(
-                description = "추천 후보 조회 개수. 미지정 시 20개, 최대 100개까지 허용한다.",
-                example = "20",
+                description = "추천 후보 조회 개수. 미지정 시 100개, 최대 100개까지 허용한다.",
+                example = "100",
                 requiredMode = Schema.RequiredMode.NOT_REQUIRED
         )
         Integer limit,
