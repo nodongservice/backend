@@ -36,6 +36,7 @@ public class RecommendAsyncTaskService {
     private static final int DEFAULT_PAGE_LIMIT = 100;
     private static final int MAX_PAGE_LIMIT = 100;
     private static final int MAX_RECOMMENDATION_RESULTS = 1000;
+    private static final String TASK_SCHEMA_VERSION = "v2-odsay-transit-time";
     private static final String TASK_KEY_PREFIX = "recommend:task:";
     private static final String TASK_LOCK_KEY_PREFIX = "recommend:task:lock:";
 
@@ -326,6 +327,7 @@ public class RecommendAsyncTaskService {
 
     private String buildRequestId(String requestType, Long userId, RecommendationKeyContext keyContext) {
         String signature = String.join("|",
+                TASK_SCHEMA_VERSION,
                 requestType,
                 String.valueOf(userId),
                 keyContext.aiEnabled() ? "ai" : "basic",
