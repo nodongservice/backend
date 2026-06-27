@@ -36,7 +36,7 @@ public class RecommendAsyncTaskService {
     private static final int DEFAULT_PAGE_LIMIT = 100;
     private static final int MAX_PAGE_LIMIT = 100;
     private static final int MAX_RECOMMENDATION_RESULTS = 1000;
-    private static final String TASK_SCHEMA_VERSION = "v2-odsay-transit-time";
+    private static final String TASK_SCHEMA_VERSION = "v3-odsay-transit-time-enabled";
     private static final String TASK_KEY_PREFIX = "recommend:task:";
     private static final String TASK_LOCK_KEY_PREFIX = "recommend:task:lock:";
 
