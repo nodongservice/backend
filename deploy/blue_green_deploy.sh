@@ -47,6 +47,9 @@ REDIS_CONTAINER_NAME="${REDIS_CONTAINER_NAME:-bridgework-redis}"
 REDIS_IMAGE="${REDIS_IMAGE:-redis:7.2-alpine}"
 REDIS_VOLUME="${REDIS_VOLUME:-bridgework-redis-data}"
 REDIS_PASSWORD="${REDIS_PASSWORD:-}"
+FASTAPI_ACTIVE_SLOT_FILE="${FASTAPI_ACTIVE_SLOT_FILE:-$HOME/bridgework/aiserver/state/fastapi_active_slot}"
+FASTAPI_BLUE_PORT="${FASTAPI_BLUE_PORT:-19000}"
+FASTAPI_GREEN_PORT="${FASTAPI_GREEN_PORT:-19001}"
 
 BLUE_PORT="${BLUE_PORT:-18080}"
 GREEN_PORT="${GREEN_PORT:-18081}"
@@ -96,6 +99,27 @@ if ! docker volume inspect "$REDIS_VOLUME" >/dev/null 2>&1; then
   log "Redis 볼륨 생성: $REDIS_VOLUME"
   docker volume create "$REDIS_VOLUME" >/dev/null
 fi
+
+resolve_fastapi_active_port() {
+  local slot=""
+  if [[ -f "$FASTAPI_ACTIVE_SLOT_FILE" ]]; then
+    slot="$(tr -d '[:space:]' < "$FASTAPI_ACTIVE_SLOT_FILE")"
+  fi
+
+  case "$slot" in
+    green)
+      echo "$FASTAPI_GREEN_PORT"
+      ;;
+    blue | *)
+      echo "$FASTAPI_BLUE_PORT"
+      ;;
+  esac
+}
+
+FASTAPI_ACTIVE_PORT="$(resolve_fastapi_active_port)"
+FASTAPI_BASE_URL="${FASTAPI_BASE_URL:-http://host.docker.internal:${FASTAPI_ACTIVE_PORT}}"
+FASTAPI_HEALTH_URL="${FASTAPI_HEALTH_URL:-http://host.docker.internal:${FASTAPI_BLUE_PORT}/health,http://host.docker.internal:${FASTAPI_GREEN_PORT}/health}"
+log "FastAPI 내부 호출 경로: base=$FASTAPI_BASE_URL health=$FASTAPI_HEALTH_URL"
 
 # Redis 보안 설정(requirepass) 일관성을 위해 배포 시마다 재생성한다.
 if docker ps -a --format '{{.Names}}' | grep -q "^${REDIS_CONTAINER_NAME}$"; then
@@ -250,6 +274,9 @@ docker run -d \
   -e SPRING_CONFIG_ADDITIONAL_LOCATION="optional:file:/app/config/" \
   -e SERVER_PORT="$CONTAINER_PORT" \
   -e TZ="${TZ:-UTC}" \
+  -e BRIDGEWORK_FASTAPI_HEALTH_URL="$FASTAPI_HEALTH_URL" \
+  -e BRIDGEWORK_RECOMMEND_FASTAPI_BASE_URL="$FASTAPI_BASE_URL" \
+  -e BRIDGEWORK_PROFILE_OCR_FASTAPI_BASE_URL="$FASTAPI_BASE_URL" \
   -p "${TARGET_PORT}:${CONTAINER_PORT}" \
   "$IMAGE_URI" >/dev/null
 
