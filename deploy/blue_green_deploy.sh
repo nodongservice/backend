@@ -36,11 +36,55 @@ is_container_running() {
   docker ps --format '{{.Names}}' | grep -q "^${container_name}$"
 }
 
+release_deploy_lock() {
+  if [[ -n "${DEPLOY_LOCK_DIR:-}" && -d "$DEPLOY_LOCK_DIR" && -f "$DEPLOY_LOCK_DIR/pid" ]]; then
+    if [[ "$(cat "$DEPLOY_LOCK_DIR/pid" 2>/dev/null || true)" == "$$" ]]; then
+      rm -rf "$DEPLOY_LOCK_DIR"
+    fi
+  fi
+}
+
+acquire_deploy_lock() {
+  local lock_dir="$1"
+  local timeout_seconds="$2"
+  local interval_seconds=2
+  local waited=0
+
+  while true; do
+    if mkdir "$lock_dir" 2>/dev/null; then
+      echo "$$" > "$lock_dir/pid"
+      trap release_deploy_lock EXIT
+      log "배포 잠금 획득: $lock_dir"
+      return 0
+    fi
+
+    # 비정상 종료로 남은 잠금은 소유 프로세스가 없을 때만 제거한다.
+    local owner_pid=""
+    owner_pid="$(cat "$lock_dir/pid" 2>/dev/null || true)"
+    if [[ -n "$owner_pid" ]] && ! kill -0 "$owner_pid" 2>/dev/null; then
+      log "만료된 배포 잠금 정리: $lock_dir pid=$owner_pid"
+      rm -rf "$lock_dir"
+      continue
+    fi
+
+    if (( waited >= timeout_seconds )); then
+      log "다른 배포가 진행 중이라 대기 시간이 초과되었습니다: $lock_dir"
+      return 1
+    fi
+
+    log "다른 배포가 진행 중입니다. 대기: ${waited}s/${timeout_seconds}s"
+    sleep "$interval_seconds"
+    waited=$((waited + interval_seconds))
+  done
+}
+
 APP_NAME="${APP_NAME:-bridgework-backend}"
 APP_ROOT="${APP_ROOT:-$HOME/bridgework/backend}"
 CONFIG_FILE="${CONFIG_FILE:-$APP_ROOT/application-prod.yml}"
 STATE_DIR="${STATE_DIR:-$APP_ROOT/state}"
 ACTIVE_SLOT_FILE="${ACTIVE_SLOT_FILE:-$STATE_DIR/active_slot}"
+DEPLOY_LOCK_DIR="${DEPLOY_LOCK_DIR:-/tmp/${APP_NAME}.deploy.lock}"
+DEPLOY_LOCK_TIMEOUT_SECONDS="${DEPLOY_LOCK_TIMEOUT_SECONDS:-600}"
 DOCKER_NETWORK="${DOCKER_NETWORK:-bridgework-network}"
 UPSTREAM_SWITCH_SCRIPT="${UPSTREAM_SWITCH_SCRIPT:-$HOME/bridgework-infra/deploy/spring_blue_green_switch.sh}"
 REDIS_CONTAINER_NAME="${REDIS_CONTAINER_NAME:-bridgework-redis}"
@@ -73,6 +117,10 @@ fi
 
 require_command docker
 require_command curl
+
+if ! acquire_deploy_lock "$DEPLOY_LOCK_DIR" "$DEPLOY_LOCK_TIMEOUT_SECONDS"; then
+  exit 1
+fi
 
 if [[ ! -f "$CONFIG_FILE" ]]; then
   log "외부 설정 파일이 없습니다: $CONFIG_FILE"
