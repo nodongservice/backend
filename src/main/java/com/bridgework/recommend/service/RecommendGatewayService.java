@@ -16,9 +16,9 @@ import org.springframework.stereotype.Service;
 @Service
 public class RecommendGatewayService {
 
-    private static final int DEFAULT_PAGE_LIMIT = 20;
+    private static final int DEFAULT_PAGE_LIMIT = 100;
     private static final int MAX_PAGE_LIMIT = 100;
-    private static final int MAX_PAGE_OFFSET = 100;
+    private static final int MAX_PAGE_OFFSET = 1000;
 
     private final UserProfileService userProfileService;
     private final RecommendJobQueryService recommendJobQueryService;

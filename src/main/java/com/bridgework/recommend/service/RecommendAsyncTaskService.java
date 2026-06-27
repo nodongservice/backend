@@ -33,6 +33,9 @@ public class RecommendAsyncTaskService {
 
     private static final ZoneId SEOUL_ZONE = ZoneId.of("Asia/Seoul");
     private static final int DAILY_CACHE_BOUNDARY_HOUR = 2;
+    private static final int DEFAULT_PAGE_LIMIT = 100;
+    private static final int MAX_PAGE_LIMIT = 100;
+    private static final int MAX_RECOMMENDATION_RESULTS = 1000;
     private static final String TASK_KEY_PREFIX = "recommend:task:";
     private static final String TASK_LOCK_KEY_PREFIX = "recommend:task:lock:";
 
@@ -255,7 +258,7 @@ public class RecommendAsyncTaskService {
         OffsetDateTime latestUpdatedAt = firstPageEnvelope.updatedAt() == null
                 ? OffsetDateTime.now(ZoneOffset.UTC)
                 : firstPageEnvelope.updatedAt();
-        for (int offset = pageLimit; offset < 100; offset += pageLimit) {
+        for (int offset = pageLimit; offset < MAX_RECOMMENDATION_RESULTS; offset += pageLimit) {
             RecommendationKeyContext pageContext = new RecommendationKeyContext(
                     true,
                     firstPageContext.profileId(),
@@ -278,7 +281,7 @@ public class RecommendAsyncTaskService {
             if (pageEnvelope.updatedAt() != null && pageEnvelope.updatedAt().isAfter(latestUpdatedAt)) {
                 latestUpdatedAt = pageEnvelope.updatedAt();
             }
-            if (pageResults.size() < pageLimit || mergedResults.size() >= 100) {
+            if (pageResults.size() < pageLimit || mergedResults.size() >= MAX_RECOMMENDATION_RESULTS) {
                 break;
             }
         }
@@ -287,7 +290,7 @@ public class RecommendAsyncTaskService {
             return firstPageEnvelope;
         }
 
-        mergedResult.put("results", mergedResults.stream().limit(100).toList());
+        mergedResult.put("results", mergedResults.stream().limit(MAX_RECOMMENDATION_RESULTS).toList());
         return firstPageEnvelope.complete(mergedResult, latestUpdatedAt);
     }
 
@@ -428,11 +431,11 @@ public class RecommendAsyncTaskService {
     }
 
     private int safeLimit(RecommendRequestDto request) {
-        return request == null ? 20 : request.safeLimit(20, 100);
+        return request == null ? DEFAULT_PAGE_LIMIT : request.safeLimit(DEFAULT_PAGE_LIMIT, MAX_PAGE_LIMIT);
     }
 
     private int safeOffset(RecommendRequestDto request) {
-        return request == null ? 0 : request.safeOffset(100);
+        return request == null ? 0 : request.safeOffset(MAX_RECOMMENDATION_RESULTS);
     }
 
     private record RecommendationKeyContext(

@@ -137,7 +137,7 @@ class RecommendGatewayServiceTest {
         );
 
         when(userProfileService.getProfiles(1L)).thenReturn(List.of(defaultProfile));
-        when(fastApiRecommendClient.requestMapScore(defaultProfile, 20, 0)).thenReturn(aiResponse);
+        when(fastApiRecommendClient.requestMapScore(defaultProfile, 100, 0)).thenReturn(aiResponse);
 
         Map<String, Object> response = recommendGatewayService.recommendMap(
                 1L,
