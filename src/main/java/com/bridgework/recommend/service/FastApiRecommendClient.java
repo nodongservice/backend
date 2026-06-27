@@ -201,7 +201,9 @@ public class FastApiRecommendClient {
     private List<String> resolveCandidateUris(String path) {
         LinkedHashSet<String> candidates = new LinkedHashSet<>();
 
-        // 운영에서는 blue/green 슬롯 헬스 경로를 기준으로 직접 호출 경로를 우선 구성한다.
+        candidates.add(joinBaseUrlAndPath(recommendProperties.getFastapiBaseUrl(), path));
+
+        // 장애 시에만 헬스 모니터 경로 기반 후보를 보조로 사용한다.
         for (String healthUrl : healthMonitorProperties.getFastapiHealthUrls()) {
             String baseUrl = toBaseUrlFromHealthUrl(healthUrl);
             if (!StringUtils.hasText(baseUrl)) {
@@ -210,7 +212,6 @@ public class FastApiRecommendClient {
             candidates.add(joinBaseUrlAndPath(baseUrl, path));
         }
 
-        candidates.add(joinBaseUrlAndPath(recommendProperties.getFastapiBaseUrl(), path));
         return List.copyOf(candidates);
     }
 
