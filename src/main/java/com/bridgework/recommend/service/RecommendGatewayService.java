@@ -34,10 +34,11 @@ public class RecommendGatewayService {
 
     public Map<String, Object> recommendQuick(Long userId, RecommendRequestDto request) {
         if (request == null || !request.useAi()) {
+            int totalCount = recommendJobQueryService.countLatestRecruitments();
             return buildQuickFallbackResult(recommendJobQueryService.getLatestRecruitments(
                     safeLimit(request),
                     safeOffset(request)
-            ));
+            ), totalCount);
         }
 
         UserProfileResponseDto profile = resolveSelectedProfile(userId, request.profileId());
@@ -57,10 +58,11 @@ public class RecommendGatewayService {
 
     public Map<String, Object> recommendMap(Long userId, RecommendRequestDto request) {
         if (request == null || !request.useAi()) {
+            int totalCount = recommendJobQueryService.countLatestRecruitments();
             return buildMapFallbackResult(recommendJobQueryService.getLatestRecruitments(
                     safeLimit(request),
                     safeOffset(request)
-            ));
+            ), totalCount);
         }
 
         UserProfileResponseDto profile = resolveSelectedProfile(userId, request.profileId());
@@ -120,7 +122,7 @@ public class RecommendGatewayService {
         return request == null ? 0 : request.safeOffset(MAX_PAGE_OFFSET);
     }
 
-    private Map<String, Object> buildQuickFallbackResult(List<RecommendJobResponseDto> jobs) {
+    private Map<String, Object> buildQuickFallbackResult(List<RecommendJobResponseDto> jobs, int totalCount) {
         List<Map<String, Object>> results = jobs.stream()
                 .map(job -> {
                     Map<String, Object> item = new LinkedHashMap<>();
@@ -135,10 +137,11 @@ public class RecommendGatewayService {
 
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("results", results);
+        result.put("totalCount", Math.max(0, totalCount));
         return result;
     }
 
-    private Map<String, Object> buildMapFallbackResult(List<RecommendJobResponseDto> jobs) {
+    private Map<String, Object> buildMapFallbackResult(List<RecommendJobResponseDto> jobs, int totalCount) {
         List<Map<String, Object>> results = jobs.stream()
                 .map(job -> {
                     Map<String, Object> item = new LinkedHashMap<>();
@@ -154,6 +157,7 @@ public class RecommendGatewayService {
 
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("results", results);
+        result.put("totalCount", Math.max(0, totalCount));
         return result;
     }
 

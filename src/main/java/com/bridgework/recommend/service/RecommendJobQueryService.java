@@ -12,6 +12,16 @@ import org.springframework.stereotype.Service;
 @Service
 public class RecommendJobQueryService {
 
+    private static final String OPEN_RECRUITMENT_WHERE_SQL = """
+            WHERE (posting_status = 'ACTIVE' OR posting_status IS NULL)
+              AND job_nm IS NOT NULL
+              AND buspla_name IS NOT NULL
+              AND (
+                  LENGTH(REGEXP_REPLACE(COALESCE(term_date, ''), '[^0-9]', '', 'g')) < 8
+                  OR RIGHT(REGEXP_REPLACE(COALESCE(term_date, ''), '[^0-9]', '', 'g'), 8) >= TO_CHAR(CURRENT_DATE, 'YYYYMMDD')
+              )
+            """;
+
     private final NamedParameterJdbcTemplate namedParameterJdbcTemplate;
 
     public RecommendJobQueryService(NamedParameterJdbcTemplate namedParameterJdbcTemplate) {
@@ -47,13 +57,7 @@ public class RecommendJobQueryService {
                        geo_latitude,
                        geo_longitude
                 FROM pd_kepad_recruitment
-                WHERE (posting_status = 'ACTIVE' OR posting_status IS NULL)
-                  AND job_nm IS NOT NULL
-                  AND buspla_name IS NOT NULL
-                  AND (
-                      LENGTH(REGEXP_REPLACE(COALESCE(term_date, ''), '[^0-9]', '', 'g')) < 8
-                      OR RIGHT(REGEXP_REPLACE(COALESCE(term_date, ''), '[^0-9]', '', 'g'), 8) >= TO_CHAR(CURRENT_DATE, 'YYYYMMDD')
-                  )
+                %s
                 ORDER BY CASE
                              WHEN geo_latitude IS NOT NULL AND geo_longitude IS NOT NULL THEN 0
                              ELSE 1
@@ -62,7 +66,7 @@ public class RecommendJobQueryService {
                          updated_at DESC,
                          external_id ASC
                 LIMIT :limit OFFSET :offset
-                """;
+                """.formatted(OPEN_RECRUITMENT_WHERE_SQL);
         try {
             return namedParameterJdbcTemplate.query(
                     sql,
@@ -96,6 +100,25 @@ public class RecommendJobQueryService {
                     "RECOMMEND_QUERY_FAILED",
                     HttpStatus.INTERNAL_SERVER_ERROR,
                     "추천 공고 조회에 실패했습니다. DB 스키마와 동기화 상태를 확인하세요.",
+                    exception
+            );
+        }
+    }
+
+    public int countLatestRecruitments() {
+        String sql = """
+                SELECT COUNT(*)
+                FROM pd_kepad_recruitment
+                %s
+                """.formatted(OPEN_RECRUITMENT_WHERE_SQL);
+        try {
+            Integer count = namedParameterJdbcTemplate.queryForObject(sql, new MapSqlParameterSource(), Integer.class);
+            return count == null ? 0 : count;
+        } catch (DataAccessException exception) {
+            throw new RecommendDomainException(
+                    "RECOMMEND_COUNT_FAILED",
+                    HttpStatus.INTERNAL_SERVER_ERROR,
+                    "추천 공고 총 개수 조회에 실패했습니다. DB 스키마와 동기화 상태를 확인하세요.",
                     exception
             );
         }
