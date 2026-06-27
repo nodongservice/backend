@@ -55,6 +55,7 @@ class RecommendGatewayServiceTest {
                 "무관", "고졸", "무관", "무관", "담당기관", 37.5, 127.0
         );
         when(recommendJobQueryService.getLatestRecruitments(anyInt(), anyInt())).thenReturn(List.of(job));
+        when(recommendJobQueryService.countLatestRecruitments()).thenReturn(137);
 
         Map<String, Object> response = recommendGatewayService.recommendQuick(
                 1L,
@@ -62,6 +63,7 @@ class RecommendGatewayServiceTest {
         );
 
         assertThat(response).containsKey("results");
+        assertThat(response.get("totalCount")).isEqualTo(137);
         List<?> results = (List<?>) response.get("results");
         assertThat(results).hasSize(1);
 
@@ -84,6 +86,7 @@ class RecommendGatewayServiceTest {
                 "무관", "고졸", "무관", "무관", "담당기관", 37.5, 127.0
         );
         when(recommendJobQueryService.getLatestRecruitments(anyInt(), anyInt())).thenReturn(List.of(job));
+        when(recommendJobQueryService.countLatestRecruitments()).thenReturn(137);
 
         Map<String, Object> response = recommendGatewayService.recommendMap(
                 1L,
@@ -91,6 +94,7 @@ class RecommendGatewayServiceTest {
         );
 
         List<?> results = (List<?>) response.get("results");
+        assertThat(response.get("totalCount")).isEqualTo(137);
         assertThat(results).hasSize(1);
 
         @SuppressWarnings("unchecked")

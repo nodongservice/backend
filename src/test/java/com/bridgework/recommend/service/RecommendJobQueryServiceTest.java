@@ -39,4 +39,26 @@ class RecommendJobQueryServiceTest {
         assertThat(parameterCaptor.getValue().getValue("limit")).isEqualTo(20);
         assertThat(parameterCaptor.getValue().getValue("offset")).isEqualTo(40);
     }
+
+    @Test
+    void countLatestRecruitments_usesSameOpenRecruitmentFilters() {
+        NamedParameterJdbcTemplate jdbcTemplate = org.mockito.Mockito.mock(NamedParameterJdbcTemplate.class);
+        when(jdbcTemplate.queryForObject(any(String.class), any(MapSqlParameterSource.class), org.mockito.ArgumentMatchers.eq(Integer.class)))
+                .thenReturn(137);
+
+        RecommendJobQueryService service = new RecommendJobQueryService(jdbcTemplate);
+
+        int count = service.countLatestRecruitments();
+
+        ArgumentCaptor<String> sqlCaptor = ArgumentCaptor.forClass(String.class);
+        org.mockito.Mockito.verify(jdbcTemplate).queryForObject(sqlCaptor.capture(), any(MapSqlParameterSource.class), org.mockito.ArgumentMatchers.eq(Integer.class));
+
+        String sql = sqlCaptor.getValue();
+        assertThat(count).isEqualTo(137);
+        assertThat(sql).contains("SELECT COUNT(*)");
+        assertThat(sql).contains("posting_status = 'ACTIVE' OR posting_status IS NULL");
+        assertThat(sql).contains("job_nm IS NOT NULL");
+        assertThat(sql).contains("buspla_name IS NOT NULL");
+        assertThat(sql).contains("RIGHT(REGEXP_REPLACE(COALESCE(term_date, ''), '[^0-9]', '', 'g'), 8) >= TO_CHAR(CURRENT_DATE, 'YYYYMMDD')");
+    }
 }
