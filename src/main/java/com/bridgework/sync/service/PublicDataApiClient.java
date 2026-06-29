@@ -2063,7 +2063,22 @@ public class PublicDataApiClient {
         if (sourceConfig.getSourceType() == PublicDataSourceType.SEOUL_WALKING_NETWORK) {
             return buildSeoulWalkingNetworkExternalId(itemNode, payloadHash);
         }
+        if (sourceConfig.getSourceType() == PublicDataSourceType.VOCATIONAL_TRAINING) {
+            return buildVocationalTrainingExternalId(itemNode, payloadHash);
+        }
         return extractExternalId(itemNode, sourceConfig.getItemIdField()).orElse(payloadHash);
+    }
+
+    private String buildVocationalTrainingExternalId(JsonNode itemNode, String payloadHash) {
+        String trainingId = itemNode.path("trprId").asText("").trim();
+        String degree = itemNode.path("trprDegr").asText("").trim();
+        if (!trainingId.isBlank() && !degree.isBlank()) {
+            return "vocational_training:" + trainingId + ":" + degree;
+        }
+        if (!trainingId.isBlank()) {
+            return "vocational_training:" + trainingId;
+        }
+        return payloadHash;
     }
 
     private String buildSeoulWalkingNetworkExternalId(JsonNode itemNode, String payloadHash) {

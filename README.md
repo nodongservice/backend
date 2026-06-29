@@ -327,6 +327,7 @@ FastAPI 후보 조회는 모집 중인 공고와 마감일이 지나지 않은 �
 | `body.items.item.envLstnTalk` | 작업환경_듣고 말하기 |
 | `body.items.item.envStndWalk` | 작업환경_서거나 걷기 |
 | `body.items.item.jobNm` | 모집직종 |
+| `body.items.item.joReqstNo` | 구인신청번호(내부 외부ID 기준) |
 | `body.items.item.offerregDt` | 구인신청일자 |
 | `body.items.item.regDt` | 등록일 |
 | `body.items.item.regagnName` | 담당기관 |
@@ -751,7 +752,7 @@ FastAPI 후보 조회는 모집 중인 공고와 마감일이 지나지 않은 �
 | `TRAINST_CST_ID` | 훈련기관ID |
 | `TRNG_AREA_CD` | 지역코드(중분류) |
 | `TRPR_DEGR` | 훈련과정 순차 |
-| `TRPR_ID` | 훈련과정ID |
+| `TRPR_ID` | 훈련과정ID (`TRPR_DEGR`와 조합해 내부 외부ID 생성) |
 | `WKED_SE` | 주말/주중 구분 |
 | `YARD_MAN` | 정원 |
 
@@ -783,15 +784,19 @@ FastAPI 후보 조회는 모집 중인 공고와 마감일이 지나지 않은 �
 - `public_data_record`: 원본 payload(JSON), 해시, 외부ID, 수집시각 저장
 - `public_data_record_field`: payload를 `field_path` 단위로 펼쳐 저장
 - `pd_*` 정규화 테이블: 데이터셋별 컬럼형 저장(스코어링/지도 조회용)
-- 변경건만 payload/필드 재저장, 동일건은 수집시각만 갱신
-- 각 소스 전체 페이지 수집이 끝난 뒤 API 결과에 없는 기존 데이터는 DB에서 삭제
+- 변경건 또는 재활성화 건만 payload/필드/정규화 테이블을 재저장하고, 이미 ACTIVE 상태인 동일건은 DB 쓰기를 생략
+- 기간성 데이터(`KEPAD_RECRUITMENT.termDate`, `VOCATIONAL_TRAINING.traEndDate`, `JOBSEEKER_COMPETENCY_PROGRAM.pgmEndt`)는 종료일이 지난 API 응답을 신규 저장하지 않음
+- 기간성 데이터의 기존 원본 레코드는 API 결과에 없거나 종료일이 지나면 `sync_status=CLOSED`로 전환
+- `KEPAD_RECRUITMENT` 정규화 데이터는 마감 시 `posting_status=CLOSED`로 전환하고, 다른 기간성 정규화 데이터는 활성 조회 대상에서 제거
+- 기간성이 아닌 소스는 전체 페이지 수집이 끝난 뒤 API 결과에 없는 기존 데이터를 DB에서 삭제
+- `VOCATIONAL_TRAINING` 외부 ID는 같은 과정의 회차를 구분하기 위해 `trprId + trprDegr` 조합으로 생성
 - `KEPAD_RECRUITMENT`, `KEPAD_SUPPORT_AGENCY`는 네이버 지오코딩으로 `geo_latitude`, `geo_longitude`, `geo_matched_address`를 함께 저장
 
 ### 공공데이터 DB 스키마(테이블/컬럼)
 
 #### 원본/운영 테이블
 - `public_data_record`
-  - `id`, `source_type`, `external_id`, `payload_json`, `payload_hash`, `raw_fetched_at`, `created_at`, `updated_at`
+  - `id`, `source_type`, `external_id`, `payload_json`, `payload_hash`, `raw_fetched_at`, `sync_status`, `closed_at`, `status_updated_at`, `created_at`, `updated_at`
 - `public_data_record_field`
   - `id`, `record_id`, `field_path`, `field_value`, `value_type`, `created_at`, `updated_at`
 - `public_data_sync_log`

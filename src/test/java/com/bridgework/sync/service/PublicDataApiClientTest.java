@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.bridgework.sync.config.BridgeWorkSyncProperties;
+import com.bridgework.sync.dto.PublicDataApiItemDto;
 import com.bridgework.sync.dto.PublicDataApiPageResponseDto;
 import com.bridgework.sync.entity.PublicDataSourceType;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -271,6 +272,50 @@ class PublicDataApiClientTest {
         PublicDataApiPageResponseDto response = publicDataApiClient.fetchPage(sourceConfig, 1);
         assertThat(response.items()).hasSize(1);
         assertThat(response.items().get(0).externalId()).startsWith("seoul_walking_network:GEOM:");
+    }
+
+    @Test
+    void fetchPage_whenVocationalTrainingHasSameCourseIdWithDifferentDegree_thenUsesCompositeExternalId() {
+        mockWebServer.enqueue(new MockResponse()
+                .setHeader("Content-Type", "application/xml")
+                .setBody("""
+                        <HRDNet>
+                          <scn_cnt>2</scn_cnt>
+                          <srchList>
+                            <scn_list>
+                              <trprId>AIG202600001</trprId>
+                              <trprDegr>1</trprDegr>
+                              <traEndDate>29991231</traEndDate>
+                            </scn_list>
+                            <scn_list>
+                              <trprId>AIG202600001</trprId>
+                              <trprDegr>2</trprDegr>
+                              <traEndDate>29991231</traEndDate>
+                            </scn_list>
+                          </srchList>
+                        </HRDNet>
+                        """));
+
+        BridgeWorkSyncProperties.SourceConfig sourceConfig = new BridgeWorkSyncProperties.SourceConfig();
+        sourceConfig.setEnabled(true);
+        sourceConfig.setSourceType(PublicDataSourceType.VOCATIONAL_TRAINING);
+        sourceConfig.setBaseUrl(mockWebServer.url("/work24").toString());
+        sourceConfig.setServiceKey("test-key");
+        sourceConfig.setPageSize(100);
+        sourceConfig.setMaxPages(1);
+        sourceConfig.setItemIdField("trprId");
+        sourceConfig.setItemsJsonPointer("/HRDNet/srchList/scn_list");
+        sourceConfig.setTotalCountJsonPointer("/HRDNet/scn_cnt");
+
+        PublicDataApiPageResponseDto response = publicDataApiClient.fetchPage(sourceConfig, 1);
+
+        assertThat(response.items()).hasSize(2);
+        assertThat(response.items())
+                .extracting(PublicDataApiItemDto::externalId)
+                .containsExactly(
+                        "vocational_training:AIG202600001:1",
+                        "vocational_training:AIG202600001:2"
+                );
     }
 
     @Test

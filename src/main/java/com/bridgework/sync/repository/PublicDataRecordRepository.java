@@ -21,6 +21,12 @@ public interface PublicDataRecordRepository extends JpaRepository<PublicDataReco
         String getExternalId();
     }
 
+    interface RecordStateView {
+        String getExternalId();
+        String getPayloadHash();
+        RecordSyncStatus getSyncStatus();
+    }
+
     Optional<PublicDataRecord> findBySourceTypeAndExternalId(PublicDataSourceType sourceType, String externalId);
 
     Page<PublicDataRecord> findBySourceTypeOrderByUpdatedAtDesc(PublicDataSourceType sourceType, Pageable pageable);
@@ -29,6 +35,15 @@ public interface PublicDataRecordRepository extends JpaRepository<PublicDataReco
 
     @Query("SELECT r.id AS id, r.externalId AS externalId FROM PublicDataRecord r WHERE r.sourceType = :sourceType")
     List<RecordIdentityView> findRecordIdentityBySourceType(@Param("sourceType") PublicDataSourceType sourceType);
+
+    @Query("""
+            SELECT r.externalId AS externalId,
+                   r.payloadHash AS payloadHash,
+                   r.syncStatus AS syncStatus
+            FROM PublicDataRecord r
+            WHERE r.sourceType = :sourceType
+            """)
+    List<RecordStateView> findRecordStateBySourceType(@Param("sourceType") PublicDataSourceType sourceType);
 
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Transactional
