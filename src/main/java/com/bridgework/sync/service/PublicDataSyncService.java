@@ -24,18 +24,26 @@ import com.bridgework.sync.repository.PublicDataRecordRepository;
 import com.bridgework.sync.repository.PublicDataSourceSnapshotRepository;
 import com.bridgework.sync.repository.PublicDataSyncLogRepository;
 import com.bridgework.sync.normalized.PublicDataNormalizedStoreService;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.PostConstruct;
 import java.time.Duration;
+import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -47,6 +55,9 @@ public class PublicDataSyncService {
     private static final Logger log = LoggerFactory.getLogger(PublicDataSyncService.class);
     private static final int DELETE_BATCH_SIZE = 500;
     private static final ZoneId SEOUL_ZONE_ID = ZoneId.of("Asia/Seoul");
+    private static final DateTimeFormatter YYYYMMDD_FORMATTER = DateTimeFormatter.BASIC_ISO_DATE;
+    private static final Pattern COMPACT_DATE_PATTERN = Pattern.compile("(?<!\\d)(20\\d{2})(\\d{2})(\\d{2})(?!\\d)");
+    private static final Pattern SEPARATED_DATE_PATTERN = Pattern.compile("(?<!\\d)(20\\d{2})[.\\-/](\\d{1,2})[.\\-/](\\d{1,2})(?!\\d)");
 
     private final BridgeWorkSyncProperties syncProperties;
     private final PublicDataApiClient publicDataApiClient;
@@ -56,6 +67,7 @@ public class PublicDataSyncService {
     private final PublicDataSourceSnapshotRepository publicDataSourceSnapshotRepository;
     private final PublicDataNormalizedStoreService publicDataNormalizedStoreService;
     private final DiscordNotifierService discordNotifierService;
+    private final ObjectMapper objectMapper;
 
     public PublicDataSyncService(BridgeWorkSyncProperties syncProperties,
                                  PublicDataApiClient publicDataApiClient,
@@ -64,7 +76,8 @@ public class PublicDataSyncService {
                                  PublicDataSyncLogRepository publicDataSyncLogRepository,
                                  PublicDataSourceSnapshotRepository publicDataSourceSnapshotRepository,
                                  PublicDataNormalizedStoreService publicDataNormalizedStoreService,
-                                 DiscordNotifierService discordNotifierService) {
+                                 DiscordNotifierService discordNotifierService,
+                                 ObjectMapper objectMapper) {
         this.syncProperties = syncProperties;
         this.publicDataApiClient = publicDataApiClient;
         this.publicDataRecordRepository = publicDataRecordRepository;
@@ -73,6 +86,7 @@ public class PublicDataSyncService {
         this.publicDataSourceSnapshotRepository = publicDataSourceSnapshotRepository;
         this.publicDataNormalizedStoreService = publicDataNormalizedStoreService;
         this.discordNotifierService = discordNotifierService;
+        this.objectMapper = objectMapper;
     }
 
     @PostConstruct
@@ -243,6 +257,7 @@ public class PublicDataSyncService {
         SyncStatus syncStatus = SyncStatus.SUCCESS;
         String message = "동기화 완료";
         Set<String> fetchedExternalIds = new HashSet<>();
+        Set<String> seenExternalIds = new HashSet<>();
         Map<String, Integer> failureReasonCounts = new LinkedHashMap<>();
         SourceLatestRevisionDto latestRevisionDto = null;
 
@@ -255,6 +270,8 @@ public class PublicDataSyncService {
                 return new SourceSyncResultDto(sourceType, syncStatus, 0, 0, 0, 0, message);
             }
 
+            Map<String, ExistingRecordState> existingRecords = indexExistingRecords(sourceType);
+
             for (int pageNo = 1; pageNo <= sourceConfig.getMaxPages(); pageNo++) {
                 PublicDataApiPageResponseDto pageResponse = publicDataApiClient.fetchPage(sourceConfig, pageNo);
 
@@ -264,18 +281,20 @@ public class PublicDataSyncService {
 
                 for (PublicDataApiItemDto item : pageResponse.items()) {
                     // 동일 호출 내 중복 응답은 마지막 상태와 무관하게 1건으로 처리한다.
-                    if (!fetchedExternalIds.add(item.externalId())) {
+                    if (!seenExternalIds.add(item.externalId())) {
+                        continue;
+                    }
+                    if (isExpiredItem(sourceType, item)) {
                         continue;
                     }
 
+                    fetchedExternalIds.add(item.externalId());
                     processedCount++;
                     try {
                         OffsetDateTime fetchedAt = OffsetDateTime.now();
-                        UpsertResult upsertResult = upsertRecord(sourceType, item);
-                        // 변경건만 정규화 재계산하고, 미변경건은 수집시각만 갱신한다.
-                        if (upsertResult == UpsertResult.UNCHANGED) {
-                            publicDataNormalizedStoreService.touch(sourceType, item.externalId(), fetchedAt);
-                        } else {
+                        UpsertResult upsertResult = upsertRecord(sourceType, item, existingRecords);
+                        // 변경 또는 재활성화 건만 정규화 테이블에 반영한다.
+                        if (upsertResult != UpsertResult.UNCHANGED) {
                             publicDataNormalizedStoreService.upsert(sourceType, item, fetchedAt);
                         }
                         if (upsertResult == UpsertResult.INSERTED) {
@@ -304,16 +323,15 @@ public class PublicDataSyncService {
             }
 
             if (failedCount == 0) {
-                if (sourceType == PublicDataSourceType.KEPAD_RECRUITMENT) {
+                if (shouldCloseMissingRecords(sourceType)) {
                     OffsetDateTime statusChangedAt = OffsetDateTime.now();
                     int rawClosedCount = closeMissingRecords(sourceType, fetchedExternalIds, statusChangedAt);
-                    int normalizedClosedCount = publicDataNormalizedStoreService.closeMissingRecruitments(
-                            fetchedExternalIds,
-                            statusChangedAt
-                    );
+                    int normalizedClosedCount = sourceType == PublicDataSourceType.KEPAD_RECRUITMENT
+                            ? publicDataNormalizedStoreService.closeMissingRecruitments(fetchedExternalIds, statusChangedAt)
+                            : publicDataNormalizedStoreService.deleteMissing(sourceType, fetchedExternalIds);
                     closedCount = Math.max(rawClosedCount, normalizedClosedCount);
                     if (closedCount > 0) {
-                        message = "동기화 완료 (마감 전환 " + closedCount + "건)";
+                        message = "동기화 완료 (만료/마감 전환 " + closedCount + "건)";
                     }
                 } else {
                     deletedCount = removeDeletedRecords(sourceType, fetchedExternalIds);
@@ -396,6 +414,19 @@ public class PublicDataSyncService {
                 .orElse(false);
     }
 
+    private Map<String, ExistingRecordState> indexExistingRecords(PublicDataSourceType sourceType) {
+        List<PublicDataRecordRepository.RecordStateView> states =
+                publicDataRecordRepository.findRecordStateBySourceType(sourceType);
+        Map<String, ExistingRecordState> indexedStates = new HashMap<>(Math.max(16, states.size() * 2));
+        for (PublicDataRecordRepository.RecordStateView state : states) {
+            indexedStates.put(
+                    state.getExternalId(),
+                    new ExistingRecordState(state.getPayloadHash(), state.getSyncStatus())
+            );
+        }
+        return indexedStates;
+    }
+
     private void upsertSourceSnapshot(PublicDataSourceType sourceType, SourceLatestRevisionDto latestRevisionDto) {
         PublicDataSourceSnapshot snapshot = publicDataSourceSnapshotRepository.findById(sourceType)
                 .orElseGet(() -> {
@@ -453,7 +484,16 @@ public class PublicDataSyncService {
         );
     }
 
-    private UpsertResult upsertRecord(PublicDataSourceType sourceType, PublicDataApiItemDto item) {
+    private UpsertResult upsertRecord(PublicDataSourceType sourceType,
+                                      PublicDataApiItemDto item,
+                                      Map<String, ExistingRecordState> existingRecords) {
+        ExistingRecordState existingState = existingRecords.get(item.externalId());
+        if (existingState != null
+                && existingState.syncStatus() == RecordSyncStatus.ACTIVE
+                && Objects.equals(existingState.payloadHash(), item.payloadHash())) {
+            return UpsertResult.UNCHANGED;
+        }
+
         Optional<PublicDataRecord> existingRecord = publicDataRecordRepository
                 .findBySourceTypeAndExternalId(sourceType, item.externalId());
 
@@ -471,26 +511,108 @@ public class PublicDataSyncService {
             record.setStatusUpdatedAt(now);
             PublicDataRecord savedRecord = publicDataRecordRepository.save(record);
             publicDataRecordFieldService.replaceFields(savedRecord);
+            existingRecords.put(item.externalId(), new ExistingRecordState(item.payloadHash(), RecordSyncStatus.ACTIVE));
             return UpsertResult.INSERTED;
         }
 
         PublicDataRecord record = existingRecord.get();
         record.setRawFetchedAt(now);
+        boolean wasClosed = record.getSyncStatus() != RecordSyncStatus.ACTIVE;
         record.setSyncStatus(RecordSyncStatus.ACTIVE);
         record.setClosedAt(null);
-        record.setStatusUpdatedAt(now);
+        if (wasClosed) {
+            record.setStatusUpdatedAt(now);
+        }
 
         // 동일 키 데이터는 해시를 비교해 변경 건만 업데이트한다.
-        if (!record.getPayloadHash().equals(item.payloadHash())) {
+        if (!Objects.equals(record.getPayloadHash(), item.payloadHash())) {
             record.setPayloadJson(item.payloadJson());
             record.setPayloadHash(item.payloadHash());
             PublicDataRecord savedRecord = publicDataRecordRepository.save(record);
             publicDataRecordFieldService.replaceFields(savedRecord);
+            existingRecords.put(item.externalId(), new ExistingRecordState(item.payloadHash(), RecordSyncStatus.ACTIVE));
             return UpsertResult.UPDATED;
         }
 
         publicDataRecordRepository.save(record);
-        return UpsertResult.UNCHANGED;
+        existingRecords.put(item.externalId(), new ExistingRecordState(item.payloadHash(), RecordSyncStatus.ACTIVE));
+        return wasClosed ? UpsertResult.UPDATED : UpsertResult.UNCHANGED;
+    }
+
+    private boolean shouldCloseMissingRecords(PublicDataSourceType sourceType) {
+        return sourceType == PublicDataSourceType.KEPAD_RECRUITMENT
+                || sourceType == PublicDataSourceType.VOCATIONAL_TRAINING
+                || sourceType == PublicDataSourceType.JOBSEEKER_COMPETENCY_PROGRAM;
+    }
+
+    private boolean isExpiredItem(PublicDataSourceType sourceType, PublicDataApiItemDto item) {
+        return resolveItemEndDate(sourceType, item)
+                .map(endDate -> endDate.isBefore(LocalDate.now(SEOUL_ZONE_ID)))
+                .orElse(false);
+    }
+
+    private Optional<LocalDate> resolveItemEndDate(PublicDataSourceType sourceType, PublicDataApiItemDto item) {
+        String endDateField = switch (sourceType) {
+            case KEPAD_RECRUITMENT -> "termDate";
+            case VOCATIONAL_TRAINING -> "traEndDate";
+            case JOBSEEKER_COMPETENCY_PROGRAM -> "pgmEndt";
+            default -> null;
+        };
+        if (endDateField == null) {
+            return Optional.empty();
+        }
+
+        try {
+            JsonNode payloadNode = objectMapper.readTree(item.payloadJson());
+            String rawDateText = payloadNode.path(endDateField).asText("");
+            return extractLastDate(rawDateText);
+        } catch (Exception exception) {
+            log.warn("만료일 해석 실패 source={} externalId={} reason={}",
+                    sourceType,
+                    item.externalId(),
+                    exception.getMessage());
+            return Optional.empty();
+        }
+    }
+
+    private Optional<LocalDate> extractLastDate(String rawText) {
+        if (rawText == null || rawText.isBlank()) {
+            return Optional.empty();
+        }
+
+        List<DateCandidate> dates = new ArrayList<>();
+        collectDateMatches(rawText, COMPACT_DATE_PATTERN, dates);
+        collectDateMatches(rawText, SEPARATED_DATE_PATTERN, dates);
+        if (dates.isEmpty()) {
+            return Optional.empty();
+        }
+        dates.sort((left, right) -> Integer.compare(left.startIndex(), right.startIndex()));
+        return Optional.of(dates.get(dates.size() - 1).date());
+    }
+
+    private void collectDateMatches(String rawText, Pattern pattern, List<DateCandidate> dates) {
+        Matcher matcher = pattern.matcher(rawText);
+        while (matcher.find()) {
+            try {
+                if (pattern == COMPACT_DATE_PATTERN) {
+                    dates.add(new DateCandidate(
+                            matcher.start(),
+                            LocalDate.parse(matcher.group(1) + matcher.group(2) + matcher.group(3), YYYYMMDD_FORMATTER)
+                    ));
+                } else {
+                    dates.add(new DateCandidate(
+                            matcher.start(),
+                            LocalDate.of(
+                                    Integer.parseInt(matcher.group(1)),
+                                    Integer.parseInt(matcher.group(2)),
+                                    Integer.parseInt(matcher.group(3))
+                            )
+                    ));
+                }
+            } catch (RuntimeException exception) {
+                // 잘못된 날짜 토큰은 무시한다.
+            }
+        }
     }
 
     private PublicDataSyncLog createSyncLog(PublicDataSourceType sourceType, SyncRequestSource requestSource) {
@@ -560,5 +682,11 @@ public class PublicDataSyncService {
         INSERTED,
         UPDATED,
         UNCHANGED
+    }
+
+    private record ExistingRecordState(String payloadHash, RecordSyncStatus syncStatus) {
+    }
+
+    private record DateCandidate(int startIndex, LocalDate date) {
     }
 }
