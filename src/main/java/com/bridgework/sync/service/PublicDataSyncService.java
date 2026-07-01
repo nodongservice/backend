@@ -476,12 +476,31 @@ public class PublicDataSyncService {
             );
         }
 
-        return publicDataRecordRepository.markMissingAsStatusBySourceType(
-                sourceType,
-                fetchedExternalIds,
-                RecordSyncStatus.CLOSED,
-                statusChangedAt
-        );
+        List<PublicDataRecordRepository.RecordIdentityView> existingRecords =
+                publicDataRecordRepository.findRecordIdentityBySourceType(sourceType);
+        List<Long> idsToClose = new ArrayList<>();
+
+        for (PublicDataRecordRepository.RecordIdentityView existingRecord : existingRecords) {
+            if (!fetchedExternalIds.contains(existingRecord.getExternalId())) {
+                idsToClose.add(existingRecord.getId());
+            }
+        }
+
+        if (idsToClose.isEmpty()) {
+            return 0;
+        }
+
+        int closedCount = 0;
+        for (int start = 0; start < idsToClose.size(); start += DELETE_BATCH_SIZE) {
+            int end = Math.min(start + DELETE_BATCH_SIZE, idsToClose.size());
+            List<Long> chunk = idsToClose.subList(start, end);
+            closedCount += publicDataRecordRepository.markAllByIdInAsStatusNative(
+                    chunk,
+                    RecordSyncStatus.CLOSED.name(),
+                    statusChangedAt
+            );
+        }
+        return closedCount;
     }
 
     private UpsertResult upsertRecord(PublicDataSourceType sourceType,

@@ -66,6 +66,20 @@ public interface PublicDataRecordRepository extends JpaRepository<PublicDataReco
 
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Transactional
+    @Query(value = """
+            UPDATE public_data_record
+            SET sync_status = :syncStatus,
+                closed_at = :closedAt,
+                status_updated_at = :closedAt
+            WHERE id IN (:ids)
+              AND sync_status <> :syncStatus
+            """, nativeQuery = true)
+    int markAllByIdInAsStatusNative(@Param("ids") Collection<Long> ids,
+                                    @Param("syncStatus") String syncStatus,
+                                    @Param("closedAt") java.time.OffsetDateTime closedAt);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Transactional
     @Query("""
             UPDATE PublicDataRecord r
             SET r.syncStatus = :syncStatus,
