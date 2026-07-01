@@ -81,14 +81,10 @@ class PublicDataSyncServiceTest {
         when(publicDataApiClient.fetchLatestRevision(any())).thenReturn(Optional.empty());
         when(publicDataRecordRepository.findRecordStateBySourceType(PublicDataSourceType.KEPAD_RECRUITMENT))
                 .thenReturn(List.of(recordState("J-1", "hash-1", RecordSyncStatus.ACTIVE)));
+        when(publicDataRecordRepository.findRecordIdentityBySourceType(PublicDataSourceType.KEPAD_RECRUITMENT))
+                .thenReturn(List.of(recordIdentity(1L, "J-1")));
         when(publicDataApiClient.fetchPage(any(), eq(1)))
                 .thenReturn(new PublicDataApiPageResponseDto(List.of(item), false));
-        when(publicDataRecordRepository.markMissingAsStatusBySourceType(
-                eq(PublicDataSourceType.KEPAD_RECRUITMENT),
-                anySet(),
-                eq(RecordSyncStatus.CLOSED),
-                any(OffsetDateTime.class)
-        )).thenReturn(0);
         when(publicDataNormalizedStoreService.closeMissingRecruitments(anySet(), any(OffsetDateTime.class)))
                 .thenReturn(0);
 
@@ -102,6 +98,8 @@ class PublicDataSyncServiceTest {
         assertThat(response.updatedCount()).isZero();
         verify(publicDataRecordRepository, never()).findBySourceTypeAndExternalId(any(), any());
         verify(publicDataRecordRepository, never()).save(any(PublicDataRecord.class));
+        verify(publicDataRecordRepository, never()).markMissingAsStatusBySourceType(any(), anySet(), any(), any());
+        verify(publicDataRecordRepository, never()).markAllByIdInAsStatusNative(any(), any(), any());
         verify(publicDataRecordFieldService, never()).replaceFields(any());
         verify(publicDataNormalizedStoreService, never()).upsert(any(), any(), any());
         verify(publicDataNormalizedStoreService, never()).touch(any(), any(), any());
@@ -145,6 +143,49 @@ class PublicDataSyncServiceTest {
         );
     }
 
+    @Test
+    void syncSingle_whenExistingRecordMissingFromFetchedIds_thenClosesOnlyMissingRecordIdsInChunks() {
+        PublicDataApiItemDto item = new PublicDataApiItemDto(
+                "J-1",
+                "{\"joReqstNo\":\"J-1\",\"termDate\":\"29991231\"}",
+                "hash-1"
+        );
+        when(publicDataApiClient.fetchLatestRevision(any())).thenReturn(Optional.empty());
+        when(publicDataRecordRepository.findRecordStateBySourceType(PublicDataSourceType.KEPAD_RECRUITMENT))
+                .thenReturn(List.of(
+                        recordState("J-1", "hash-1", RecordSyncStatus.ACTIVE),
+                        recordState("J-MISSING", "hash-old", RecordSyncStatus.ACTIVE)
+                ));
+        when(publicDataRecordRepository.findRecordIdentityBySourceType(PublicDataSourceType.KEPAD_RECRUITMENT))
+                .thenReturn(List.of(
+                        recordIdentity(1L, "J-1"),
+                        recordIdentity(2L, "J-MISSING")
+                ));
+        when(publicDataApiClient.fetchPage(any(), eq(1)))
+                .thenReturn(new PublicDataApiPageResponseDto(List.of(item), false));
+        when(publicDataRecordRepository.markAllByIdInAsStatusNative(
+                eq(List.of(2L)),
+                eq(RecordSyncStatus.CLOSED.name()),
+                any(OffsetDateTime.class)
+        )).thenReturn(1);
+        when(publicDataNormalizedStoreService.closeMissingRecruitments(anySet(), any(OffsetDateTime.class)))
+                .thenReturn(0);
+
+        SyncRunResponseDto response = publicDataSyncService.syncSingle(
+                PublicDataSourceType.KEPAD_RECRUITMENT,
+                SyncRequestSource.MANUAL
+        );
+
+        assertThat(response.processedCount()).isEqualTo(1);
+        assertThat(response.updatedCount()).isZero();
+        verify(publicDataRecordRepository, never()).markMissingAsStatusBySourceType(any(), anySet(), any(), any());
+        verify(publicDataRecordRepository).markAllByIdInAsStatusNative(
+                eq(List.of(2L)),
+                eq(RecordSyncStatus.CLOSED.name()),
+                any(OffsetDateTime.class)
+        );
+    }
+
     private BridgeWorkSyncProperties syncProperties(PublicDataSourceType sourceType) {
         BridgeWorkSyncProperties.SourceConfig sourceConfig = new BridgeWorkSyncProperties.SourceConfig();
         sourceConfig.setEnabled(true);
@@ -179,6 +220,20 @@ class PublicDataSyncServiceTest {
             @Override
             public RecordSyncStatus getSyncStatus() {
                 return syncStatus;
+            }
+        };
+    }
+
+    private PublicDataRecordRepository.RecordIdentityView recordIdentity(Long id, String externalId) {
+        return new PublicDataRecordRepository.RecordIdentityView() {
+            @Override
+            public Long getId() {
+                return id;
+            }
+
+            @Override
+            public String getExternalId() {
+                return externalId;
             }
         };
     }

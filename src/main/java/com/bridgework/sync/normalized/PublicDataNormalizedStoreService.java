@@ -39,6 +39,7 @@ public class PublicDataNormalizedStoreService {
     );
     private static final String RECRUITMENT_STATUS_ACTIVE = "ACTIVE";
     private static final String RECRUITMENT_STATUS_CLOSED = "CLOSED";
+    private static final int STATUS_BATCH_SIZE = 500;
 
     private final NamedParameterJdbcTemplate namedParameterJdbcTemplate;
     private final ObjectMapper objectMapper;
@@ -127,9 +128,8 @@ public class PublicDataNormalizedStoreService {
         }
 
         int deletedCount = 0;
-        int chunkSize = 500;
-        for (int start = 0; start < deleteIds.size(); start += chunkSize) {
-            int end = Math.min(start + chunkSize, deleteIds.size());
+        for (int start = 0; start < deleteIds.size(); start += STATUS_BATCH_SIZE) {
+            int end = Math.min(start + STATUS_BATCH_SIZE, deleteIds.size());
             List<String> chunk = deleteIds.subList(start, end);
             deletedCount += namedParameterJdbcTemplate.update(
                     "DELETE FROM " + definition.tableName() + " WHERE external_id IN (:externalIds)",
@@ -147,27 +147,52 @@ public class PublicDataNormalizedStoreService {
             return 0;
         }
 
-        MapSqlParameterSource params = new MapSqlParameterSource()
-                .addValue("status", RECRUITMENT_STATUS_CLOSED)
-                .addValue("statusChangedAt", statusChangedAt);
-
         if (fetchedExternalIds == null || fetchedExternalIds.isEmpty()) {
             return namedParameterJdbcTemplate.update(
                     "UPDATE " + definition.tableName() + " "
                             + "SET posting_status = :status, closed_at = :statusChangedAt, status_updated_at = :statusChangedAt "
                             + "WHERE posting_status <> :status",
-                    params
+                    new MapSqlParameterSource()
+                            .addValue("status", RECRUITMENT_STATUS_CLOSED)
+                            .addValue("statusChangedAt", statusChangedAt)
             );
         }
 
-        params.addValue("externalIds", fetchedExternalIds);
-        return namedParameterJdbcTemplate.update(
-                "UPDATE " + definition.tableName() + " "
-                        + "SET posting_status = :status, closed_at = :statusChangedAt, status_updated_at = :statusChangedAt "
-                        + "WHERE posting_status <> :status "
-                        + "AND external_id NOT IN (:externalIds)",
-                params
+        List<String> existingIds = namedParameterJdbcTemplate.query(
+                "SELECT external_id FROM " + definition.tableName(),
+                (resultSet, rowNum) -> resultSet.getString("external_id")
         );
+        if (existingIds.isEmpty()) {
+            return 0;
+        }
+
+        List<String> closeIds = new ArrayList<>();
+        for (String existingId : existingIds) {
+            if (!fetchedExternalIds.contains(existingId)) {
+                closeIds.add(existingId);
+            }
+        }
+        if (closeIds.isEmpty()) {
+            return 0;
+        }
+
+        int closedCount = 0;
+        for (int start = 0; start < closeIds.size(); start += STATUS_BATCH_SIZE) {
+            int end = Math.min(start + STATUS_BATCH_SIZE, closeIds.size());
+            List<String> chunk = closeIds.subList(start, end);
+            closedCount += namedParameterJdbcTemplate.update(
+                    "UPDATE " + definition.tableName() + " "
+                            + "SET posting_status = :status, closed_at = :statusChangedAt, status_updated_at = :statusChangedAt "
+                            + "WHERE posting_status <> :status "
+                            + "AND external_id IN (:externalIds)",
+                    new MapSqlParameterSource()
+                            .addValue("status", RECRUITMENT_STATUS_CLOSED)
+                            .addValue("statusChangedAt", statusChangedAt)
+                            .addValue("externalIds", chunk)
+            );
+        }
+
+        return closedCount;
     }
 
     @Transactional(readOnly = true)
