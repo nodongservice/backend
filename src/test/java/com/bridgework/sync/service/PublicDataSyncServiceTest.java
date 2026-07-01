@@ -24,6 +24,7 @@ import com.bridgework.sync.repository.PublicDataSourceSnapshotRepository;
 import com.bridgework.sync.repository.PublicDataSyncLogRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -181,6 +182,55 @@ class PublicDataSyncServiceTest {
         verify(publicDataRecordRepository, never()).markMissingAsStatusBySourceType(any(), anySet(), any(), any());
         verify(publicDataRecordRepository).markAllByIdInAsStatusNative(
                 eq(List.of(2L)),
+                eq(RecordSyncStatus.CLOSED.name()),
+                any(OffsetDateTime.class)
+        );
+    }
+
+    @Test
+    void syncSingle_whenFetchedIdsExceedJdbcParameterLimit_thenStillClosesOnlyMissingIdsByChunk() {
+        int fetchedCount = 100_005;
+        List<PublicDataApiItemDto> fetchedItems = new ArrayList<>(fetchedCount);
+        List<PublicDataRecordRepository.RecordStateView> states = new ArrayList<>(fetchedCount + 1);
+        List<PublicDataRecordRepository.RecordIdentityView> identities = new ArrayList<>(fetchedCount + 1);
+
+        for (int index = 0; index < fetchedCount; index++) {
+            String externalId = "J-" + index;
+            fetchedItems.add(new PublicDataApiItemDto(
+                    externalId,
+                    "{\"joReqstNo\":\"" + externalId + "\",\"termDate\":\"29991231\"}",
+                    "hash-" + index
+            ));
+            states.add(recordState(externalId, "hash-" + index, RecordSyncStatus.ACTIVE));
+            identities.add(recordIdentity((long) index, externalId));
+        }
+        states.add(recordState("J-MISSING", "hash-missing", RecordSyncStatus.ACTIVE));
+        identities.add(recordIdentity(999_999L, "J-MISSING"));
+
+        when(publicDataApiClient.fetchLatestRevision(any())).thenReturn(Optional.empty());
+        when(publicDataRecordRepository.findRecordStateBySourceType(PublicDataSourceType.KEPAD_RECRUITMENT))
+                .thenReturn(states);
+        when(publicDataRecordRepository.findRecordIdentityBySourceType(PublicDataSourceType.KEPAD_RECRUITMENT))
+                .thenReturn(identities);
+        when(publicDataApiClient.fetchPage(any(), eq(1)))
+                .thenReturn(new PublicDataApiPageResponseDto(fetchedItems, false));
+        when(publicDataRecordRepository.markAllByIdInAsStatusNative(
+                eq(List.of(999_999L)),
+                eq(RecordSyncStatus.CLOSED.name()),
+                any(OffsetDateTime.class)
+        )).thenReturn(1);
+        when(publicDataNormalizedStoreService.closeMissingRecruitments(anySet(), any(OffsetDateTime.class)))
+                .thenReturn(0);
+
+        SyncRunResponseDto response = publicDataSyncService.syncSingle(
+                PublicDataSourceType.KEPAD_RECRUITMENT,
+                SyncRequestSource.MANUAL
+        );
+
+        assertThat(response.processedCount()).isEqualTo(fetchedCount);
+        verify(publicDataRecordRepository, never()).markMissingAsStatusBySourceType(any(), anySet(), any(), any());
+        verify(publicDataRecordRepository).markAllByIdInAsStatusNative(
+                eq(List.of(999_999L)),
                 eq(RecordSyncStatus.CLOSED.name()),
                 any(OffsetDateTime.class)
         );
