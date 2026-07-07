@@ -42,4 +42,18 @@ class RecommendAsyncTaskServiceTest {
         assertThat(RecommendAsyncTaskService.useAiOrDefault(new RecommendRequestDto(null, 1L))).isTrue();
         assertThat(RecommendAsyncTaskService.useAiOrDefault(new RecommendRequestDto(false, 1L))).isFalse();
     }
+
+    @Test
+    void safeLimit_whenAiEnabled_thenDoesNotClampToPageSize() {
+        RecommendRequestDto request = new RecommendRequestDto(true, 1L, 154, 0);
+
+        assertThat(RecommendAsyncTaskService.safeLimit(request)).isEqualTo(154);
+    }
+
+    @Test
+    void safeLimit_whenAiDisabled_thenKeepsPageSizeLimit() {
+        RecommendRequestDto request = new RecommendRequestDto(false, null, 154, 0);
+
+        assertThat(RecommendAsyncTaskService.safeLimit(request)).isEqualTo(100);
+    }
 }
