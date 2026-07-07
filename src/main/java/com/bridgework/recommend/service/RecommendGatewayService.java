@@ -42,7 +42,7 @@ public class RecommendGatewayService {
         }
 
         UserProfileResponseDto profile = resolveSelectedProfile(userId, request.profileId());
-        Map<String, Object> aiResponse = fastApiRecommendClient.requestQuickScore(profile, safeLimit(request), safeOffset(request));
+        Map<String, Object> aiResponse = fastApiRecommendClient.requestQuickScore(profile, safeAiLimit(request), safeAiOffset(request));
         return extractResult(aiResponse);
     }
 
@@ -52,7 +52,7 @@ public class RecommendGatewayService {
         }
 
         UserProfileResponseDto profile = resolveSelectedProfile(userId, request.profileId());
-        Map<String, Object> aiResponse = fastApiRecommendClient.requestQuickScore(profile, safeLimit(request), safeOffset(request), true);
+        Map<String, Object> aiResponse = fastApiRecommendClient.requestQuickScore(profile, safeAiLimit(request), safeAiOffset(request), true);
         return extractResult(aiResponse);
     }
 
@@ -66,7 +66,7 @@ public class RecommendGatewayService {
         }
 
         UserProfileResponseDto profile = resolveSelectedProfile(userId, request.profileId());
-        Map<String, Object> aiResponse = fastApiRecommendClient.requestMapScore(profile, safeLimit(request), safeOffset(request));
+        Map<String, Object> aiResponse = fastApiRecommendClient.requestMapScore(profile, safeAiLimit(request), safeAiOffset(request));
         return extractResult(aiResponse);
     }
 
@@ -76,7 +76,7 @@ public class RecommendGatewayService {
         }
 
         UserProfileResponseDto profile = resolveSelectedProfile(userId, request.profileId());
-        Map<String, Object> aiResponse = fastApiRecommendClient.requestMapScore(profile, safeLimit(request), safeOffset(request), true);
+        Map<String, Object> aiResponse = fastApiRecommendClient.requestMapScore(profile, safeAiLimit(request), safeAiOffset(request), true);
         return extractResult(aiResponse);
     }
 
@@ -120,6 +120,18 @@ public class RecommendGatewayService {
 
     private int safeOffset(RecommendRequestDto request) {
         return request == null ? 0 : request.safeOffset(MAX_PAGE_OFFSET);
+    }
+
+    private int safeAiLimit(RecommendRequestDto request) {
+        if (request != null && request.limit() != null) {
+            return Math.max(1, request.limit());
+        }
+        int totalCount = Math.max(1, recommendJobQueryService.countLatestRecruitments());
+        return totalCount;
+    }
+
+    private int safeAiOffset(RecommendRequestDto request) {
+        return request == null ? 0 : request.safeOffset(Integer.MAX_VALUE);
     }
 
     private Map<String, Object> buildQuickFallbackResult(List<RecommendJobResponseDto> jobs, int totalCount) {

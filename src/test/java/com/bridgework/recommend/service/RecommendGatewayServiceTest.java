@@ -141,7 +141,8 @@ class RecommendGatewayServiceTest {
         );
 
         when(userProfileService.getProfiles(1L)).thenReturn(List.of(defaultProfile));
-        when(fastApiRecommendClient.requestMapScore(defaultProfile, 100, 0)).thenReturn(aiResponse);
+        when(recommendJobQueryService.countLatestRecruitments()).thenReturn(227);
+        when(fastApiRecommendClient.requestMapScore(defaultProfile, 227, 0)).thenReturn(aiResponse);
 
         Map<String, Object> response = recommendGatewayService.recommendMap(
                 1L,
@@ -163,7 +164,7 @@ class RecommendGatewayServiceTest {
     }
 
     @Test
-    void recommendQuick_whenAiEnabled_thenPassesPageToFastApi() {
+    void recommendQuick_whenAiEnabled_thenPassesRequestedWindowToFastApi() {
         UserProfileResponseDto selectedProfile = profile(11L, true);
         Map<String, Object> aiResponse = Map.of(
                 "code", "SUCCESS",
@@ -181,6 +182,28 @@ class RecommendGatewayServiceTest {
 
         assertThat(response).isEqualTo(aiResponse.get("result"));
         verify(fastApiRecommendClient).requestQuickScore(eq(selectedProfile), eq(20), eq(40));
+    }
+
+    @Test
+    void recommendMap_whenAiEnabledAndLimitMissing_thenPassesAllActiveJobsToFastApi() {
+        UserProfileResponseDto selectedProfile = profile(11L, true);
+        Map<String, Object> aiResponse = Map.of(
+                "code", "SUCCESS",
+                "message", "요청이 성공했습니다.",
+                "result", Map.of("results", List.of())
+        );
+
+        when(userProfileService.getProfile(1L, 11L)).thenReturn(selectedProfile);
+        when(recommendJobQueryService.countLatestRecruitments()).thenReturn(227);
+        when(fastApiRecommendClient.requestMapScore(selectedProfile, 227, 0)).thenReturn(aiResponse);
+
+        Map<String, Object> response = recommendGatewayService.recommendMap(
+                1L,
+                new RecommendRequestDto(true, 11L)
+        );
+
+        assertThat(response).isEqualTo(aiResponse.get("result"));
+        verify(fastApiRecommendClient).requestMapScore(eq(selectedProfile), eq(227), eq(0));
     }
 
     @Test

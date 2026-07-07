@@ -35,13 +35,14 @@ public class RecommendAsyncTaskService {
     private static final int DAILY_CACHE_BOUNDARY_HOUR = 2;
     private static final int DEFAULT_PAGE_LIMIT = 100;
     private static final int MAX_PAGE_LIMIT = 100;
-    private static final int MAX_RECOMMENDATION_RESULTS = 1000;
-    private static final String TASK_SCHEMA_VERSION = "v6-summary-dedup";
+    private static final int MAX_PAGE_OFFSET = 1000;
+    private static final String TASK_SCHEMA_VERSION = "v7-ai-full-results";
     private static final String TASK_KEY_PREFIX = "recommend:task:";
     private static final String TASK_LOCK_KEY_PREFIX = "recommend:task:lock:";
 
     private final RecommendGatewayService recommendGatewayService;
     private final UserProfileService userProfileService;
+    private final RecommendJobQueryService recommendJobQueryService;
     private final StringRedisTemplate stringRedisTemplate;
     private final ObjectMapper objectMapper;
     private final BridgeWorkRecommendProperties recommendProperties;
@@ -49,12 +50,14 @@ public class RecommendAsyncTaskService {
 
     public RecommendAsyncTaskService(RecommendGatewayService recommendGatewayService,
                                      UserProfileService userProfileService,
+                                     RecommendJobQueryService recommendJobQueryService,
                                      StringRedisTemplate stringRedisTemplate,
                                      ObjectMapper objectMapper,
                                      BridgeWorkRecommendProperties recommendProperties,
                                      @Qualifier("recommendTaskExecutor") Executor recommendTaskExecutor) {
         this.recommendGatewayService = recommendGatewayService;
         this.userProfileService = userProfileService;
+        this.recommendJobQueryService = recommendJobQueryService;
         this.stringRedisTemplate = stringRedisTemplate;
         this.objectMapper = objectMapper;
         this.recommendProperties = recommendProperties;
@@ -89,7 +92,8 @@ public class RecommendAsyncTaskService {
     }
 
     private RecommendAsyncResponseDto requestTask(String requestType, Long userId, RecommendRequestDto request) {
-        RecommendationKeyContext keyContext = buildKeyContext(userId, request);
+        RecommendRequestDto normalizedRequest = normalizeRequest(request);
+        RecommendationKeyContext keyContext = buildKeyContext(userId, normalizedRequest);
         String requestId = buildRequestId(requestType, userId, keyContext);
         String taskKey = taskKey(requestId);
         String lockKey = lockKey(requestId);
@@ -102,14 +106,14 @@ public class RecommendAsyncTaskService {
         if (existingEnvelope != null && existingEnvelope.status() == RecommendTaskStatus.PROCESSING) {
             boolean lockAlive = Boolean.TRUE.equals(stringRedisTemplate.hasKey(lockKey));
             Duration processingAge = Duration.between(existingEnvelope.updatedAt(), OffsetDateTime.now(ZoneOffset.UTC));
-            if (lockAlive || processingAge.compareTo(taskLockTtl(request)) <= 0) {
+            if (lockAlive || processingAge.compareTo(taskLockTtl(normalizedRequest)) <= 0) {
                 return toResponse(existingEnvelope);
             }
         }
 
         Duration cacheTtl = ttlUntilNextCacheBoundary();
         OffsetDateTime expiresAt = OffsetDateTime.now(ZoneOffset.UTC).plus(cacheTtl);
-        Duration lockTtl = taskLockTtl(request);
+        Duration lockTtl = taskLockTtl(normalizedRequest);
 
         Boolean acquired = stringRedisTemplate.opsForValue().setIfAbsent(lockKey, "1", lockTtl);
         if (!Boolean.TRUE.equals(acquired)) {
@@ -139,9 +143,9 @@ public class RecommendAsyncTaskService {
 
         recommendTaskExecutor.execute(() -> {
             try {
-                Map<String, Object> result = shouldStreamPartialResults(request)
-                        ? processTaskWithPartialResults(requestType, userId, request, processingEnvelope, taskKey, cacheTtl)
-                        : requestRecommendation(requestType, userId, request);
+                Map<String, Object> result = shouldStreamPartialResults(normalizedRequest)
+                        ? processTaskWithPartialResults(requestType, userId, normalizedRequest, processingEnvelope, taskKey, cacheTtl)
+                        : requestRecommendation(requestType, userId, normalizedRequest);
 
                 RecommendTaskEnvelope completedEnvelope = processingEnvelope.complete(result, OffsetDateTime.now(ZoneOffset.UTC));
                 writeEnvelope(taskKey, completedEnvelope, cacheTtl);
@@ -183,6 +187,7 @@ public class RecommendAsyncTaskService {
         List<Object> accumulatedResults = new ArrayList<>();
         Map<String, Object> accumulatedResult = new LinkedHashMap<>();
         accumulatedResult.put("results", accumulatedResults);
+        accumulatedResult.put("totalCount", limit);
 
         for (int index = 0; index < limit; index++) {
             RecommendRequestDto singleRequest = new RecommendRequestDto(
@@ -241,58 +246,18 @@ public class RecommendAsyncTaskService {
                                                                 Long userId,
                                                                 RecommendationKeyContext firstPageContext,
                                                                 RecommendTaskEnvelope firstPageEnvelope) {
-        if (!firstPageContext.aiEnabled() || firstPageContext.offset() != 0) {
-            return firstPageEnvelope;
+        return firstPageEnvelope;
+    }
+
+    private RecommendRequestDto normalizeRequest(RecommendRequestDto request) {
+        boolean aiEnabled = useAiOrDefault(request);
+        if (!aiEnabled) {
+            return request;
         }
 
-        int pageLimit = firstPageContext.limit();
-        if (pageLimit <= 0) {
-            return firstPageEnvelope;
-        }
-
-        Map<String, Object> mergedResult = copyResult(firstPageEnvelope.result());
-        List<Object> mergedResults = new ArrayList<>(extractResults(mergedResult));
-        if (mergedResults.isEmpty() || mergedResults.size() < pageLimit) {
-            return firstPageEnvelope;
-        }
-
-        OffsetDateTime latestUpdatedAt = firstPageEnvelope.updatedAt() == null
-                ? OffsetDateTime.now(ZoneOffset.UTC)
-                : firstPageEnvelope.updatedAt();
-        for (int offset = pageLimit; offset < MAX_RECOMMENDATION_RESULTS; offset += pageLimit) {
-            RecommendationKeyContext pageContext = new RecommendationKeyContext(
-                    true,
-                    firstPageContext.profileId(),
-                    firstPageContext.profileUpdatedAt(),
-                    pageLimit,
-                    offset
-            );
-            String pageRequestId = buildRequestId(requestType, userId, pageContext);
-            RecommendTaskEnvelope pageEnvelope = readEnvelope(taskKey(pageRequestId)).orElse(null);
-            if (pageEnvelope == null || pageEnvelope.status() != RecommendTaskStatus.COMPLETED) {
-                break;
-            }
-
-            List<?> pageResults = extractResults(pageEnvelope.result());
-            if (pageResults.isEmpty()) {
-                break;
-            }
-
-            mergedResults.addAll(pageResults);
-            if (pageEnvelope.updatedAt() != null && pageEnvelope.updatedAt().isAfter(latestUpdatedAt)) {
-                latestUpdatedAt = pageEnvelope.updatedAt();
-            }
-            if (pageResults.size() < pageLimit || mergedResults.size() >= MAX_RECOMMENDATION_RESULTS) {
-                break;
-            }
-        }
-
-        if (mergedResults.size() <= extractResults(firstPageEnvelope.result()).size()) {
-            return firstPageEnvelope;
-        }
-
-        mergedResult.put("results", mergedResults.stream().limit(MAX_RECOMMENDATION_RESULTS).toList());
-        return firstPageEnvelope.complete(mergedResult, latestUpdatedAt);
+        int totalCount = Math.max(1, recommendJobQueryService.countLatestRecruitments());
+        Long profileId = request == null ? null : request.profileId();
+        return new RecommendRequestDto(true, profileId, totalCount, 0);
     }
 
     private RecommendationKeyContext buildKeyContext(Long userId, RecommendRequestDto request) {
@@ -432,12 +397,18 @@ public class RecommendAsyncTaskService {
         return message;
     }
 
-    private int safeLimit(RecommendRequestDto request) {
-        return request == null ? DEFAULT_PAGE_LIMIT : request.safeLimit(DEFAULT_PAGE_LIMIT, MAX_PAGE_LIMIT);
+    static int safeLimit(RecommendRequestDto request) {
+        if (useAiOrDefault(request)) {
+            if (request == null || request.limit() == null) {
+                return DEFAULT_PAGE_LIMIT;
+            }
+            return Math.max(1, request.limit());
+        }
+        return request.safeLimit(DEFAULT_PAGE_LIMIT, MAX_PAGE_LIMIT);
     }
 
     private int safeOffset(RecommendRequestDto request) {
-        return request == null ? 0 : request.safeOffset(MAX_RECOMMENDATION_RESULTS);
+        return request == null ? 0 : request.safeOffset(MAX_PAGE_OFFSET);
     }
 
     private record RecommendationKeyContext(
