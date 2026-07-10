@@ -22,6 +22,7 @@ bridgework:
     server-url: /
   discord:
     spring-bot-webhook-url: ${SPRING_BOT_DISCORD_WEBHOOK_URL}
+    accessibility-feedback-webhook-url: ${ACCESSIBILITY_FEEDBACK_DISCORD_WEBHOOK_URL:}
   health-monitor:
     fastapi-health-url: ${BRIDGEWORK_HEALTH_MONITOR_FASTAPI_HEALTH_URL:${BRIDGEWORK_FASTAPI_HEALTH_URL:http://bridgework-aiserver:8000/health}}
   rate-limit:

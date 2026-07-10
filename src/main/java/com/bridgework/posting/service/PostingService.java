@@ -1,15 +1,24 @@
 package com.bridgework.posting.service;
 
+import com.bridgework.auth.entity.AppUser;
+import com.bridgework.auth.repository.AppUserRepository;
+import com.bridgework.common.notification.DiscordNotifierService;
 import com.bridgework.posting.dto.PostingDetailDto;
+import com.bridgework.posting.dto.PostingFeedbackCreateRequestDto;
+import com.bridgework.posting.dto.PostingFeedbackCreateResponseDto;
 import com.bridgework.posting.dto.PostingListItemDto;
 import com.bridgework.posting.dto.ScrapCommandResponseDto;
+import com.bridgework.posting.entity.PostingFeedback;
+import com.bridgework.posting.entity.PostingFeedbackReaction;
 import com.bridgework.posting.entity.JobScrap;
 import com.bridgework.posting.exception.PostingDomainException;
 import com.bridgework.posting.repository.JobScrapRepository;
+import com.bridgework.posting.repository.PostingFeedbackRepository;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Optional;
 import org.springframework.dao.DataAccessException;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
@@ -24,11 +33,20 @@ public class PostingService {
 
     private final NamedParameterJdbcTemplate namedParameterJdbcTemplate;
     private final JobScrapRepository jobScrapRepository;
+    private final PostingFeedbackRepository postingFeedbackRepository;
+    private final AppUserRepository appUserRepository;
+    private final DiscordNotifierService discordNotifierService;
 
     public PostingService(NamedParameterJdbcTemplate namedParameterJdbcTemplate,
-                          JobScrapRepository jobScrapRepository) {
+                          JobScrapRepository jobScrapRepository,
+                          PostingFeedbackRepository postingFeedbackRepository,
+                          AppUserRepository appUserRepository,
+                          DiscordNotifierService discordNotifierService) {
         this.namedParameterJdbcTemplate = namedParameterJdbcTemplate;
         this.jobScrapRepository = jobScrapRepository;
+        this.postingFeedbackRepository = postingFeedbackRepository;
+        this.appUserRepository = appUserRepository;
+        this.discordNotifierService = discordNotifierService;
     }
 
     @Transactional(readOnly = true)
@@ -217,6 +235,41 @@ public class PostingService {
         return new ScrapCommandResponseDto(postingId, false);
     }
 
+    @Transactional
+    public PostingFeedbackCreateResponseDto createPostingFeedback(Long userId,
+                                                                  Long postingId,
+                                                                  PostingFeedbackCreateRequestDto request) {
+        PostingFeedbackTarget postingTarget = getPostingFeedbackTarget(postingId);
+
+        PostingFeedback feedback = new PostingFeedback();
+        feedback.setUserId(userId);
+        feedback.setPostingId(postingId);
+        feedback.setReaction(request.reaction());
+        feedback.setComment(request.comment().trim());
+        PostingFeedback savedFeedback = postingFeedbackRepository.save(feedback);
+
+        if (request.reaction() == PostingFeedbackReaction.DISLIKE) {
+            Optional<AppUser> user = appUserRepository.findById(userId);
+            discordNotifierService.notifyAccessibilityFeedbackDisliked(
+                    postingId,
+                    postingTarget.externalId(),
+                    postingTarget.companyName(),
+                    postingTarget.jobTitle(),
+                    userId,
+                    user.map(AppUser::getEmail).orElse(null),
+                    savedFeedback.getComment(),
+                    savedFeedback.getCreatedAt()
+            );
+        }
+
+        return new PostingFeedbackCreateResponseDto(
+                savedFeedback.getId(),
+                postingId,
+                savedFeedback.getReaction(),
+                savedFeedback.getCreatedAt()
+        );
+    }
+
     private void assertPostingCanBeScrapped(Long postingId) {
         String sql = """
                 SELECT posting_status
@@ -243,6 +296,51 @@ public class PostingService {
                     "POSTING_NOT_ACTIVE",
                     HttpStatus.CONFLICT,
                     "마감된 공고는 스크랩할 수 없습니다."
+            );
+        }
+    }
+
+    private PostingFeedbackTarget getPostingFeedbackTarget(Long postingId) {
+        String sql = """
+                SELECT id,
+                       external_id,
+                       buspla_name,
+                       job_nm
+                FROM pd_kepad_recruitment
+                WHERE id = :postingId
+                """;
+
+        try {
+            PostingFeedbackTarget target = namedParameterJdbcTemplate.query(
+                    sql,
+                    new MapSqlParameterSource("postingId", postingId),
+                    resultSet -> resultSet.next()
+                            ? new PostingFeedbackTarget(
+                                    resultSet.getLong("id"),
+                                    resultSet.getString("external_id"),
+                                    resultSet.getString("buspla_name"),
+                                    resultSet.getString("job_nm")
+                            )
+                            : null
+            );
+
+            if (target == null) {
+                throw new PostingDomainException(
+                        "POSTING_NOT_FOUND",
+                        HttpStatus.NOT_FOUND,
+                        "공고를 찾을 수 없습니다."
+                );
+            }
+
+            return target;
+        } catch (PostingDomainException exception) {
+            throw exception;
+        } catch (DataAccessException exception) {
+            throw new PostingDomainException(
+                    "POSTING_FEEDBACK_TARGET_QUERY_FAILED",
+                    HttpStatus.INTERNAL_SERVER_ERROR,
+                    "피드백 대상 공고 조회에 실패했습니다.",
+                    exception
             );
         }
     }
@@ -305,5 +403,13 @@ public class PostingService {
                 resultSet.getLong("scrap_count"),
                 resultSet.getBoolean("scrapped_by_me")
         );
+    }
+
+    private record PostingFeedbackTarget(
+            Long postingId,
+            String externalId,
+            String companyName,
+            String jobTitle
+    ) {
     }
 }

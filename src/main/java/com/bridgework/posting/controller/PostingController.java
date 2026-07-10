@@ -4,12 +4,15 @@ import com.bridgework.auth.exception.UnauthorizedException;
 import com.bridgework.auth.security.UserPrincipal;
 import com.bridgework.common.dto.ApiResponse;
 import com.bridgework.posting.dto.PostingDetailDto;
+import com.bridgework.posting.dto.PostingFeedbackCreateRequestDto;
+import com.bridgework.posting.dto.PostingFeedbackCreateResponseDto;
 import com.bridgework.posting.dto.PostingListItemDto;
 import com.bridgework.posting.dto.ScrapCommandResponseDto;
 import com.bridgework.posting.service.PostingService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import java.util.List;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -17,6 +20,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -67,6 +71,17 @@ public class PostingController {
             Authentication authentication
     ) {
         return ResponseEntity.ok(ApiResponse.success(postingService.deleteScrap(currentUserId(authentication), postingId)));
+    }
+
+    @PostMapping("/postings/{postingId}/feedback")
+    @SecurityRequirement(name = "bearerAuth")
+    @Operation(summary = "공고 접근성 설명 피드백 등록", description = "좋아요/싫어요와 의견을 저장한다. 싫어요는 별도 Discord 채널에도 전달한다.")
+    public ResponseEntity<ApiResponse<PostingFeedbackCreateResponseDto>> createPostingFeedback(
+            @PathVariable Long postingId,
+            Authentication authentication,
+            @Valid @RequestBody PostingFeedbackCreateRequestDto request
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(postingService.createPostingFeedback(currentUserId(authentication), postingId, request)));
     }
 
     @GetMapping("/me/scraps")
