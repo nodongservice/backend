@@ -18,6 +18,38 @@ class FastApiRecommendClientTest {
 
     @Test
     @SuppressWarnings("unchecked")
+    void resolveCandidateUris_includesSlotHealthFallbacksAfterPrimaryBaseUrl() {
+        BridgeWorkRecommendProperties recommendProperties = new BridgeWorkRecommendProperties();
+        recommendProperties.setFastapiBaseUrl("http://bridgework-aiserver:8000");
+
+        BridgeWorkHealthMonitorProperties healthMonitorProperties = new BridgeWorkHealthMonitorProperties();
+        healthMonitorProperties.setFastapiHealthUrl(
+                "http://bridgework-aiserver-blue:8000/health,http://bridgework-aiserver-green:8000/health"
+        );
+
+        FastApiRecommendClient client = new FastApiRecommendClient(
+                null,
+                recommendProperties,
+                healthMonitorProperties,
+                new BridgeWorkSyncProperties(),
+                null
+        );
+
+        List<String> candidateUris = ReflectionTestUtils.invokeMethod(
+                client,
+                "resolveCandidateUris",
+                "/api/v1/score/quick"
+        );
+
+        assertThat(candidateUris).containsExactly(
+                "http://bridgework-aiserver:8000/api/v1/score/quick",
+                "http://bridgework-aiserver-blue:8000/api/v1/score/quick",
+                "http://bridgework-aiserver-green:8000/api/v1/score/quick"
+        );
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
     void buildScoreProfile_includesHomeCoordinatesAndCommuteLimitMinutes() {
         FastApiRecommendClient client = new FastApiRecommendClient(
                 null,
