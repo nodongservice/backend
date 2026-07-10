@@ -211,8 +211,8 @@ FastAPI 후보 조회는 모집 중인 공고와 마감일이 지나지 않은 �
 - `BRIDGEWORK_AUTH_JWT_SECRET`
 - `KAKAO_CLIENT_SECRET`
 - `NAVER_CLIENT_SECRET`
-- `BRIDGEWORK_FASTAPI_HEALTH_URL` (선택, 미지정 시 기본 내부 URL 사용)
-- `BRIDGEWORK_RECOMMEND_FASTAPI_BASE_URL` (선택, 미지정 시 기본 내부 URL 사용)
+- `BRIDGEWORK_FASTAPI_HEALTH_URL` (선택, 미지정 시 `http://host.docker.internal:19000/health,http://host.docker.internal:19001/health`)
+- `BRIDGEWORK_RECOMMEND_FASTAPI_BASE_URL` (선택, 미지정 시 `http://host.docker.internal:19000`)
 
 ## 개인정보 보호 구현 메모
 - 계정 식별 정보, 일반 프로필 정보, 민감정보를 목적별로 분리 저장한다.
