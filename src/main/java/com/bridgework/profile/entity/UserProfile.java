@@ -2,6 +2,7 @@ package com.bridgework.profile.entity;
 
 import com.bridgework.auth.entity.GenderType;
 import com.bridgework.auth.entity.AppUser;
+import jakarta.persistence.CascadeType;
 import com.bridgework.profile.dto.UserProfileUpsertRequestDto;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -13,9 +14,11 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
+import jakarta.persistence.OneToOne;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
+import jakarta.persistence.Transient;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 
@@ -46,10 +49,10 @@ public class UserProfile {
     @Column(name = "avoided_work_environments_json", nullable = false, columnDefinition = "TEXT")
     private String avoidedWorkEnvironmentsJson;
 
-    @Column(name = "required_supports_json", nullable = false, columnDefinition = "TEXT")
+    @Transient
     private String requiredSupportsJson;
 
-    @Column(name = "disability_type", nullable = false, length = 120)
+    @Transient
     private String disabilityType;
 
     @Column(name = "career_summary", length = 500)
@@ -64,38 +67,37 @@ public class UserProfile {
     @Column(name = "profile_name", nullable = false, length = 100)
     private String profileName;
 
-    @Column(name = "full_name", nullable = false, length = 100)
+    @Transient
     private String fullName;
 
-    @Column(name = "contact_phone", nullable = false, length = 32)
+    @Transient
     private String contactPhone;
 
-    @Column(name = "contact_email", nullable = false, length = 255)
+    @Transient
     private String contactEmail;
 
-    @Column(name = "birth_date")
+    @Transient
     private LocalDate birthDate;
 
-    @Enumerated(EnumType.STRING)
-    @Column(name = "gender_type", nullable = false, length = 20)
+    @Transient
     private GenderType genderType;
 
     @Column(name = "age_group", length = 50)
     private String ageGroup;
 
-    @Column(name = "detail_address", length = 300)
+    @Transient
     private String detailAddress;
 
-    @Column(name = "home_lat")
+    @Transient
     private Double homeLat;
 
-    @Column(name = "home_lng")
+    @Transient
     private Double homeLng;
 
-    @Column(name = "home_geocoded_address", length = 300)
+    @Transient
     private String homeGeocodedAddress;
 
-    @Column(name = "emergency_contact", length = 100)
+    @Transient
     private String emergencyContact;
 
     @Column(name = "highest_education", nullable = false, length = 300)
@@ -158,22 +160,22 @@ public class UserProfile {
     @Column(name = "trainings", columnDefinition = "TEXT")
     private String trainings;
 
-    @Column(name = "disability_severity", nullable = false, length = 80)
+    @Transient
     private String disabilitySeverity;
 
-    @Column(name = "disability_registered_yn", nullable = false)
+    @Transient
     private Boolean disabilityRegisteredYn;
 
-    @Column(name = "sensitive_info_consent_yn")
+    @Transient
     private Boolean sensitiveInfoConsentYn;
 
-    @Column(name = "disability_description", columnDefinition = "TEXT")
+    @Transient
     private String disabilityDescription;
 
-    @Column(name = "assistive_devices", columnDefinition = "TEXT")
+    @Transient
     private String assistiveDevices;
 
-    @Column(name = "work_support_requirements", columnDefinition = "TEXT")
+    @Transient
     private String workSupportRequirements;
 
     @Column(name = "work_availability", length = 80)
@@ -233,6 +235,12 @@ public class UserProfile {
     @Column(name = "updated_at", nullable = false)
     private OffsetDateTime updatedAt;
 
+    @OneToOne(mappedBy = "profile", fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)
+    private UserProfilePrivateDetails privateDetails;
+
+    @OneToOne(mappedBy = "profile", fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)
+    private UserProfileSensitiveInfo sensitiveInfo;
+
     @PrePersist
     void onCreate() {
         OffsetDateTime now = OffsetDateTime.now();
@@ -248,7 +256,6 @@ public class UserProfile {
     public void updateFromRequest(UserProfileUpsertRequestDto request,
                                   String preferredWorkEnvironmentsJson,
                                   String avoidedWorkEnvironmentsJson,
-                                  String requiredSupportsJson,
                                   String skillsJson,
                                   String certificationsJson,
                                   String workTypesJson,
@@ -268,20 +275,11 @@ public class UserProfile {
         this.commuteRange = request.commuteRange();
         this.preferredWorkEnvironmentsJson = preferredWorkEnvironmentsJson;
         this.avoidedWorkEnvironmentsJson = avoidedWorkEnvironmentsJson;
-        this.requiredSupportsJson = requiredSupportsJson;
-        this.disabilityType = enumCode(request.disabilityType());
         this.careerSummary = request.careerSummary();
         this.educationSummary = request.educationSummary();
         this.employmentTypeSummary = request.employmentTypeSummary();
 
-        this.fullName = request.fullName();
-        this.contactPhone = request.contactPhone();
-        this.contactEmail = request.contactEmail();
-        this.birthDate = request.birthDate();
-        this.genderType = request.genderType();
         this.ageGroup = request.ageGroup();
-        this.detailAddress = request.detailAddress();
-        this.emergencyContact = request.emergencyContact();
 
         this.highestEducation = enumCode(request.highestEducation());
         this.graduationStatus = enumCode(request.graduationStatus());
@@ -305,13 +303,6 @@ public class UserProfile {
         this.trainingEntriesJson = trainingEntriesJson;
         this.trainings = request.trainings();
 
-        this.disabilitySeverity = enumCode(request.disabilitySeverity());
-        this.disabilityRegisteredYn = request.disabilityRegisteredYn();
-        this.sensitiveInfoConsentYn = request.sensitiveInfoConsentYn();
-        this.disabilityDescription = request.disabilityDescription();
-        this.assistiveDevices = request.assistiveDevices();
-        this.workSupportRequirements = request.workSupportRequirements();
-
         this.workAvailability = enumCode(request.workAvailability());
         this.workTypesJson = workTypesJson;
         this.expectedSalary = request.expectedSalary();
@@ -334,21 +325,51 @@ public class UserProfile {
         this.aiSupportTagsJson = aiSupportTagsJson;
     }
 
+    public void updatePrivateDetails(String fullName,
+                                     String contactPhone,
+                                     String contactEmailOverride,
+                                     LocalDate birthDate,
+                                     GenderType genderType,
+                                     String detailAddress,
+                                     String emergencyContact) {
+        ensurePrivateDetails().update(
+                fullName,
+                contactPhone,
+                contactEmailOverride,
+                birthDate,
+                genderType,
+                detailAddress,
+                emergencyContact
+        );
+    }
+
+    public void updateSensitiveInfo(String requiredSupportsJson,
+                                    String disabilityType,
+                                    String disabilitySeverity,
+                                    Boolean disabilityRegisteredYn,
+                                    Boolean sensitiveInfoConsentYn,
+                                    String disabilityDescription,
+                                    String assistiveDevices,
+                                    String workSupportRequirements) {
+        ensureSensitiveInfo().update(
+                requiredSupportsJson,
+                disabilityType,
+                disabilitySeverity,
+                disabilityRegisteredYn,
+                sensitiveInfoConsentYn,
+                disabilityDescription,
+                assistiveDevices,
+                workSupportRequirements
+        );
+    }
+
     private String enumCode(Enum<?> value) {
         return value == null ? null : value.name();
     }
 
     public void anonymizeForWithdrawal(String anonymizedContactEmail) {
         // 통계에 필요한 구조화 코드는 유지하고 식별/서술형 개인정보만 제거한다.
-        this.fullName = "탈퇴회원";
-        this.contactPhone = "00000000000";
-        this.contactEmail = anonymizedContactEmail;
-        this.birthDate = LocalDate.of(1900, 1, 1);
-        this.detailAddress = "탈퇴회원";
-        this.homeLat = null;
-        this.homeLng = null;
-        this.homeGeocodedAddress = null;
-        this.emergencyContact = null;
+        ensurePrivateDetails().anonymize(anonymizedContactEmail);
 
         this.careerSummary = null;
         this.educationSummary = null;
@@ -364,7 +385,6 @@ public class UserProfile {
         this.commuteRange = null;
         this.preferredWorkEnvironmentsJson = "[]";
         this.avoidedWorkEnvironmentsJson = "[]";
-        this.requiredSupportsJson = "[]";
 
         this.certificationsJson = "[]";
         this.certificationEntriesJson = "[]";
@@ -376,10 +396,7 @@ public class UserProfile {
         this.trainingEntriesJson = "[]";
         this.trainings = null;
 
-        this.disabilityDescription = null;
-        this.assistiveDevices = null;
-        this.workSupportRequirements = null;
-        this.sensitiveInfoConsentYn = null;
+        ensureSensitiveInfo().anonymize();
 
         this.selfIntroduction = "탈퇴회원";
         this.motivation = null;
@@ -429,11 +446,11 @@ public class UserProfile {
     }
 
     public String getRequiredSupportsJson() {
-        return requiredSupportsJson;
+        return sensitiveInfo == null ? "[]" : sensitiveInfo.getRequiredSupportsJson();
     }
 
     public String getDisabilityType() {
-        return disabilityType;
+        return sensitiveInfo == null ? null : sensitiveInfo.getDisabilityType();
     }
 
     public String getCareerSummary() {
@@ -457,23 +474,26 @@ public class UserProfile {
     }
 
     public String getFullName() {
-        return fullName;
+        return privateDetails == null ? null : privateDetails.getFullName();
     }
 
     public String getContactPhone() {
-        return contactPhone;
+        return privateDetails == null ? null : privateDetails.getContactPhone();
     }
 
     public String getContactEmail() {
-        return contactEmail;
+        if (privateDetails == null || privateDetails.getContactEmailOverride() == null) {
+            return user == null ? null : user.getEmail();
+        }
+        return privateDetails.getContactEmailOverride();
     }
 
     public LocalDate getBirthDate() {
-        return birthDate;
+        return privateDetails == null ? null : privateDetails.getBirthDate();
     }
 
     public GenderType getGenderType() {
-        return genderType;
+        return privateDetails == null ? null : privateDetails.getGenderType();
     }
 
     public String getAgeGroup() {
@@ -481,29 +501,27 @@ public class UserProfile {
     }
 
     public String getDetailAddress() {
-        return detailAddress;
+        return privateDetails == null ? null : privateDetails.getDetailAddress();
     }
 
     public Double getHomeLat() {
-        return homeLat;
+        return privateDetails == null ? null : privateDetails.getHomeLat();
     }
 
     public Double getHomeLng() {
-        return homeLng;
+        return privateDetails == null ? null : privateDetails.getHomeLng();
     }
 
     public String getHomeGeocodedAddress() {
-        return homeGeocodedAddress;
+        return privateDetails == null ? null : privateDetails.getHomeGeocodedAddress();
     }
 
     public void updateHomeCoordinates(Double homeLat, Double homeLng, String homeGeocodedAddress) {
-        this.homeLat = homeLat;
-        this.homeLng = homeLng;
-        this.homeGeocodedAddress = homeGeocodedAddress;
+        ensurePrivateDetails().updateHomeCoordinates(homeLat, homeLng, homeGeocodedAddress);
     }
 
     public String getEmergencyContact() {
-        return emergencyContact;
+        return privateDetails == null ? null : privateDetails.getEmergencyContact();
     }
 
     public String getHighestEducation() {
@@ -587,27 +605,27 @@ public class UserProfile {
     }
 
     public String getDisabilitySeverity() {
-        return disabilitySeverity;
+        return sensitiveInfo == null ? null : sensitiveInfo.getDisabilitySeverity();
     }
 
     public Boolean getDisabilityRegisteredYn() {
-        return disabilityRegisteredYn;
+        return sensitiveInfo == null ? null : sensitiveInfo.getDisabilityRegisteredYn();
     }
 
     public Boolean getSensitiveInfoConsentYn() {
-        return sensitiveInfoConsentYn;
+        return sensitiveInfo == null ? null : sensitiveInfo.getSensitiveInfoConsentYn();
     }
 
     public String getDisabilityDescription() {
-        return disabilityDescription;
+        return sensitiveInfo == null ? null : sensitiveInfo.getDisabilityDescription();
     }
 
     public String getAssistiveDevices() {
-        return assistiveDevices;
+        return sensitiveInfo == null ? null : sensitiveInfo.getAssistiveDevices();
     }
 
     public String getWorkSupportRequirements() {
-        return workSupportRequirements;
+        return sensitiveInfo == null ? null : sensitiveInfo.getWorkSupportRequirements();
     }
 
     public String getWorkAvailability() {
@@ -680,5 +698,21 @@ public class UserProfile {
 
     public OffsetDateTime getUpdatedAt() {
         return updatedAt;
+    }
+
+    private UserProfilePrivateDetails ensurePrivateDetails() {
+        if (privateDetails == null) {
+            privateDetails = new UserProfilePrivateDetails();
+            privateDetails.setProfile(this);
+        }
+        return privateDetails;
+    }
+
+    private UserProfileSensitiveInfo ensureSensitiveInfo() {
+        if (sensitiveInfo == null) {
+            sensitiveInfo = new UserProfileSensitiveInfo();
+            sensitiveInfo.setProfile(this);
+        }
+        return sensitiveInfo;
     }
 }

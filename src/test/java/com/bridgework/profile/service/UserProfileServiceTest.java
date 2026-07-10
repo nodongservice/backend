@@ -3,6 +3,8 @@ package com.bridgework.profile.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -98,7 +100,7 @@ class UserProfileServiceTest {
 
         when(appUserRepository.findByIdAndStatus(1L, UserStatus.ACTIVE)).thenReturn(Optional.of(user));
         when(userProfileRepository.countByUser_Id(1L)).thenReturn(0L);
-        when(profileAiTagService.buildTags(request)).thenReturn(tags);
+        when(profileAiTagService.buildTags(eq(request), anyList(), any(), any())).thenReturn(tags);
         when(userProfileRepository.save(any(UserProfile.class))).thenAnswer(invocation -> {
             UserProfile profile = invocation.getArgument(0, UserProfile.class);
             ReflectionTestUtils.setField(profile, "id", 10L);
@@ -126,7 +128,7 @@ class UserProfileServiceTest {
 
         when(appUserRepository.findByIdAndStatus(1L, UserStatus.ACTIVE)).thenReturn(Optional.of(user));
         when(userProfileRepository.countByUser_Id(1L)).thenReturn(0L);
-        when(profileAiTagService.buildTags(request)).thenReturn(tags);
+        when(profileAiTagService.buildTags(eq(request), anyList(), any(), any())).thenReturn(tags);
         when(userProfileRepository.save(any(UserProfile.class))).thenAnswer(invocation -> {
             UserProfile profile = invocation.getArgument(0, UserProfile.class);
             ReflectionTestUtils.setField(profile, "id", 10L);
@@ -179,6 +181,7 @@ class UserProfileServiceTest {
     private AppUser user(Long id) {
         AppUser user = new AppUser();
         ReflectionTestUtils.setField(user, "id", id);
+        user.setEmail("user@example.com");
         user.setStatus(UserStatus.ACTIVE);
         return user;
     }
@@ -205,8 +208,26 @@ class UserProfileServiceTest {
                 "[]",
                 "[]",
                 "[]",
-                "[]",
                 "[]"
+        );
+        profile.updatePrivateDetails(
+                "홍길동",
+                "010-1111-2222",
+                null,
+                LocalDate.of(1995, 5, 10),
+                GenderType.MALE,
+                "강남구",
+                "010-9999-9999"
+        );
+        profile.updateSensitiveInfo(
+                "[]",
+                ProfileDisabilityType.PHYSICAL.name(),
+                ProfileDisabilitySeverity.SEVERE.name(),
+                true,
+                true,
+                "이동 시 보조 필요",
+                "휠체어",
+                "엘리베이터"
         );
         return profile;
     }

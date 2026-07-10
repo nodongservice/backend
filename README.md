@@ -198,6 +198,7 @@ FastAPI 후보 조회는 모집 중인 공고와 마감일이 지나지 않은 �
 - `DB_USERNAME`
 - `DB_PASSWORD`
 - `REDIS_PASSWORD`
+- `BRIDGEWORK_PERSONAL_DATA_ENCRYPTION_KEY`
 - `DATA_GO_KR_SERVICE_KEY`
 - `KRIC_SERVICE_KEY`
 - `SEOUL_OPEN_API_KEY`
@@ -212,6 +213,12 @@ FastAPI 후보 조회는 모집 중인 공고와 마감일이 지나지 않은 �
 - `NAVER_CLIENT_SECRET`
 - `BRIDGEWORK_FASTAPI_HEALTH_URL` (선택, 미지정 시 기본 내부 URL 사용)
 - `BRIDGEWORK_RECOMMEND_FASTAPI_BASE_URL` (선택, 미지정 시 기본 내부 URL 사용)
+
+## 개인정보 보호 구현 메모
+- 계정 식별 정보, 일반 프로필 정보, 민감정보를 목적별로 분리 저장한다.
+- 민감 프로필 상세 정보와 직접 식별 가능한 연락·주소 정보는 애플리케이션 레벨 암호화를 거쳐 저장한다.
+- 기존 평문 데이터는 애플리케이션 기동 시 1회 백필로 암호화 상태로 전환한다.
+- 관리자 더미 사용자 대리 로그인은 별도 권한(`sensitive_profile_access_enabled`)이 있는 계정만 가능하며 접근 이력이 감사 로그 테이블에 남는다.
 
 ### 역사 코드 파일(프로젝트 포함)
 - 기본 포함 파일: `backend/resources/reference/operating_agency_station_codes_2026-02-28.xlsx`

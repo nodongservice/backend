@@ -1,6 +1,7 @@
 package com.bridgework.common.notification;
 
 import com.bridgework.common.config.BridgeWorkDiscordProperties;
+import com.bridgework.common.security.PersonalDataMaskingUtils;
 import com.bridgework.sync.dto.SourceSyncResultDto;
 import com.bridgework.sync.dto.SyncRunResponseDto;
 import com.bridgework.sync.entity.PublicDataSourceType;
@@ -100,7 +101,7 @@ public class DiscordNotifierService {
     }
 
     public void notifySignupCompleted(String email, long totalUserCount) {
-        String safeEmail = (email == null || email.isBlank()) ? "(이메일 없음)" : email;
+        String safeEmail = (email == null || email.isBlank()) ? "(이메일 없음)" : PersonalDataMaskingUtils.maskEmail(email);
         String message = HEADER_SIGNUP_COMPLETED + '\n'
                 + "이메일: " + safeEmail + '\n'
                 + "현재 회원 수: " + totalUserCount + "명\n"
@@ -126,7 +127,7 @@ public class DiscordNotifierService {
         String safeErrorCode = (errorCode == null || errorCode.isBlank()) ? "INTERNAL_SERVER_ERROR" : errorCode;
         String safeMessage = (message == null || message.isBlank()) ? "(메시지 없음)" : message;
 
-        String rootCause = extractRootCauseMessage(throwable);
+        String rootCause = PersonalDataMaskingUtils.sanitizeText(extractRootCauseMessage(throwable));
         String exceptionType = throwable == null ? "(unknown)" : throwable.getClass().getSimpleName();
 
         String discordMessage = HEADER_UNHANDLED_EXCEPTION + '\n'
@@ -183,8 +184,8 @@ public class DiscordNotifierService {
         String safeCompanyName = (companyName == null || companyName.isBlank()) ? "(기업명 없음)" : companyName;
         String safeJobTitle = (jobTitle == null || jobTitle.isBlank()) ? "(공고명 없음)" : jobTitle;
         String safeUserId = userId == null ? "(unknown-user)" : String.valueOf(userId);
-        String safeUserEmail = (userEmail == null || userEmail.isBlank()) ? "(이메일 없음)" : userEmail;
-        String safeComment = (comment == null || comment.isBlank()) ? "(내용 없음)" : comment;
+        String safeUserEmail = (userEmail == null || userEmail.isBlank()) ? "(이메일 없음)" : PersonalDataMaskingUtils.maskEmail(userEmail);
+        String safeComment = (comment == null || comment.isBlank()) ? "(내용 없음)" : PersonalDataMaskingUtils.sanitizeText(comment);
         String safeSubmittedAt = submittedAt == null ? "(unknown-time)" : submittedAt.toString();
 
         String message = HEADER_ACCESSIBILITY_FEEDBACK_DISLIKE + '\n'

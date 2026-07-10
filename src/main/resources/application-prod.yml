@@ -18,6 +18,9 @@ server:
   forward-headers-strategy: framework
 
 bridgework:
+  security:
+    personal-data-encryption:
+      secret: ${BRIDGEWORK_PERSONAL_DATA_ENCRYPTION_KEY}
   openapi:
     server-url: /
   discord:

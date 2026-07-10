@@ -24,12 +24,12 @@ import com.bridgework.sync.normalized.NormalizedGeoPoint;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import jakarta.transaction.Transactional;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 @Service
@@ -164,6 +164,7 @@ public class UserProfileService {
         return toResponse(targetProfile);
     }
 
+    @Transactional(readOnly = true)
     public List<UserProfileResponseDto> getProfiles(Long userId) {
         return userProfileRepository.findByUser_IdOrderByIsDefaultDescUpdatedAtDesc(userId)
                 .stream()
@@ -171,6 +172,7 @@ public class UserProfileService {
                 .toList();
     }
 
+    @Transactional(readOnly = true)
     public UserProfileResponseDto getProfile(Long userId, Long profileId) {
         UserProfile profile = userProfileRepository.findByIdAndUser_Id(profileId, userId)
                 .orElseThrow(() -> new UserProfileNotFoundException(profileId));
@@ -183,11 +185,21 @@ public class UserProfileService {
     }
 
     private void applyRequestToProfile(UserProfile profile, UserProfileUpsertRequestDto request) {
-        ProfileAiTags profileAiTags = profileAiTagService.buildTags(request);
+        List<String> sanitizedRequiredSupports = sanitizeSensitiveList(request.requiredSupports(), request.sensitiveInfoConsentYn());
+        String sanitizedDisabilityDescription = sanitizeSensitiveText(request.disabilityDescription(), request.sensitiveInfoConsentYn());
+        String sanitizedAssistiveDevices = sanitizeSensitiveText(request.assistiveDevices(), request.sensitiveInfoConsentYn());
+        String sanitizedWorkSupportRequirements = sanitizeSensitiveText(request.workSupportRequirements(), request.sensitiveInfoConsentYn());
+
+        ProfileAiTags profileAiTags = profileAiTagService.buildTags(
+                request,
+                sanitizedRequiredSupports,
+                sanitizedWorkSupportRequirements,
+                sanitizedAssistiveDevices
+        );
 
         String preferredWorkEnvironmentsJson = toJson(request.preferredWorkEnvironments());
         String avoidedWorkEnvironmentsJson = toJson(request.avoidedWorkEnvironments());
-        String requiredSupportsJson = toJson(request.requiredSupports());
+        String requiredSupportsJson = toJson(sanitizedRequiredSupports);
         String skillsJson = toJson(request.skills());
         String certificationsJson = toJson(request.certifications());
         String workTypesJson = toJsonLabeledEnum(request.workTypes());
@@ -208,7 +220,6 @@ public class UserProfileService {
                 request,
                 preferredWorkEnvironmentsJson,
                 avoidedWorkEnvironmentsJson,
-                requiredSupportsJson,
                 skillsJson,
                 certificationsJson,
                 workTypesJson,
@@ -223,6 +234,25 @@ public class UserProfileService {
                 aiJobTagsJson,
                 aiEnvironmentTagsJson,
                 aiSupportTagsJson
+        );
+        profile.updatePrivateDetails(
+                request.fullName(),
+                request.contactPhone(),
+                resolveContactEmailOverride(profile.getUser(), request.contactEmail()),
+                request.birthDate(),
+                request.genderType(),
+                request.detailAddress(),
+                request.emergencyContact()
+        );
+        profile.updateSensitiveInfo(
+                requiredSupportsJson,
+                request.disabilityType() == null ? null : request.disabilityType().name(),
+                request.disabilitySeverity() == null ? null : request.disabilitySeverity().name(),
+                request.disabilityRegisteredYn(),
+                request.sensitiveInfoConsentYn(),
+                sanitizedDisabilityDescription,
+                sanitizedAssistiveDevices,
+                sanitizedWorkSupportRequirements
         );
         applyHomeCoordinates(profile, request.detailAddress());
     }
@@ -254,6 +284,26 @@ public class UserProfileService {
                     "생년월일은 필수입니다."
             );
         }
+    }
+
+    private String resolveContactEmailOverride(AppUser user, String contactEmail) {
+        String normalizedContactEmail = StringUtils.trimWhitespace(contactEmail);
+        String accountEmail = user == null ? null : StringUtils.trimWhitespace(user.getEmail());
+        if (!StringUtils.hasText(normalizedContactEmail)) {
+            return null;
+        }
+        if (accountEmail != null && normalizedContactEmail.equalsIgnoreCase(accountEmail)) {
+            return null;
+        }
+        return normalizedContactEmail;
+    }
+
+    private List<String> sanitizeSensitiveList(List<String> values, Boolean consent) {
+        return Boolean.TRUE.equals(consent) ? (values == null ? List.of() : values) : List.of();
+    }
+
+    private String sanitizeSensitiveText(String value, Boolean consent) {
+        return Boolean.TRUE.equals(consent) ? value : null;
     }
 
     private UserProfileResponseDto toResponse(UserProfile profile) {
