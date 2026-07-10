@@ -3,6 +3,14 @@ package com.bridgework.profile.service;
 import com.bridgework.auth.entity.AppUser;
 import com.bridgework.auth.entity.UserStatus;
 import com.bridgework.auth.repository.AppUserRepository;
+import com.bridgework.profile.dto.ProfileCareerEntryDto;
+import com.bridgework.profile.dto.ProfileCertificationEntryDto;
+import com.bridgework.profile.dto.ProfileEducationEntryDto;
+import com.bridgework.profile.dto.ProfileLanguageEntryDto;
+import com.bridgework.profile.dto.ProfilePortfolioEntryDto;
+import com.bridgework.profile.dto.ProfileProjectEntryDto;
+import com.bridgework.profile.dto.ProfileAwardEntryDto;
+import com.bridgework.profile.dto.ProfileTrainingEntryDto;
 import com.bridgework.profile.dto.UserProfileResponseDto;
 import com.bridgework.profile.dto.UserProfileUpsertRequestDto;
 import com.bridgework.profile.entity.UserProfile;
@@ -28,6 +36,22 @@ import org.springframework.util.StringUtils;
 public class UserProfileService {
 
     private static final TypeReference<List<String>> STRING_LIST_TYPE_REFERENCE = new TypeReference<>() {
+    };
+    private static final TypeReference<List<ProfileEducationEntryDto>> EDUCATION_ENTRY_LIST_TYPE_REFERENCE = new TypeReference<>() {
+    };
+    private static final TypeReference<List<ProfileCareerEntryDto>> CAREER_ENTRY_LIST_TYPE_REFERENCE = new TypeReference<>() {
+    };
+    private static final TypeReference<List<ProfileProjectEntryDto>> PROJECT_ENTRY_LIST_TYPE_REFERENCE = new TypeReference<>() {
+    };
+    private static final TypeReference<List<ProfileCertificationEntryDto>> CERTIFICATION_ENTRY_LIST_TYPE_REFERENCE = new TypeReference<>() {
+    };
+    private static final TypeReference<List<ProfileLanguageEntryDto>> LANGUAGE_ENTRY_LIST_TYPE_REFERENCE = new TypeReference<>() {
+    };
+    private static final TypeReference<List<ProfilePortfolioEntryDto>> PORTFOLIO_ENTRY_LIST_TYPE_REFERENCE = new TypeReference<>() {
+    };
+    private static final TypeReference<List<ProfileAwardEntryDto>> AWARD_ENTRY_LIST_TYPE_REFERENCE = new TypeReference<>() {
+    };
+    private static final TypeReference<List<ProfileTrainingEntryDto>> TRAINING_ENTRY_LIST_TYPE_REFERENCE = new TypeReference<>() {
     };
     private static final int MAX_PROFILE_COUNT = 3;
     private static final String DEFAULT_CREATED_PROFILE_NAME = "기본 생성 프로필";
@@ -167,6 +191,14 @@ public class UserProfileService {
         String skillsJson = toJson(request.skills());
         String certificationsJson = toJson(request.certifications());
         String workTypesJson = toJsonLabeledEnum(request.workTypes());
+        String educationEntriesJson = toJsonObjects(request.educationEntries());
+        String careerEntriesJson = toJsonObjects(request.careerEntries());
+        String projectEntriesJson = toJsonObjects(request.projectEntries());
+        String certificationEntriesJson = toJsonObjects(request.certificationEntries());
+        String languageEntriesJson = toJsonObjects(request.languageEntries());
+        String portfolioEntriesJson = toJsonObjects(request.portfolioEntries());
+        String awardEntriesJson = toJsonObjects(request.awardEntries());
+        String trainingEntriesJson = toJsonObjects(request.trainingEntries());
 
         String aiJobTagsJson = toJson(profileAiTags.jobTags());
         String aiEnvironmentTagsJson = toJson(profileAiTags.environmentTags());
@@ -180,6 +212,14 @@ public class UserProfileService {
                 skillsJson,
                 certificationsJson,
                 workTypesJson,
+                educationEntriesJson,
+                careerEntriesJson,
+                projectEntriesJson,
+                certificationEntriesJson,
+                languageEntriesJson,
+                portfolioEntriesJson,
+                awardEntriesJson,
+                trainingEntriesJson,
                 aiJobTagsJson,
                 aiEnvironmentTagsJson,
                 aiSupportTagsJson
@@ -243,20 +283,29 @@ public class UserProfileService {
 
                 profile.getHighestEducation(),
                 profile.getGraduationStatus(),
+                readJsonList(profile.getEducationEntriesJson(), EDUCATION_ENTRY_LIST_TYPE_REFERENCE),
                 profile.getMajorCareer(),
+                readJsonList(profile.getCareerEntriesJson(), CAREER_ENTRY_LIST_TYPE_REFERENCE),
                 profile.getCareerDetail(),
+                readJsonList(profile.getProjectEntriesJson(), PROJECT_ENTRY_LIST_TYPE_REFERENCE),
                 profile.getProjectExperience(),
                 profile.getCareerGapReason(),
 
                 profile.getTargetJob(),
                 toStringList(profile.getSkillsJson()),
+                readJsonList(profile.getCertificationEntriesJson(), CERTIFICATION_ENTRY_LIST_TYPE_REFERENCE),
                 toStringList(profile.getCertificationsJson()),
+                readJsonList(profile.getLanguageEntriesJson(), LANGUAGE_ENTRY_LIST_TYPE_REFERENCE),
+                readJsonList(profile.getPortfolioEntriesJson(), PORTFOLIO_ENTRY_LIST_TYPE_REFERENCE),
                 profile.getPortfolioUrl(),
+                readJsonList(profile.getAwardEntriesJson(), AWARD_ENTRY_LIST_TYPE_REFERENCE),
                 profile.getAwards(),
+                readJsonList(profile.getTrainingEntriesJson(), TRAINING_ENTRY_LIST_TYPE_REFERENCE),
                 profile.getTrainings(),
 
                 profile.getDisabilitySeverity(),
                 profile.getDisabilityRegisteredYn(),
+                profile.getSensitiveInfoConsentYn(),
                 profile.getDisabilityDescription(),
                 profile.getAssistiveDevices(),
                 profile.getWorkSupportRequirements(),
@@ -313,8 +362,16 @@ public class UserProfileService {
     }
 
     private String toJson(List<String> values) {
+        return writeJson(values == null ? List.of() : values);
+    }
+
+    private String toJsonObjects(List<?> values) {
+        return writeJson(values == null ? List.of() : values);
+    }
+
+    private String writeJson(Object value) {
         try {
-            return objectMapper.writeValueAsString(values == null ? List.of() : values);
+            return objectMapper.writeValueAsString(value);
         } catch (JsonProcessingException exception) {
             throw new ProfileDomainException(
                     "PROFILE_JSON_SERIALIZATION_FAILED",
@@ -332,12 +389,16 @@ public class UserProfileService {
     }
 
     private List<String> toStringList(String json) {
+        return readJsonList(json, STRING_LIST_TYPE_REFERENCE);
+    }
+
+    private <T> List<T> readJsonList(String json, TypeReference<List<T>> typeReference) {
         if (!StringUtils.hasText(json)) {
             return List.of();
         }
 
         try {
-            return objectMapper.readValue(json, STRING_LIST_TYPE_REFERENCE);
+            return objectMapper.readValue(json, typeReference);
         } catch (JsonProcessingException exception) {
             // 저장 데이터가 깨진 경우라도 API는 중단하지 않고 빈 목록으로 응답한다.
             return List.of();

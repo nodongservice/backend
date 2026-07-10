@@ -104,11 +104,20 @@ public class UserProfile {
     @Column(name = "graduation_status", nullable = false, length = 80)
     private String graduationStatus;
 
+    @Column(name = "education_entries_json", nullable = false, columnDefinition = "TEXT")
+    private String educationEntriesJson;
+
     @Column(name = "major_career", nullable = false, length = 500)
     private String majorCareer;
 
+    @Column(name = "career_entries_json", nullable = false, columnDefinition = "TEXT")
+    private String careerEntriesJson;
+
     @Column(name = "career_detail", columnDefinition = "TEXT")
     private String careerDetail;
+
+    @Column(name = "project_entries_json", nullable = false, columnDefinition = "TEXT")
+    private String projectEntriesJson;
 
     @Column(name = "project_experience", columnDefinition = "TEXT")
     private String projectExperience;
@@ -125,11 +134,26 @@ public class UserProfile {
     @Column(name = "certifications_json", columnDefinition = "TEXT")
     private String certificationsJson;
 
+    @Column(name = "certification_entries_json", nullable = false, columnDefinition = "TEXT")
+    private String certificationEntriesJson;
+
+    @Column(name = "language_entries_json", nullable = false, columnDefinition = "TEXT")
+    private String languageEntriesJson;
+
+    @Column(name = "portfolio_entries_json", nullable = false, columnDefinition = "TEXT")
+    private String portfolioEntriesJson;
+
     @Column(name = "portfolio_url", length = 500)
     private String portfolioUrl;
 
+    @Column(name = "award_entries_json", nullable = false, columnDefinition = "TEXT")
+    private String awardEntriesJson;
+
     @Column(name = "awards", columnDefinition = "TEXT")
     private String awards;
+
+    @Column(name = "training_entries_json", nullable = false, columnDefinition = "TEXT")
+    private String trainingEntriesJson;
 
     @Column(name = "trainings", columnDefinition = "TEXT")
     private String trainings;
@@ -139,6 +163,9 @@ public class UserProfile {
 
     @Column(name = "disability_registered_yn", nullable = false)
     private Boolean disabilityRegisteredYn;
+
+    @Column(name = "sensitive_info_consent_yn")
+    private Boolean sensitiveInfoConsentYn;
 
     @Column(name = "disability_description", columnDefinition = "TEXT")
     private String disabilityDescription;
@@ -225,6 +252,14 @@ public class UserProfile {
                                   String skillsJson,
                                   String certificationsJson,
                                   String workTypesJson,
+                                  String educationEntriesJson,
+                                  String careerEntriesJson,
+                                  String projectEntriesJson,
+                                  String certificationEntriesJson,
+                                  String languageEntriesJson,
+                                  String portfolioEntriesJson,
+                                  String awardEntriesJson,
+                                  String trainingEntriesJson,
                                   String aiJobTagsJson,
                                   String aiEnvironmentTagsJson,
                                   String aiSupportTagsJson) {
@@ -250,20 +285,29 @@ public class UserProfile {
 
         this.highestEducation = enumCode(request.highestEducation());
         this.graduationStatus = enumCode(request.graduationStatus());
+        this.educationEntriesJson = educationEntriesJson;
         this.majorCareer = request.majorCareer();
+        this.careerEntriesJson = careerEntriesJson;
         this.careerDetail = request.careerDetail();
+        this.projectEntriesJson = projectEntriesJson;
         this.projectExperience = request.projectExperience();
         this.careerGapReason = request.careerGapReason();
 
         this.targetJob = request.targetJob();
         this.skillsJson = skillsJson;
         this.certificationsJson = certificationsJson;
+        this.certificationEntriesJson = certificationEntriesJson;
+        this.languageEntriesJson = languageEntriesJson;
+        this.portfolioEntriesJson = portfolioEntriesJson;
         this.portfolioUrl = request.portfolioUrl();
+        this.awardEntriesJson = awardEntriesJson;
         this.awards = request.awards();
+        this.trainingEntriesJson = trainingEntriesJson;
         this.trainings = request.trainings();
 
         this.disabilitySeverity = enumCode(request.disabilitySeverity());
         this.disabilityRegisteredYn = request.disabilityRegisteredYn();
+        this.sensitiveInfoConsentYn = request.sensitiveInfoConsentYn();
         this.disabilityDescription = request.disabilityDescription();
         this.assistiveDevices = request.assistiveDevices();
         this.workSupportRequirements = request.workSupportRequirements();
@@ -308,8 +352,11 @@ public class UserProfile {
 
         this.careerSummary = null;
         this.educationSummary = null;
+        this.educationEntriesJson = "[]";
         this.majorCareer = "탈퇴회원";
+        this.careerEntriesJson = "[]";
         this.careerDetail = null;
+        this.projectEntriesJson = "[]";
         this.projectExperience = null;
         this.careerGapReason = null;
 
@@ -320,13 +367,19 @@ public class UserProfile {
         this.requiredSupportsJson = "[]";
 
         this.certificationsJson = "[]";
+        this.certificationEntriesJson = "[]";
+        this.languageEntriesJson = "[]";
+        this.portfolioEntriesJson = "[]";
         this.portfolioUrl = null;
+        this.awardEntriesJson = "[]";
         this.awards = null;
+        this.trainingEntriesJson = "[]";
         this.trainings = null;
 
         this.disabilityDescription = null;
         this.assistiveDevices = null;
         this.workSupportRequirements = null;
+        this.sensitiveInfoConsentYn = null;
 
         this.selfIntroduction = "탈퇴회원";
         this.motivation = null;
@@ -461,12 +514,24 @@ public class UserProfile {
         return graduationStatus;
     }
 
+    public String getEducationEntriesJson() {
+        return educationEntriesJson;
+    }
+
     public String getMajorCareer() {
         return majorCareer;
     }
 
+    public String getCareerEntriesJson() {
+        return careerEntriesJson;
+    }
+
     public String getCareerDetail() {
         return careerDetail;
+    }
+
+    public String getProjectEntriesJson() {
+        return projectEntriesJson;
     }
 
     public String getProjectExperience() {
@@ -489,12 +554,32 @@ public class UserProfile {
         return certificationsJson;
     }
 
+    public String getCertificationEntriesJson() {
+        return certificationEntriesJson;
+    }
+
+    public String getLanguageEntriesJson() {
+        return languageEntriesJson;
+    }
+
+    public String getPortfolioEntriesJson() {
+        return portfolioEntriesJson;
+    }
+
     public String getPortfolioUrl() {
         return portfolioUrl;
     }
 
+    public String getAwardEntriesJson() {
+        return awardEntriesJson;
+    }
+
     public String getAwards() {
         return awards;
+    }
+
+    public String getTrainingEntriesJson() {
+        return trainingEntriesJson;
     }
 
     public String getTrainings() {
@@ -507,6 +592,10 @@ public class UserProfile {
 
     public Boolean getDisabilityRegisteredYn() {
         return disabilityRegisteredYn;
+    }
+
+    public Boolean getSensitiveInfoConsentYn() {
+        return sensitiveInfoConsentYn;
     }
 
     public String getDisabilityDescription() {

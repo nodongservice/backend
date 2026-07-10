@@ -73,9 +73,12 @@ public record UserProfileUpsertRequestDto(
         ProfileHighestEducation highestEducation,
         @NotNull(message = "졸업 여부는 필수입니다.")
         ProfileGraduationStatus graduationStatus,
+        List<ProfileEducationEntryDto> educationEntries,
         @NotBlank(message = "주요 경력은 필수입니다.")
         String majorCareer,
+        List<ProfileCareerEntryDto> careerEntries,
         String careerDetail,
+        List<ProfileProjectEntryDto> projectEntries,
         String projectExperience,
         String careerGapReason,
 
@@ -83,15 +86,21 @@ public record UserProfileUpsertRequestDto(
         String targetJob,
         @NotEmpty(message = "보유 기술/역량은 1개 이상 필요합니다.")
         List<String> skills,
+        List<ProfileCertificationEntryDto> certificationEntries,
         List<String> certifications,
+        List<ProfileLanguageEntryDto> languageEntries,
+        List<ProfilePortfolioEntryDto> portfolioEntries,
         String portfolioUrl,
+        List<ProfileAwardEntryDto> awardEntries,
         String awards,
+        List<ProfileTrainingEntryDto> trainingEntries,
         String trainings,
 
         @NotNull(message = "장애 정도는 필수입니다.")
         ProfileDisabilitySeverity disabilitySeverity,
         @NotNull(message = "장애인 등록 여부는 필수입니다.")
         Boolean disabilityRegisteredYn,
+        Boolean sensitiveInfoConsentYn,
         String disabilityDescription,
         String assistiveDevices,
         String workSupportRequirements,
