@@ -4,6 +4,7 @@ import com.bridgework.auth.config.BridgeWorkAuthProperties;
 import com.bridgework.common.config.BridgeWorkDiscordProperties;
 import com.bridgework.common.config.BridgeWorkHealthMonitorProperties;
 import com.bridgework.common.ratelimit.BridgeWorkRateLimitProperties;
+import com.bridgework.common.security.PersonalDataEncryptionProperties;
 import com.bridgework.profile.config.BridgeWorkProfileOcrProperties;
 import com.bridgework.recommend.config.BridgeWorkRecommendProperties;
 import com.bridgework.sync.config.BridgeWorkSyncProperties;
@@ -25,7 +26,8 @@ import org.springframework.scheduling.annotation.EnableScheduling;
         BridgeWorkAuthProperties.class,
         BridgeWorkRecommendProperties.class,
         BridgeWorkProfileOcrProperties.class,
-        BridgeWorkRateLimitProperties.class
+        BridgeWorkRateLimitProperties.class,
+        PersonalDataEncryptionProperties.class
 })
 public class BridgeWorkApplication {
 

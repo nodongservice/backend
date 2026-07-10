@@ -14,6 +14,13 @@ import org.springframework.util.StringUtils;
 public class ProfileAiTagService {
 
     public ProfileAiTags buildTags(UserProfileUpsertRequestDto request) {
+        return buildTags(request, request.requiredSupports(), request.workSupportRequirements(), request.assistiveDevices());
+    }
+
+    public ProfileAiTags buildTags(UserProfileUpsertRequestDto request,
+                                   List<String> requiredSupports,
+                                   String workSupportRequirements,
+                                   String assistiveDevices) {
         List<String> jobTags = mergeUnique(
                 nullableValues(request.desiredJob(), request.targetJob(), request.careerSummary(), request.educationSummary()),
                 request.skills(),
@@ -31,11 +38,11 @@ public class ProfileAiTagService {
         );
 
         List<String> supportTags = mergeUnique(
-                request.requiredSupports(),
+                requiredSupports,
                 nullableValues(
                         enumLabel(request.disabilityType()),
-                        request.workSupportRequirements(),
-                        request.assistiveDevices()
+                        workSupportRequirements,
+                        assistiveDevices
                 )
         );
 

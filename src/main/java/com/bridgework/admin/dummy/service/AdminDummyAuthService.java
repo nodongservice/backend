@@ -1,5 +1,7 @@
 package com.bridgework.admin.dummy.service;
 
+import com.bridgework.admin.auth.entity.AdminAccount;
+import com.bridgework.admin.auth.repository.AdminAccountRepository;
 import com.bridgework.admin.dummy.dto.AdminDummyCaseResponseDto;
 import com.bridgework.admin.dummy.dto.AdminDummyLoginRequestDto;
 import com.bridgework.admin.dummy.dto.AdminDummyLoginResponseDto;
@@ -12,10 +14,12 @@ import com.bridgework.admin.dummy.repository.AdminDummyLoginAuditRepository;
 import com.bridgework.admin.dummy.repository.AdminDummyProfileRepository;
 import com.bridgework.admin.dummy.repository.AdminDummyUserRepository;
 import com.bridgework.auth.config.BridgeWorkAuthProperties;
+import com.bridgework.auth.exception.AuthDomainException;
 import com.bridgework.auth.entity.UserRole;
 import com.bridgework.auth.security.JwtTokenProvider;
 import com.bridgework.auth.service.JwtTokenPair;
 import com.bridgework.auth.service.RefreshTokenStoreService;
+import com.bridgework.audit.service.PersonalDataAccessAuditService;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
@@ -31,22 +35,28 @@ public class AdminDummyAuthService {
     private final AdminDummyUserRepository adminDummyUserRepository;
     private final AdminDummyProfileRepository adminDummyProfileRepository;
     private final AdminDummyLoginAuditRepository adminDummyLoginAuditRepository;
+    private final AdminAccountRepository adminAccountRepository;
     private final JwtTokenProvider jwtTokenProvider;
     private final RefreshTokenStoreService refreshTokenStoreService;
     private final BridgeWorkAuthProperties authProperties;
+    private final PersonalDataAccessAuditService personalDataAccessAuditService;
 
     public AdminDummyAuthService(AdminDummyUserRepository adminDummyUserRepository,
                                  AdminDummyProfileRepository adminDummyProfileRepository,
                                  AdminDummyLoginAuditRepository adminDummyLoginAuditRepository,
+                                 AdminAccountRepository adminAccountRepository,
                                  JwtTokenProvider jwtTokenProvider,
                                  RefreshTokenStoreService refreshTokenStoreService,
-                                 BridgeWorkAuthProperties authProperties) {
+                                 BridgeWorkAuthProperties authProperties,
+                                 PersonalDataAccessAuditService personalDataAccessAuditService) {
         this.adminDummyUserRepository = adminDummyUserRepository;
         this.adminDummyProfileRepository = adminDummyProfileRepository;
         this.adminDummyLoginAuditRepository = adminDummyLoginAuditRepository;
+        this.adminAccountRepository = adminAccountRepository;
         this.jwtTokenProvider = jwtTokenProvider;
         this.refreshTokenStoreService = refreshTokenStoreService;
         this.authProperties = authProperties;
+        this.personalDataAccessAuditService = personalDataAccessAuditService;
     }
 
     @Transactional(readOnly = true)
@@ -65,6 +75,14 @@ public class AdminDummyAuthService {
     public AdminDummyLoginResponseDto loginAsDummyUser(Long adminUserId,
                                                        String requestIp,
                                                        AdminDummyLoginRequestDto request) {
+        AdminAccount adminAccount = adminAccountRepository.findById(adminUserId)
+                .filter(AdminAccount::isActive)
+                .orElseThrow(() -> new AuthDomainException("ADMIN_NOT_FOUND", HttpStatus.NOT_FOUND, "관리자 계정을 찾을 수 없습니다."));
+        if (!adminAccount.isSensitiveProfileAccessEnabled()) {
+            personalDataAccessAuditService.record(adminUserId, "DUMMY_USER_LOGIN", null, null, requestIp, "DENIED", "민감 프로필 접근 권한 없음");
+            throw new AuthDomainException("SENSITIVE_PROFILE_ACCESS_DENIED", HttpStatus.FORBIDDEN, "민감 프로필 접근 권한이 없습니다.");
+        }
+
         String dummyKey = normalizeDummyKey(request.dummyKey());
         if (!StringUtils.hasText(dummyKey)) {
             throw new AdminDummyAuthException(
@@ -116,6 +134,20 @@ public class AdminDummyAuthService {
         loginAudit.setRequestIp(trimToNull(requestIp));
         loginAudit.setIssuedAt(OffsetDateTime.now(ZoneOffset.UTC));
         adminDummyLoginAuditRepository.save(loginAudit);
+        Long defaultProfileId = profiles.stream()
+                .filter(AdminDummyProfileOptionDto::isDefault)
+                .map(AdminDummyProfileOptionDto::profileId)
+                .findFirst()
+                .orElse(profiles.get(0).profileId());
+        personalDataAccessAuditService.record(
+                adminUserId,
+                "DUMMY_USER_LOGIN",
+                dummyUser.getAppUser().getId(),
+                defaultProfileId,
+                trimToNull(requestIp),
+                "GRANTED",
+                "관리자 더미 사용자 대리 로그인"
+        );
 
         return new AdminDummyLoginResponseDto(
                 tokenPair.accessToken(),

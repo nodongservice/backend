@@ -56,6 +56,9 @@ springdoc:
     tags-sorter: alpha
 
 bridgework:
+  security:
+    personal-data-encryption:
+      secret: ${BRIDGEWORK_PERSONAL_DATA_ENCRYPTION_KEY:bridgework-dev-personal-data-encryption-secret}
   openapi:
     server-url: /
   discord:

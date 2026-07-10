@@ -50,6 +50,9 @@ public class AdminAccount {
     @Column(name = "last_login_at")
     private OffsetDateTime lastLoginAt;
 
+    @Column(name = "sensitive_profile_access_enabled", nullable = false)
+    private boolean sensitiveProfileAccessEnabled;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private OffsetDateTime createdAt;
 
@@ -133,6 +136,14 @@ public class AdminAccount {
 
     public OffsetDateTime getLastLoginAt() {
         return lastLoginAt;
+    }
+
+    public boolean isSensitiveProfileAccessEnabled() {
+        return sensitiveProfileAccessEnabled;
+    }
+
+    public void setSensitiveProfileAccessEnabled(boolean sensitiveProfileAccessEnabled) {
+        this.sensitiveProfileAccessEnabled = sensitiveProfileAccessEnabled;
     }
 
     public OffsetDateTime getCreatedAt() {
