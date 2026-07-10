@@ -99,6 +99,8 @@ ALTER TABLE user_profile ALTER COLUMN gender_type DROP NOT NULL;
 ALTER TABLE user_profile ALTER COLUMN disability_type DROP NOT NULL;
 ALTER TABLE user_profile ALTER COLUMN disability_severity DROP NOT NULL;
 ALTER TABLE user_profile ALTER COLUMN disability_registered_yn DROP NOT NULL;
+ALTER TABLE user_profile DROP CONSTRAINT IF EXISTS chk_user_profile_birth_date_required;
+ALTER TABLE user_profile DROP CONSTRAINT IF EXISTS chk_user_profile_detail_address_required;
 
 UPDATE user_profile
 SET
