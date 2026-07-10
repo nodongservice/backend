@@ -6,6 +6,7 @@ import com.bridgework.recommend.dto.RecommendExplainRequestDto;
 import com.bridgework.recommend.dto.RecommendExplainResponseDto;
 import com.bridgework.recommend.dto.RecommendJobResponseDto;
 import com.bridgework.recommend.dto.RecommendRequestDto;
+import com.bridgework.recommend.dto.RecommendTransitTimeDto;
 import com.bridgework.recommend.exception.RecommendDomainException;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -93,6 +94,7 @@ public class RecommendGatewayService {
                 asString(result.get("next_step_summary")),
                 asMapList(result.get("recommended_programs")),
                 asBoolean(result.get("used_llm")),
+                toTransitTime(result.get("transit_time")),
                 aiResponse
         );
     }
@@ -286,5 +288,67 @@ public class RecommendGatewayService {
             return null;
         }
         return Boolean.parseBoolean(String.valueOf(value));
+    }
+
+    @SuppressWarnings("unchecked")
+    private RecommendTransitTimeDto toTransitTime(Object value) {
+        if (!(value instanceof Map<?, ?> rawMap)) {
+            return null;
+        }
+
+        Map<String, Object> map = new LinkedHashMap<>((Map<String, Object>) rawMap);
+        return new RecommendTransitTimeDto(
+                asString(firstPresent(map, "provider")),
+                asString(firstPresent(map, "mode")),
+                asInteger(firstPresent(map, "duration_minutes", "durationMinutes")),
+                asDouble(firstPresent(map, "distance_meters", "distanceMeters")),
+                asInteger(firstPresent(map, "walk_distance_meters", "walkDistanceMeters")),
+                asInteger(firstPresent(map, "fare")),
+                asInteger(firstPresent(map, "transfer_count", "transferCount")),
+                asInteger(firstPresent(map, "path_type", "pathType")),
+                asString(firstPresent(map, "first_start_station", "firstStartStation")),
+                asString(firstPresent(map, "last_end_station", "lastEndStation")),
+                asString(firstPresent(map, "requested_departure_at", "requestedDepartureAt")),
+                asString(firstPresent(map, "departure_policy", "departurePolicy")),
+                asString(firstPresent(map, "source")),
+                asString(firstPresent(map, "error_reason", "errorReason"))
+        );
+    }
+
+    private Object firstPresent(Map<String, Object> map, String... keys) {
+        for (String key : keys) {
+            if (map.containsKey(key)) {
+                return map.get(key);
+            }
+        }
+        return null;
+    }
+
+    private Integer asInteger(Object value) {
+        if (value instanceof Number number) {
+            return number.intValue();
+        }
+        if (value == null) {
+            return null;
+        }
+        try {
+            return Integer.parseInt(String.valueOf(value));
+        } catch (NumberFormatException exception) {
+            return null;
+        }
+    }
+
+    private Double asDouble(Object value) {
+        if (value instanceof Number number) {
+            return number.doubleValue();
+        }
+        if (value == null) {
+            return null;
+        }
+        try {
+            return Double.parseDouble(String.valueOf(value));
+        } catch (NumberFormatException exception) {
+            return null;
+        }
     }
 }

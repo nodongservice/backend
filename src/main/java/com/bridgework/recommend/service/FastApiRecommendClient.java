@@ -76,7 +76,7 @@ public class FastApiRecommendClient {
     }
 
     public Map<String, Object> requestQuickScore(UserProfileResponseDto profile, int limit, int offset, boolean streamMode) {
-        return post(recommendProperties.getQuickPath(), buildProfilePayload(profile, limit, offset, streamMode));
+        return post(recommendProperties.getQuickPath(), buildProfilePayload(profile, limit, offset, streamMode, true));
     }
 
     public Map<String, Object> requestMapScore(UserProfileResponseDto profile, int limit, int offset) {
@@ -84,7 +84,7 @@ public class FastApiRecommendClient {
     }
 
     public Map<String, Object> requestMapScore(UserProfileResponseDto profile, int limit, int offset, boolean streamMode) {
-        return post(recommendProperties.getMapPath(), buildProfilePayload(profile, limit, offset, streamMode));
+        return post(recommendProperties.getMapPath(), buildProfilePayload(profile, limit, offset, streamMode, false));
     }
 
     public Map<String, Object> requestRecommendationExplain(
@@ -228,14 +228,25 @@ public class FastApiRecommendClient {
     }
 
     private Map<String, Object> buildProfilePayload(UserProfileResponseDto profile, int limit, int offset) {
-        return buildProfilePayload(profile, limit, offset, false);
+        return buildProfilePayload(profile, limit, offset, false, true);
     }
 
     private Map<String, Object> buildProfilePayload(UserProfileResponseDto profile, int limit, int offset, boolean streamMode) {
+        return buildProfilePayload(profile, limit, offset, streamMode, true);
+    }
+
+    private Map<String, Object> buildProfilePayload(
+            UserProfileResponseDto profile,
+            int limit,
+            int offset,
+            boolean streamMode,
+            boolean includeTransitTime
+    ) {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("profile", buildScoreProfile(profile));
         payload.put("limit", limit);
         payload.put("offset", offset);
+        payload.put("includeTransitTime", includeTransitTime);
         if (streamMode) {
             payload.put("streamMode", true);
         }

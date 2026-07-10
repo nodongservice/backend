@@ -22,6 +22,8 @@ public record RecommendExplainResponseDto(
         List<Map<String, Object>> recommendedPrograms,
         @Schema(description = "LLM 사용 여부", example = "false")
         Boolean usedLlm,
+        @Schema(description = "선택 공고 예상 통근시간")
+        RecommendTransitTimeDto transitTime,
         @Schema(
                 description = "FastAPI 원본 응답",
                 example = "{\"code\":\"SUCCESS\",\"message\":\"요청이 성공했습니다.\",\"result\":{\"short_summary\":\"...\",\"recommendation_reasons\":[\"...\"],\"caution_points\":[\"...\"],\"checklist\":[\"...\"],\"used_llm\":false}}"
