@@ -11,6 +11,9 @@ import com.bridgework.auth.entity.GenderType;
 import com.bridgework.auth.entity.UserStatus;
 import com.bridgework.auth.repository.AppUserRepository;
 import com.bridgework.common.exception.BridgeWorkDomainException;
+import com.bridgework.profile.dto.ProfileCareerEntryDto;
+import com.bridgework.profile.dto.ProfileEducationEntryDto;
+import com.bridgework.profile.dto.ProfileProjectEntryDto;
 import com.bridgework.profile.dto.UserProfileResponseDto;
 import com.bridgework.profile.dto.UserProfileUpsertRequestDto;
 import com.bridgework.profile.entity.UserProfile;
@@ -195,6 +198,14 @@ class UserProfileServiceTest {
                 "[]",
                 "[]",
                 "[]",
+                "[]",
+                "[]",
+                "[]",
+                "[]",
+                "[]",
+                "[]",
+                "[]",
+                "[]",
                 "[]"
         );
         return profile;
@@ -224,18 +235,27 @@ class UserProfileServiceTest {
 
                 ProfileHighestEducation.BACHELOR,
                 ProfileGraduationStatus.GRADUATED,
+                List.of(new ProfileEducationEntryDto("COLLEGE_4", "테스트대학교", "2011", "2015", "GRADUATED")),
                 "A사 사무보조",
+                List.of(new ProfileCareerEntryDto("A사", "경영지원팀", "2018.01", "2021.12", "문서 관리")),
                 "문서 관리",
+                List.of(new ProfileProjectEntryDto("BOOTCAMP", "내부 시스템 개선", "2020.03", "2020.06", "내부 시스템 개선")),
                 "내부 시스템 개선",
                 "건강 회복",
 
                 "사무보조",
                 List.of("엑셀", "문서작성"),
+                List.of(),
                 List.of("컴활"),
+                List.of(),
+                List.of(),
                 "https://example.com/portfolio",
+                List.of(),
                 "우수사원",
+                List.of(),
                 "직무교육",
                 ProfileDisabilitySeverity.SEVERE,
+                true,
                 true,
                 "이동 시 보조 필요",
                 "수동 휠체어",
