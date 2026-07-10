@@ -36,6 +36,7 @@ public class DiscordNotifierService {
     private static final String HEADER_UNHANDLED_EXCEPTION = "🚨 [Unhandled Exception 알림]";
     private static final String HEADER_HEALTH_ISSUE = "🚨 [시스템 헬스체크 장애]";
     private static final String HEADER_HEALTH_RECOVERY = "✅ [시스템 헬스체크 복구]";
+    private static final String HEADER_ACCESSIBILITY_FEEDBACK_DISLIKE = "👎 [접근성 설명 싫어요 피드백]";
     private static final String HEADER_GENERIC = "ℹ️ [시스템 알림]";
 
     private final WebClient webClient;
@@ -169,8 +170,42 @@ public class DiscordNotifierService {
         send(message);
     }
 
+    public void notifyAccessibilityFeedbackDisliked(Long postingId,
+                                                    String externalId,
+                                                    String companyName,
+                                                    String jobTitle,
+                                                    Long userId,
+                                                    String userEmail,
+                                                    String comment,
+                                                    OffsetDateTime submittedAt) {
+        String safePostingId = postingId == null ? "(unknown)" : String.valueOf(postingId);
+        String safeExternalId = (externalId == null || externalId.isBlank()) ? "(externalId 없음)" : externalId;
+        String safeCompanyName = (companyName == null || companyName.isBlank()) ? "(기업명 없음)" : companyName;
+        String safeJobTitle = (jobTitle == null || jobTitle.isBlank()) ? "(공고명 없음)" : jobTitle;
+        String safeUserId = userId == null ? "(unknown-user)" : String.valueOf(userId);
+        String safeUserEmail = (userEmail == null || userEmail.isBlank()) ? "(이메일 없음)" : userEmail;
+        String safeComment = (comment == null || comment.isBlank()) ? "(내용 없음)" : comment;
+        String safeSubmittedAt = submittedAt == null ? "(unknown-time)" : submittedAt.toString();
+
+        String message = HEADER_ACCESSIBILITY_FEEDBACK_DISLIKE + '\n'
+                + "공고 ID: " + safePostingId + '\n'
+                + "외부 공고 ID: " + safeExternalId + '\n'
+                + "기업명: " + safeCompanyName + '\n'
+                + "공고명: " + safeJobTitle + '\n'
+                + "사용자 ID: " + safeUserId + '\n'
+                + "사용자 이메일: " + safeUserEmail + '\n'
+                + "제출 시각(UTC): " + safeSubmittedAt + '\n'
+                + "사유: " + safeComment + '\n'
+                + '\n';
+
+        send(message, discordProperties.getAccessibilityFeedbackWebhookUrl());
+    }
+
     private void send(String content) {
-        String webhookUrl = discordProperties.getSpringBotWebhookUrl();
+        send(content, discordProperties.getSpringBotWebhookUrl());
+    }
+
+    private void send(String content, String webhookUrl) {
         if (webhookUrl == null || webhookUrl.isBlank()) {
             return;
         }

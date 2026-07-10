@@ -60,6 +60,7 @@ bridgework:
     server-url: /
   discord:
     spring-bot-webhook-url: ""
+    accessibility-feedback-webhook-url: ""
   health-monitor:
     enabled: true
     interval: PT60S

@@ -10,6 +10,8 @@ public class BridgeWorkDiscordProperties {
 
     @NotNull
     private String springBotWebhookUrl = "";
+    @NotNull
+    private String accessibilityFeedbackWebhookUrl = "";
 
     public String getSpringBotWebhookUrl() {
         return springBotWebhookUrl;
@@ -17,5 +19,13 @@ public class BridgeWorkDiscordProperties {
 
     public void setSpringBotWebhookUrl(String springBotWebhookUrl) {
         this.springBotWebhookUrl = springBotWebhookUrl;
+    }
+
+    public String getAccessibilityFeedbackWebhookUrl() {
+        return accessibilityFeedbackWebhookUrl;
+    }
+
+    public void setAccessibilityFeedbackWebhookUrl(String accessibilityFeedbackWebhookUrl) {
+        this.accessibilityFeedbackWebhookUrl = accessibilityFeedbackWebhookUrl;
     }
 }
