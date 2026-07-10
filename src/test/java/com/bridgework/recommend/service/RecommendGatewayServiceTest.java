@@ -254,6 +254,16 @@ class RecommendGatewayServiceTest {
                         "caution_points", List.of("출퇴근 시간 혼잡 가능"),
                         "checklist", List.of("면접 전 근무지 동선을 확인하세요."),
                         "next_step_summary", "비슷한 직무를 준비할 때 아래 프로그램이 도움이 될 수 있어요.",
+                        "transit_time", Map.of(
+                                "provider", "bridgework",
+                                "mode", "estimated_transit",
+                                "duration_minutes", 42,
+                                "walk_distance_meters", 620,
+                                "transfer_count", 1,
+                                "requested_departure_at", "2026-07-13T08:00:00+09:00",
+                                "departure_policy", "weekday_08:00_statistical_estimate",
+                                "source", "Bridgework 대중교통 유사 추정"
+                        ),
                         "recommended_programs", List.of(Map.of(
                                 "title", "직업 적응 훈련 프로그램",
                                 "reason", "작업 적응에 도움이 될 수 있어요.",
@@ -276,6 +286,9 @@ class RecommendGatewayServiceTest {
         assertThat(response.recommendedPrograms()).hasSize(1);
         assertThat(response.recommendedPrograms().get(0).get("title")).isEqualTo("직업 적응 훈련 프로그램");
         assertThat(response.usedLlm()).isFalse();
+        assertThat(response.transitTime()).isNotNull();
+        assertThat(response.transitTime().durationMinutes()).isEqualTo(42);
+        assertThat(response.transitTime().transferCount()).isEqualTo(1);
         assertThat(response.aiResponse()).isEqualTo(aiResponse);
         verify(userProfileService, never()).getProfile(org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.anyLong());
     }
