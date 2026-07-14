@@ -63,7 +63,7 @@ public class NaverGeocodingService {
                 return point;
             }
         }
-        log.warn("지오코딩 매칭 실패 originalAddress={} candidates={}", queryAddress, queryCandidates);
+        log.warn("지오코딩 매칭 실패 candidateCount={}", queryCandidates.size());
         return Optional.empty();
     }
 

@@ -6,6 +6,8 @@ import com.bridgework.auth.entity.UserStatus;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
+import jakarta.persistence.LockModeType;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 
@@ -14,6 +16,10 @@ public interface AppUserRepository extends JpaRepository<AppUser, Long> {
     Optional<AppUser> findByProviderAndProviderUserId(SocialProvider provider, String providerUserId);
 
     Optional<AppUser> findByIdAndStatus(Long id, UserStatus status);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select user from AppUser user where user.id = :id and user.status = :status")
+    Optional<AppUser> findByIdAndStatusForUpdate(Long id, UserStatus status);
 
     List<AppUser> findAllByStatusAndWithdrawalRequestedAtBefore(UserStatus status, OffsetDateTime before);
 

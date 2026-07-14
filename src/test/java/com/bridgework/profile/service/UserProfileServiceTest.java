@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -70,7 +71,7 @@ class UserProfileServiceTest {
     void create_whenBirthDateAndAgeGroupAreMissing_thenThrows() {
         UserProfileUpsertRequestDto request = baseRequest(null, null, "테스트 프로필");
 
-        assertThatThrownBy(() -> userProfileService.create(1L, request))
+        assertThatThrownBy(() -> userProfileService.createWithResolvedHomeCoordinates(1L, request, Optional.empty()))
                 .isInstanceOf(BridgeWorkDomainException.class)
                 .hasMessage("생년월일은 필수입니다.");
     }
@@ -80,10 +81,10 @@ class UserProfileServiceTest {
         UserProfileUpsertRequestDto request = baseRequest(LocalDate.of(1995, 5, 10), null, "테스트 프로필");
         AppUser user = user(1L);
 
-        when(appUserRepository.findByIdAndStatus(1L, UserStatus.ACTIVE)).thenReturn(Optional.of(user));
+        when(appUserRepository.findByIdAndStatusForUpdate(1L, UserStatus.ACTIVE)).thenReturn(Optional.of(user));
         when(userProfileRepository.countByUser_Id(1L)).thenReturn(3L);
 
-        assertThatThrownBy(() -> userProfileService.create(1L, request))
+        assertThatThrownBy(() -> userProfileService.createWithResolvedHomeCoordinates(1L, request, Optional.empty()))
                 .isInstanceOf(BridgeWorkDomainException.class)
                 .hasMessage("프로필은 최대 3개까지 생성할 수 있습니다.");
     }
@@ -98,22 +99,22 @@ class UserProfileServiceTest {
                 List.of("휠체어 접근")
         );
 
-        when(appUserRepository.findByIdAndStatus(1L, UserStatus.ACTIVE)).thenReturn(Optional.of(user));
+        when(appUserRepository.findByIdAndStatusForUpdate(1L, UserStatus.ACTIVE)).thenReturn(Optional.of(user));
         when(userProfileRepository.countByUser_Id(1L)).thenReturn(0L);
-        when(profileAiTagService.buildTags(eq(request), anyList(), any(), any())).thenReturn(tags);
-        when(userProfileRepository.save(any(UserProfile.class))).thenAnswer(invocation -> {
+        when(profileAiTagService.buildTags(eq(request), anyList(), any(), any(), any(), any())).thenReturn(tags);
+        when(userProfileRepository.saveAndFlush(any(UserProfile.class))).thenAnswer(invocation -> {
             UserProfile profile = invocation.getArgument(0, UserProfile.class);
             ReflectionTestUtils.setField(profile, "id", 10L);
             return profile;
         });
 
-        UserProfileResponseDto response = userProfileService.create(1L, request);
+        UserProfileResponseDto response = userProfileService.createWithResolvedHomeCoordinates(1L, request, Optional.empty());
 
         assertThat(response.profileId()).isEqualTo(10L);
         assertThat(response.userId()).isEqualTo(1L);
         assertThat(response.isDefault()).isTrue();
         assertThat(response.profileName()).isEqualTo("테스트 프로필");
-        verify(userProfileRepository).save(any(UserProfile.class));
+        verify(userProfileRepository).saveAndFlush(any(UserProfile.class));
     }
 
     @Test
@@ -126,18 +127,43 @@ class UserProfileServiceTest {
                 List.of("휠체어 접근")
         );
 
-        when(appUserRepository.findByIdAndStatus(1L, UserStatus.ACTIVE)).thenReturn(Optional.of(user));
+        when(appUserRepository.findByIdAndStatusForUpdate(1L, UserStatus.ACTIVE)).thenReturn(Optional.of(user));
         when(userProfileRepository.countByUser_Id(1L)).thenReturn(0L);
-        when(profileAiTagService.buildTags(eq(request), anyList(), any(), any())).thenReturn(tags);
-        when(userProfileRepository.save(any(UserProfile.class))).thenAnswer(invocation -> {
+        when(profileAiTagService.buildTags(eq(request), anyList(), any(), any(), any(), any())).thenReturn(tags);
+        when(userProfileRepository.saveAndFlush(any(UserProfile.class))).thenAnswer(invocation -> {
             UserProfile profile = invocation.getArgument(0, UserProfile.class);
             ReflectionTestUtils.setField(profile, "id", 10L);
             return profile;
         });
 
-        UserProfileResponseDto response = userProfileService.create(1L, request);
+        UserProfileResponseDto response = userProfileService.createWithResolvedHomeCoordinates(1L, request, Optional.empty());
 
         assertThat(response.profileName()).isEqualTo("기본 생성 프로필");
+    }
+
+    @Test
+    void create_withoutSensitiveConsent_doesNotPersistOrDeriveSensitiveInformation() {
+        UserProfileUpsertRequestDto request = baseRequest(LocalDate.of(1995, 5, 10), null, "선택정보 없는 프로필", false);
+        AppUser user = user(1L);
+        ProfileAiTags tags = new ProfileAiTags(List.of("사무보조"), List.of("주간"), List.of());
+
+        when(appUserRepository.findByIdAndStatusForUpdate(1L, UserStatus.ACTIVE)).thenReturn(Optional.of(user));
+        when(userProfileRepository.countByUser_Id(1L)).thenReturn(0L);
+        when(profileAiTagService.buildTags(eq(request), eq(List.of()), isNull(), isNull(), isNull(), isNull()))
+                .thenReturn(tags);
+        when(userProfileRepository.saveAndFlush(any(UserProfile.class))).thenAnswer(invocation -> {
+            UserProfile profile = invocation.getArgument(0, UserProfile.class);
+            ReflectionTestUtils.setField(profile, "id", 10L);
+            return profile;
+        });
+
+        UserProfileResponseDto response = userProfileService.createWithResolvedHomeCoordinates(1L, request, Optional.empty());
+
+        assertThat(response.sensitiveInfoConsentYn()).isFalse();
+        assertThat(response.disabilityType()).isNull();
+        assertThat(response.disabilitySeverity()).isNull();
+        assertThat(response.disabilityRegisteredYn()).isNull();
+        assertThat(response.requiredSupports()).isEmpty();
     }
 
     @Test
@@ -146,6 +172,7 @@ class UserProfileServiceTest {
         UserProfile defaultProfile = profile(11L, user, true);
         UserProfile secondProfile = profile(12L, user, false);
 
+        when(appUserRepository.findByIdAndStatusForUpdate(1L, UserStatus.ACTIVE)).thenReturn(Optional.of(user));
         when(userProfileRepository.findByUser_IdOrderByIsDefaultDescUpdatedAtDesc(1L))
                 .thenReturn(List.of(defaultProfile, secondProfile));
 
@@ -162,6 +189,7 @@ class UserProfileServiceTest {
         AppUser user = user(1L);
         UserProfile defaultProfile = profile(11L, user, true);
 
+        when(appUserRepository.findByIdAndStatusForUpdate(1L, UserStatus.ACTIVE)).thenReturn(Optional.of(user));
         when(userProfileRepository.findByIdAndUser_Id(11L, 1L)).thenReturn(Optional.of(defaultProfile));
         when(userProfileRepository.countByUser_Id(1L)).thenReturn(2L);
 
@@ -233,6 +261,10 @@ class UserProfileServiceTest {
     }
 
     private UserProfileUpsertRequestDto baseRequest(LocalDate birthDate, String ageGroup, String profileName) {
+        return baseRequest(birthDate, ageGroup, profileName, true);
+    }
+
+    private UserProfileUpsertRequestDto baseRequest(LocalDate birthDate, String ageGroup, String profileName, boolean sensitiveConsent) {
         return new UserProfileUpsertRequestDto(
                 "사무보조",
                 "30분",
@@ -277,7 +309,7 @@ class UserProfileServiceTest {
                 "직무교육",
                 ProfileDisabilitySeverity.SEVERE,
                 true,
-                true,
+                sensitiveConsent,
                 "이동 시 보조 필요",
                 "수동 휠체어",
                 "출입구 경사로",

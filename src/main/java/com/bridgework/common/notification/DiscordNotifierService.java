@@ -123,11 +123,15 @@ public class DiscordNotifierService {
     }
 
     public void notifyUnhandledException(String requestUri, String errorCode, String message, Throwable throwable) {
-        String safeRequestUri = (requestUri == null || requestUri.isBlank()) ? "(unknown)" : requestUri;
+        String safeRequestUri = (requestUri == null || requestUri.isBlank())
+                ? "(unknown)"
+                : PersonalDataMaskingUtils.sanitizeText(requestUri);
         String safeErrorCode = (errorCode == null || errorCode.isBlank()) ? "INTERNAL_SERVER_ERROR" : errorCode;
-        String safeMessage = (message == null || message.isBlank()) ? "(메시지 없음)" : message;
+        String safeMessage = (message == null || message.isBlank())
+                ? "(메시지 없음)"
+                : PersonalDataMaskingUtils.sanitizeText(message);
 
-        String rootCause = PersonalDataMaskingUtils.sanitizeText(extractRootCauseMessage(throwable));
+        String rootCause = PersonalDataMaskingUtils.safeRootCauseSummary(throwable);
         String exceptionType = throwable == null ? "(unknown)" : throwable.getClass().getSimpleName();
 
         String discordMessage = HEADER_UNHANDLED_EXCEPTION + '\n'
@@ -435,20 +439,4 @@ public class DiscordNotifierService {
         return message.replace('\n', ' ').replace('\r', ' ').trim();
     }
 
-    private String extractRootCauseMessage(Throwable throwable) {
-        if (throwable == null) {
-            return "(원인 없음)";
-        }
-
-        Throwable current = throwable;
-        while (current.getCause() != null && current.getCause() != current) {
-            current = current.getCause();
-        }
-
-        String message = current.getMessage();
-        if (message == null || message.isBlank()) {
-            message = current.getClass().getSimpleName();
-        }
-        return message.replace('\n', ' ').replace('\r', ' ').trim();
-    }
 }

@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -24,6 +25,7 @@ import com.bridgework.auth.entity.UserRole;
 import com.bridgework.auth.entity.UserStatus;
 import com.bridgework.auth.exception.InvalidAuthRequestException;
 import com.bridgework.auth.exception.InvalidRefreshTokenException;
+import com.bridgework.auth.exception.SignupCompletionInProgressException;
 import com.bridgework.auth.repository.AppUserRepository;
 import com.bridgework.auth.security.JwtTokenProvider;
 import com.bridgework.auth.security.ParsedJwtToken;
@@ -37,7 +39,7 @@ import com.bridgework.profile.enums.ProfileHighestEducation;
 import com.bridgework.profile.enums.ProfileWorkAvailability;
 import com.bridgework.profile.enums.ProfileWorkType;
 import com.bridgework.profile.repository.UserProfileRepository;
-import com.bridgework.profile.service.UserProfileService;
+import com.bridgework.profile.service.UserProfileCommandFacade;
 import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.util.List;
@@ -46,6 +48,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
+import org.mockito.InOrder;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -63,7 +66,9 @@ class AuthServiceTest {
     @Mock
     private JwtTokenProvider jwtTokenProvider;
     @Mock
-    private UserProfileService userProfileService;
+    private SignupCompletionPersistenceService signupCompletionPersistenceService;
+    @Mock
+    private UserProfileCommandFacade userProfileCommandFacade;
     @Mock
     private UserProfileRepository userProfileRepository;
     @Mock
@@ -86,7 +91,8 @@ class AuthServiceTest {
                 refreshTokenStoreService,
                 jwtTokenProvider,
                 authProperties,
-                userProfileService,
+                signupCompletionPersistenceService,
+                userProfileCommandFacade,
                 userProfileRepository,
                 discordNotifierService,
                 withdrawalCancelTokenStoreService,
@@ -164,14 +170,10 @@ class AuthServiceTest {
         );
 
         when(signupSessionStoreService.getRequiredSession("signup-token")).thenReturn(sessionData);
-        when(appUserRepository.findByProviderAndProviderUserId(SocialProvider.KAKAO, "kakao-user-1"))
-                .thenReturn(Optional.empty());
-        when(appUserRepository.existsByEmail("social@example.com")).thenReturn(false);
-        when(appUserRepository.save(any(AppUser.class))).thenAnswer(invocation -> {
-            AppUser user = invocation.getArgument(0, AppUser.class);
-            ReflectionTestUtils.setField(user, "id", 1L);
-            return user;
-        });
+        when(signupSessionStoreService.tryAcquireCompletionLock("signup-token")).thenReturn(Optional.of("lock-owner"));
+        when(userProfileCommandFacade.prepareHomeCoordinates(any())).thenReturn(Optional.empty());
+        when(signupCompletionPersistenceService.complete(request, sessionData, Optional.empty()))
+                .thenReturn(new CompletedSignupUser(1L, "social@example.com", UserRole.USER));
         when(appUserRepository.countRealSignedUpUsers()).thenReturn(1L);
         when(jwtTokenProvider.issueTokenPair(1L, UserRole.USER)).thenReturn(tokenPair);
 
@@ -182,9 +184,14 @@ class AuthServiceTest {
         verify(signupSessionStoreService).deleteSession("signup-token");
         verify(refreshTokenStoreService).save(eq(1L), eq("refresh-id"), eq("refresh-token"), any(Duration.class));
 
-        verify(appUserRepository).save(any(AppUser.class));
-        verify(userProfileService).create(eq(1L), any(UserProfileUpsertRequestDto.class));
+        verify(signupCompletionPersistenceService).complete(request, sessionData, Optional.empty());
+        verify(signupSessionStoreService).releaseCompletionLock("signup-token", "lock-owner");
         verify(discordNotifierService).notifySignupCompleted(eq("social@example.com"), eq(1L));
+
+        InOrder completionOrder = inOrder(signupCompletionPersistenceService, refreshTokenStoreService, signupSessionStoreService);
+        completionOrder.verify(signupCompletionPersistenceService).complete(request, sessionData, Optional.empty());
+        completionOrder.verify(refreshTokenStoreService).save(eq(1L), eq("refresh-id"), eq("refresh-token"), any(Duration.class));
+        completionOrder.verify(signupSessionStoreService).deleteSession("signup-token");
     }
 
     @Test
@@ -200,11 +207,28 @@ class AuthServiceTest {
                 "소셜이름"
         );
 
+        when(signupSessionStoreService.tryAcquireCompletionLock("signup-token")).thenReturn(Optional.of("lock-owner"));
         when(signupSessionStoreService.getRequiredSession("signup-token")).thenReturn(sessionData);
+        when(userProfileCommandFacade.prepareHomeCoordinates(any())).thenReturn(Optional.empty());
+        when(signupCompletionPersistenceService.complete(request, sessionData, Optional.empty()))
+                .thenThrow(new InvalidAuthRequestException("소셜 계정 이메일 정보를 확인할 수 없습니다."));
 
         assertThatThrownBy(() -> authService.completeSignup(request))
                 .isInstanceOf(InvalidAuthRequestException.class)
                 .hasMessageContaining("소셜 계정 이메일");
+        verify(signupSessionStoreService).releaseCompletionLock("signup-token", "lock-owner");
+        verify(signupSessionStoreService, never()).deleteSession("signup-token");
+    }
+
+    @Test
+    void completeSignup_whenSameTokenIsAlreadyProcessing_thenReturnsConflict() {
+        SignupCompleteRequestDto request = new SignupCompleteRequestDto("signup-token", onboardingRequest());
+        when(signupSessionStoreService.tryAcquireCompletionLock("signup-token")).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> authService.completeSignup(request))
+                .isInstanceOf(SignupCompletionInProgressException.class);
+
+        verify(signupSessionStoreService, never()).getRequiredSession("signup-token");
     }
 
     @Test

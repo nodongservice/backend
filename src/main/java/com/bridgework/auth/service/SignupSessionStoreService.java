@@ -5,8 +5,12 @@ import com.bridgework.auth.exception.SignupSessionNotFoundException;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.security.SecureRandom;
+import java.time.Duration;
+import java.util.Collections;
 import java.util.Base64;
 import java.util.Optional;
+import java.util.UUID;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
@@ -14,6 +18,12 @@ import org.springframework.stereotype.Service;
 public class SignupSessionStoreService {
 
     private static final String SIGNUP_SESSION_PREFIX = "auth:signup:";
+    private static final String SIGNUP_COMPLETION_LOCK_PREFIX = "auth:signup-completion-lock:";
+    private static final Duration SIGNUP_COMPLETION_LOCK_VALIDITY = Duration.ofMinutes(2);
+    private static final DefaultRedisScript<Long> RELEASE_LOCK_SCRIPT = new DefaultRedisScript<>(
+            "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end",
+            Long.class
+    );
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
     private final StringRedisTemplate redisTemplate;
@@ -61,6 +71,24 @@ public class SignupSessionStoreService {
 
     public void deleteSession(String signupToken) {
         redisTemplate.delete(SIGNUP_SESSION_PREFIX + signupToken);
+    }
+
+    public Optional<String> tryAcquireCompletionLock(String signupToken) {
+        String owner = UUID.randomUUID().toString();
+        Boolean acquired = redisTemplate.opsForValue().setIfAbsent(
+                SIGNUP_COMPLETION_LOCK_PREFIX + signupToken,
+                owner,
+                SIGNUP_COMPLETION_LOCK_VALIDITY
+        );
+        return Boolean.TRUE.equals(acquired) ? Optional.of(owner) : Optional.empty();
+    }
+
+    public void releaseCompletionLock(String signupToken, String owner) {
+        redisTemplate.execute(
+                RELEASE_LOCK_SCRIPT,
+                Collections.singletonList(SIGNUP_COMPLETION_LOCK_PREFIX + signupToken),
+                owner
+        );
     }
 
     private String generateSecureToken() {

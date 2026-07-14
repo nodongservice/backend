@@ -15,6 +15,8 @@ import com.bridgework.profile.dto.UserProfileResponseDto;
 import com.bridgework.profile.dto.UserProfileUpsertRequestDto;
 import com.bridgework.profile.entity.UserProfile;
 import com.bridgework.profile.enums.LabeledEnum;
+import com.bridgework.profile.enums.ProfileDisabilitySeverity;
+import com.bridgework.profile.enums.ProfileDisabilityType;
 import com.bridgework.profile.exception.ProfileDomainException;
 import com.bridgework.profile.exception.UserProfileNotFoundException;
 import com.bridgework.profile.repository.UserProfileRepository;
@@ -78,9 +80,11 @@ public class UserProfileService {
     }
 
     @Transactional
-    public UserProfileResponseDto create(Long userId, UserProfileUpsertRequestDto request) {
+    public UserProfileResponseDto createWithResolvedHomeCoordinates(Long userId,
+                                                                    UserProfileUpsertRequestDto request,
+                                                                    Optional<NormalizedGeoPoint> homeGeoPoint) {
         validateBirthDateOrAgeGroup(request);
-        AppUser user = loadUser(userId);
+        AppUser user = loadUserForUpdate(userId);
 
         long profileCount = userProfileRepository.countByUser_Id(userId);
         if (profileCount >= MAX_PROFILE_COUNT) {
@@ -96,26 +100,31 @@ public class UserProfileService {
         boolean isDefaultProfile = profileCount == 0;
         profile.setDefault(isDefaultProfile);
         profile.setProfileName(resolveProfileName(request.profileName(), isDefaultProfile, profileCount + 1, null));
-        applyRequestToProfile(profile, request);
+        applyRequestToProfile(profile, request, homeGeoPoint);
 
-        UserProfile savedProfile = userProfileRepository.save(profile);
+        UserProfile savedProfile = userProfileRepository.saveAndFlush(profile);
         return toResponse(savedProfile);
     }
 
     @Transactional
-    public UserProfileResponseDto update(Long userId, Long profileId, UserProfileUpsertRequestDto request) {
+    public UserProfileResponseDto updateWithResolvedHomeCoordinates(Long userId,
+                                                                    Long profileId,
+                                                                    UserProfileUpsertRequestDto request,
+                                                                    Optional<NormalizedGeoPoint> homeGeoPoint) {
         validateBirthDateOrAgeGroup(request);
+        loadUserForUpdate(userId);
         UserProfile profile = userProfileRepository.findByIdAndUser_Id(profileId, userId)
                 .orElseThrow(() -> new UserProfileNotFoundException(profileId));
 
         profile.setProfileName(resolveProfileName(request.profileName(), profile.isDefault(), null, profile.getProfileName()));
-        applyRequestToProfile(profile, request);
-        UserProfile savedProfile = userProfileRepository.save(profile);
+        applyRequestToProfile(profile, request, homeGeoPoint);
+        UserProfile savedProfile = userProfileRepository.saveAndFlush(profile);
         return toResponse(savedProfile);
     }
 
     @Transactional
     public void delete(Long userId, Long profileId) {
+        loadUserForUpdate(userId);
         UserProfile profile = userProfileRepository.findByIdAndUser_Id(profileId, userId)
                 .orElseThrow(() -> new UserProfileNotFoundException(profileId));
 
@@ -141,6 +150,7 @@ public class UserProfileService {
 
     @Transactional
     public UserProfileResponseDto setDefault(Long userId, Long profileId) {
+        loadUserForUpdate(userId);
         List<UserProfile> profiles = userProfileRepository.findByUser_IdOrderByIsDefaultDescUpdatedAtDesc(userId);
         if (profiles.isEmpty()) {
             throw new UserProfileNotFoundException(profileId);
@@ -161,6 +171,7 @@ public class UserProfileService {
         }
 
         userProfileRepository.saveAll(profiles);
+        userProfileRepository.flush();
         return toResponse(targetProfile);
     }
 
@@ -179,22 +190,30 @@ public class UserProfileService {
         return toResponse(profile);
     }
 
-    private AppUser loadUser(Long userId) {
-        return appUserRepository.findByIdAndStatus(userId, UserStatus.ACTIVE)
+    private AppUser loadUserForUpdate(Long userId) {
+        return appUserRepository.findByIdAndStatusForUpdate(userId, UserStatus.ACTIVE)
                 .orElseThrow(() -> new ProfileDomainException("USER_NOT_FOUND", HttpStatus.NOT_FOUND, "사용자를 찾을 수 없습니다."));
     }
 
-    private void applyRequestToProfile(UserProfile profile, UserProfileUpsertRequestDto request) {
-        List<String> sanitizedRequiredSupports = sanitizeSensitiveList(request.requiredSupports(), request.sensitiveInfoConsentYn());
-        String sanitizedDisabilityDescription = sanitizeSensitiveText(request.disabilityDescription(), request.sensitiveInfoConsentYn());
-        String sanitizedAssistiveDevices = sanitizeSensitiveText(request.assistiveDevices(), request.sensitiveInfoConsentYn());
-        String sanitizedWorkSupportRequirements = sanitizeSensitiveText(request.workSupportRequirements(), request.sensitiveInfoConsentYn());
+    private void applyRequestToProfile(UserProfile profile,
+                                       UserProfileUpsertRequestDto request,
+                                       Optional<NormalizedGeoPoint> homeGeoPoint) {
+        boolean consented = Boolean.TRUE.equals(request.sensitiveInfoConsentYn());
+        List<String> sanitizedRequiredSupports = sanitizeSensitiveList(request.requiredSupports(), consented);
+        String sanitizedDisabilityDescription = sanitizeSensitiveText(request.disabilityDescription(), consented);
+        String sanitizedAssistiveDevices = sanitizeSensitiveText(request.assistiveDevices(), consented);
+        String sanitizedWorkSupportRequirements = sanitizeSensitiveText(request.workSupportRequirements(), consented);
+        ProfileDisabilityType sanitizedDisabilityType = consented ? request.disabilityType() : null;
+        ProfileDisabilitySeverity sanitizedDisabilitySeverity = consented ? request.disabilitySeverity() : null;
+        Boolean sanitizedDisabilityRegisteredYn = consented ? request.disabilityRegisteredYn() : null;
 
         ProfileAiTags profileAiTags = profileAiTagService.buildTags(
                 request,
                 sanitizedRequiredSupports,
                 sanitizedWorkSupportRequirements,
-                sanitizedAssistiveDevices
+                sanitizedAssistiveDevices,
+                sanitizedDisabilityType,
+                sanitizedDisabilitySeverity
         );
 
         String preferredWorkEnvironmentsJson = toJson(request.preferredWorkEnvironments());
@@ -246,28 +265,30 @@ public class UserProfileService {
         );
         profile.updateSensitiveInfo(
                 requiredSupportsJson,
-                request.disabilityType() == null ? null : request.disabilityType().name(),
-                request.disabilitySeverity() == null ? null : request.disabilitySeverity().name(),
-                request.disabilityRegisteredYn(),
-                request.sensitiveInfoConsentYn(),
+                sanitizedDisabilityType == null ? null : sanitizedDisabilityType.name(),
+                sanitizedDisabilitySeverity == null ? null : sanitizedDisabilitySeverity.name(),
+                sanitizedDisabilityRegisteredYn,
+                consented,
                 sanitizedDisabilityDescription,
                 sanitizedAssistiveDevices,
                 sanitizedWorkSupportRequirements
         );
-        applyHomeCoordinates(profile, request.detailAddress());
+        applyHomeCoordinates(profile, homeGeoPoint);
     }
 
-    private void applyHomeCoordinates(UserProfile profile, String detailAddress) {
-        Optional<NormalizedGeoPoint> geoPoint;
+    public Optional<NormalizedGeoPoint> prepareHomeCoordinates(String detailAddress) {
         try {
-            geoPoint = naverGeocodingService.geocode(
+            return naverGeocodingService.geocode(
                     syncProperties.getNaverGeocodeApiKeyId(),
                     syncProperties.getNaverGeocodeApiKey(),
                     detailAddress
             );
         } catch (RuntimeException ignored) {
-            geoPoint = Optional.empty();
+            return Optional.empty();
         }
+    }
+
+    private void applyHomeCoordinates(UserProfile profile, Optional<NormalizedGeoPoint> geoPoint) {
         if (geoPoint.isPresent()) {
             NormalizedGeoPoint point = geoPoint.get();
             profile.updateHomeCoordinates(point.latitude(), point.longitude(), point.matchedAddress());
@@ -298,12 +319,12 @@ public class UserProfileService {
         return normalizedContactEmail;
     }
 
-    private List<String> sanitizeSensitiveList(List<String> values, Boolean consent) {
-        return Boolean.TRUE.equals(consent) ? (values == null ? List.of() : values) : List.of();
+    private List<String> sanitizeSensitiveList(List<String> values, boolean consented) {
+        return consented ? (values == null ? List.of() : values) : List.of();
     }
 
-    private String sanitizeSensitiveText(String value, Boolean consent) {
-        return Boolean.TRUE.equals(consent) ? value : null;
+    private String sanitizeSensitiveText(String value, boolean consented) {
+        return consented ? value : null;
     }
 
     private UserProfileResponseDto toResponse(UserProfile profile) {

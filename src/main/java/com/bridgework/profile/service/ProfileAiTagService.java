@@ -2,6 +2,8 @@ package com.bridgework.profile.service;
 
 import com.bridgework.profile.dto.UserProfileUpsertRequestDto;
 import com.bridgework.profile.enums.LabeledEnum;
+import com.bridgework.profile.enums.ProfileDisabilitySeverity;
+import com.bridgework.profile.enums.ProfileDisabilityType;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashSet;
@@ -14,13 +16,37 @@ import org.springframework.util.StringUtils;
 public class ProfileAiTagService {
 
     public ProfileAiTags buildTags(UserProfileUpsertRequestDto request) {
-        return buildTags(request, request.requiredSupports(), request.workSupportRequirements(), request.assistiveDevices());
+        boolean consented = Boolean.TRUE.equals(request.sensitiveInfoConsentYn());
+        return buildTags(
+                request,
+                consented ? request.requiredSupports() : List.of(),
+                consented ? request.workSupportRequirements() : null,
+                consented ? request.assistiveDevices() : null,
+                consented ? request.disabilityType() : null,
+                consented ? request.disabilitySeverity() : null
+        );
     }
 
     public ProfileAiTags buildTags(UserProfileUpsertRequestDto request,
                                    List<String> requiredSupports,
                                    String workSupportRequirements,
                                    String assistiveDevices) {
+        return buildTags(
+                request,
+                requiredSupports,
+                workSupportRequirements,
+                assistiveDevices,
+                request.disabilityType(),
+                request.disabilitySeverity()
+        );
+    }
+
+    public ProfileAiTags buildTags(UserProfileUpsertRequestDto request,
+                                   List<String> requiredSupports,
+                                   String workSupportRequirements,
+                                   String assistiveDevices,
+                                   ProfileDisabilityType disabilityType,
+                                   ProfileDisabilitySeverity disabilitySeverity) {
         List<String> jobTags = mergeUnique(
                 nullableValues(request.desiredJob(), request.targetJob(), request.careerSummary(), request.educationSummary()),
                 request.skills(),
@@ -32,7 +58,7 @@ public class ProfileAiTagService {
                 request.avoidedWorkEnvironments(),
                 nullableValues(
                         enumLabel(request.workAvailability()),
-                        enumLabel(request.disabilitySeverity()),
+                        enumLabel(disabilitySeverity),
                         request.commuteRange()
                 )
         );
@@ -40,7 +66,7 @@ public class ProfileAiTagService {
         List<String> supportTags = mergeUnique(
                 requiredSupports,
                 nullableValues(
-                        enumLabel(request.disabilityType()),
+                        enumLabel(disabilityType),
                         workSupportRequirements,
                         assistiveDevices
                 )
