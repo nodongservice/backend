@@ -80,6 +80,9 @@ public class UserProfileSensitiveInfo {
 
     public void anonymize() {
         this.requiredSupportsJson = "[]";
+        this.disabilityType = null;
+        this.disabilitySeverity = null;
+        this.disabilityRegisteredYn = null;
         this.sensitiveInfoConsentYn = null;
         this.disabilityDescription = null;
         this.assistiveDevices = null;

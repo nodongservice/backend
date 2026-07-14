@@ -9,7 +9,10 @@ import jakarta.validation.ConstraintViolationException;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -75,11 +78,43 @@ public class GlobalExceptionHandler {
                 .body(ApiResponse.error("FILE_TOO_LARGE", "업로드 파일 용량 제한을 초과했습니다."));
     }
 
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<ApiResponse<Object>> handleDataIntegrityViolationException(
+            DataIntegrityViolationException exception,
+            HttpServletRequest request
+    ) {
+        log.warn("데이터 무결성 충돌: uri={}, cause={}",
+                request == null ? "(unknown)" : request.getRequestURI(),
+                PersonalDataMaskingUtils.safeRootCauseSummary(exception));
+        return ResponseEntity
+                .status(HttpStatus.CONFLICT)
+                .body(ApiResponse.error("DATA_CONFLICT", "이미 처리되었거나 현재 상태와 충돌하는 요청입니다."));
+    }
+
+    @ExceptionHandler(ObjectOptimisticLockingFailureException.class)
+    public ResponseEntity<ApiResponse<Object>> handleOptimisticLockingFailureException(
+            ObjectOptimisticLockingFailureException exception,
+            HttpServletRequest request
+    ) {
+        log.warn("동시 수정 충돌: uri={}, cause={}",
+                request == null ? "(unknown)" : request.getRequestURI(),
+                PersonalDataMaskingUtils.safeRootCauseSummary(exception));
+        return ResponseEntity
+                .status(HttpStatus.CONFLICT)
+                .body(ApiResponse.error("CONCURRENT_MODIFICATION", "다른 요청에서 먼저 변경되었습니다. 최신 내용을 확인한 뒤 다시 시도해 주세요."));
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponse<Object>> handleUnexpectedException(Exception exception, HttpServletRequest request) {
-        log.error("처리되지 않은 예외 발생", exception);
+        logSafeServerException("처리되지 않은 예외", exception, request);
+        return ResponseEntity.internalServerError().body(ApiResponse.error("INTERNAL_SERVER_ERROR", "내부 서버 오류가 발생했습니다."));
+    }
+
+    private void logSafeServerException(String title, Exception exception, HttpServletRequest request) {
+        String requestUri = request == null ? "(unknown)" : request.getRequestURI();
+        String safeSummary = PersonalDataMaskingUtils.safeRootCauseSummary(exception);
+        log.error("{}: uri={}, cause={}", title, requestUri, safeSummary);
         try {
-            String requestUri = request == null ? null : request.getRequestURI();
             discordNotifierService.notifyUnhandledException(
                     requestUri,
                     "INTERNAL_SERVER_ERROR",
@@ -87,9 +122,8 @@ public class GlobalExceptionHandler {
                     exception
             );
         } catch (Exception notifyException) {
-            log.warn("예외 알림 전송 실패", notifyException);
+            log.warn("예외 알림 전송 실패: {}", PersonalDataMaskingUtils.safeRootCauseSummary(notifyException));
         }
-        return ResponseEntity.internalServerError().body(ApiResponse.error("INTERNAL_SERVER_ERROR", "내부 서버 오류가 발생했습니다."));
     }
 
     private String toFieldMessage(FieldError fieldError) {

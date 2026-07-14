@@ -12,9 +12,8 @@ import com.bridgework.auth.dto.TokenPairResponseDto;
 import com.bridgework.auth.entity.AppUser;
 import com.bridgework.auth.entity.UserRole;
 import com.bridgework.auth.entity.UserStatus;
-import com.bridgework.auth.exception.DuplicateEmailException;
 import com.bridgework.auth.exception.InvalidRefreshTokenException;
-import com.bridgework.auth.exception.InvalidAuthRequestException;
+import com.bridgework.auth.exception.SignupCompletionInProgressException;
 import com.bridgework.auth.exception.UserNotFoundException;
 import com.bridgework.auth.exception.WithdrawalNotPendingException;
 import com.bridgework.auth.repository.AppUserRepository;
@@ -23,18 +22,21 @@ import com.bridgework.auth.security.ParsedJwtToken;
 import com.bridgework.common.notification.DiscordNotifierService;
 import com.bridgework.profile.entity.UserProfile;
 import com.bridgework.profile.repository.UserProfileRepository;
-import com.bridgework.profile.service.UserProfileService;
+import com.bridgework.profile.service.UserProfileCommandFacade;
 import jakarta.transaction.Transactional;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
-import java.util.Locale;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 @Service
 public class AuthService {
+
+    private static final Logger log = LoggerFactory.getLogger(AuthService.class);
 
     private final AppUserRepository appUserRepository;
     private final SocialOAuthService socialOAuthService;
@@ -42,7 +44,8 @@ public class AuthService {
     private final RefreshTokenStoreService refreshTokenStoreService;
     private final JwtTokenProvider jwtTokenProvider;
     private final BridgeWorkAuthProperties authProperties;
-    private final UserProfileService userProfileService;
+    private final SignupCompletionPersistenceService signupCompletionPersistenceService;
+    private final UserProfileCommandFacade userProfileCommandFacade;
     private final UserProfileRepository userProfileRepository;
     private final DiscordNotifierService discordNotifierService;
     private final WithdrawalCancelTokenStoreService withdrawalCancelTokenStoreService;
@@ -54,7 +57,8 @@ public class AuthService {
                        RefreshTokenStoreService refreshTokenStoreService,
                        JwtTokenProvider jwtTokenProvider,
                        BridgeWorkAuthProperties authProperties,
-                       UserProfileService userProfileService,
+                       SignupCompletionPersistenceService signupCompletionPersistenceService,
+                       UserProfileCommandFacade userProfileCommandFacade,
                        UserProfileRepository userProfileRepository,
                        DiscordNotifierService discordNotifierService,
                        WithdrawalCancelTokenStoreService withdrawalCancelTokenStoreService,
@@ -65,7 +69,8 @@ public class AuthService {
         this.refreshTokenStoreService = refreshTokenStoreService;
         this.jwtTokenProvider = jwtTokenProvider;
         this.authProperties = authProperties;
-        this.userProfileService = userProfileService;
+        this.signupCompletionPersistenceService = signupCompletionPersistenceService;
+        this.userProfileCommandFacade = userProfileCommandFacade;
         this.userProfileRepository = userProfileRepository;
         this.discordNotifierService = discordNotifierService;
         this.withdrawalCancelTokenStoreService = withdrawalCancelTokenStoreService;
@@ -144,38 +149,22 @@ public class AuthService {
         );
     }
 
-    @Transactional
     public TokenPairResponseDto completeSignup(SignupCompleteRequestDto request) {
-        SocialSignupSessionData signupSessionData = signupSessionStoreService.getRequiredSession(request.signupToken());
+        String lockOwner = signupSessionStoreService.tryAcquireCompletionLock(request.signupToken())
+                .orElseThrow(SignupCompletionInProgressException::new);
+        try {
+            SocialSignupSessionData signupSessionData = signupSessionStoreService.getRequiredSession(request.signupToken());
+            var homeGeoPoint = userProfileCommandFacade.prepareHomeCoordinates(request.profile().detailAddress());
+            CompletedSignupUser completedUser = signupCompletionPersistenceService.complete(request, signupSessionData, homeGeoPoint);
 
-        String normalizedEmail = normalizeEmail(signupSessionData.email());
-        if (!StringUtils.hasText(normalizedEmail)) {
-            throw new InvalidAuthRequestException("소셜 계정 이메일 정보를 확인할 수 없습니다. 이메일 제공 동의 후 다시 시도해 주세요.");
+            // DB 커밋이 성공한 뒤에만 Redis 토큰과 가입 세션을 변경한다.
+            TokenPairResponseDto tokenPair = issueAndStoreTokenPair(completedUser.userId(), completedUser.role());
+            signupSessionStoreService.deleteSession(request.signupToken());
+            notifySignupCompletedSafely(completedUser);
+            return tokenPair;
+        } finally {
+            releaseSignupCompletionLockSafely(request.signupToken(), lockOwner);
         }
-
-        validateDuplicateIdentity(normalizedEmail, signupSessionData);
-
-        AppUser user = appUserRepository
-                .findByProviderAndProviderUserId(signupSessionData.provider(), signupSessionData.providerUserId())
-                .orElseGet(AppUser::new);
-
-        user.setProvider(signupSessionData.provider());
-        user.setProviderUserId(signupSessionData.providerUserId());
-        user.setEmail(normalizedEmail);
-        user.setRole(UserRole.USER);
-        user.setSignupCompleted(true);
-        user.setStatus(UserStatus.ACTIVE);
-        user.setWithdrawalRequestedAt(null);
-        user.setDeletedAt(null);
-
-        AppUser savedUser = appUserRepository.save(user);
-        // 가입 완료 시 기본 프로필을 생성해 사용자 상태를 일관되게 만든다.
-        userProfileService.create(savedUser.getId(), request.profile());
-
-        // 회원가입이 완료되면 세션 토큰은 즉시 제거해 재사용을 차단한다.
-        signupSessionStoreService.deleteSession(request.signupToken());
-        discordNotifierService.notifySignupCompleted(savedUser.getEmail(), appUserRepository.countRealSignedUpUsers());
-        return issueAndStoreTokenPair(savedUser);
     }
 
     @Transactional
@@ -292,10 +281,14 @@ public class AuthService {
     }
 
     private TokenPairResponseDto issueAndStoreTokenPair(AppUser user) {
-        JwtTokenPair jwtTokenPair = jwtTokenProvider.issueTokenPair(user.getId(), user.getRole());
+        return issueAndStoreTokenPair(user.getId(), user.getRole());
+    }
+
+    private TokenPairResponseDto issueAndStoreTokenPair(Long userId, UserRole role) {
+        JwtTokenPair jwtTokenPair = jwtTokenProvider.issueTokenPair(userId, role);
 
         refreshTokenStoreService.save(
-                user.getId(),
+                userId,
                 jwtTokenPair.refreshTokenId(),
                 jwtTokenPair.refreshToken(),
                 authProperties.getJwt().getRefreshTokenValidity()
@@ -310,31 +303,23 @@ public class AuthService {
         );
     }
 
-    private void validateDuplicateIdentity(String normalizedEmail,
-                                           SocialSignupSessionData signupSessionData) {
-        AppUser existingBySocial = appUserRepository
-                .findByProviderAndProviderUserId(signupSessionData.provider(), signupSessionData.providerUserId())
-                .orElse(null);
-
-        if (existingBySocial == null) {
-            if (appUserRepository.existsByEmail(normalizedEmail)) {
-                throw new DuplicateEmailException();
-            }
-            return;
-        }
-
-        String existingEmail = normalizeEmail(existingBySocial.getEmail());
-        if (!normalizedEmail.equals(existingEmail)
-                && appUserRepository.existsByEmail(normalizedEmail)) {
-            throw new DuplicateEmailException();
+    private void notifySignupCompletedSafely(CompletedSignupUser completedUser) {
+        try {
+            discordNotifierService.notifySignupCompleted(
+                    completedUser.email(),
+                    appUserRepository.countRealSignedUpUsers()
+            );
+        } catch (Exception exception) {
+            log.warn("회원가입 완료 알림 전송 준비 실패: {}", exception.getClass().getSimpleName());
         }
     }
 
-    private String normalizeEmail(String email) {
-        if (!StringUtils.hasText(email)) {
-            return null;
+    private void releaseSignupCompletionLockSafely(String signupToken, String lockOwner) {
+        try {
+            signupSessionStoreService.releaseCompletionLock(signupToken, lockOwner);
+        } catch (Exception exception) {
+            log.warn("회원가입 완료 잠금 해제 실패: {}", exception.getClass().getSimpleName());
         }
-        return email.trim().toLowerCase(Locale.ROOT);
     }
 
     private String resolveDefaultProfileName(Long userId) {
