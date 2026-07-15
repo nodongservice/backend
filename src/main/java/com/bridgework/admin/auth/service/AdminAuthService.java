@@ -7,7 +7,8 @@ import com.bridgework.admin.auth.exception.AdminAccountLockedException;
 import com.bridgework.admin.auth.exception.InvalidAdminCredentialsException;
 import com.bridgework.admin.auth.repository.AdminAccountRepository;
 import com.bridgework.auth.entity.UserRole;
-import com.bridgework.auth.security.JwtTokenProvider;
+import com.bridgework.auth.dto.TokenPairResponseDto;
+import com.bridgework.auth.service.TokenSessionService;
 import com.bridgework.common.notification.DiscordNotifierService;
 import java.time.Duration;
 import java.time.OffsetDateTime;
@@ -26,16 +27,16 @@ public class AdminAuthService {
 
     private final AdminAccountRepository adminAccountRepository;
     private final PasswordEncoder passwordEncoder;
-    private final JwtTokenProvider jwtTokenProvider;
+    private final TokenSessionService tokenSessionService;
     private final DiscordNotifierService discordNotifierService;
 
     public AdminAuthService(AdminAccountRepository adminAccountRepository,
                             PasswordEncoder passwordEncoder,
-                            JwtTokenProvider jwtTokenProvider,
+                            TokenSessionService tokenSessionService,
                             DiscordNotifierService discordNotifierService) {
         this.adminAccountRepository = adminAccountRepository;
         this.passwordEncoder = passwordEncoder;
-        this.jwtTokenProvider = jwtTokenProvider;
+        this.tokenSessionService = tokenSessionService;
         this.discordNotifierService = discordNotifierService;
     }
 
@@ -76,13 +77,14 @@ public class AdminAuthService {
         }
 
         adminAccount.clearLoginFailureState(now);
-        JwtTokenProvider.IssuedAccessToken issuedAccessToken =
-                jwtTokenProvider.issueAccessToken(adminAccount.getId(), adminAccount.getRole());
+        TokenPairResponseDto tokenPair = tokenSessionService.issue(adminAccount.getId(), adminAccount.getRole());
 
         return new AdminLoginResponseDto(
-                issuedAccessToken.token(),
-                "Bearer",
-                issuedAccessToken.expiresAt().withOffsetSameInstant(ZoneOffset.UTC)
+                tokenPair.accessToken(),
+                tokenPair.refreshToken(),
+                tokenPair.tokenType(),
+                tokenPair.accessTokenExpiresAt(),
+                tokenPair.refreshTokenExpiresAt()
         );
     }
 

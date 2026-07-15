@@ -902,7 +902,12 @@ FastAPI 후보 조회는 모집 중인 공고와 마감일이 지나지 않은 �
   - 요청 바디: `{"loginId":"admin01","password":"***"}`
   - 관리자 계정은 `admin_account` 테이블에 사전 등록되어 있어야 함
 - 토큰 재발급: `POST /api/v1/auth/token/refresh`
+  - 브라우저는 `HttpOnly`, `SameSite=Lax` 리프레시 쿠키를 자동 전송하며 응답 JSON에는 리프레시 토큰 원문이 포함되지 않음
+  - 리프레시 토큰은 Redis Lua 스크립트로 1회성 원자 회전하고 관리자/사용자 키 공간을 분리함
 - 로그아웃: `POST /api/v1/auth/logout`
+  - 액세스 토큰이 만료된 상태에서도 리프레시 쿠키로 로그아웃할 수 있음
+  - Redis 세션을 폐기하므로 해당 세션에서 발급한 액세스 토큰도 즉시 무효화됨
+- 액세스 토큰은 15분, 리프레시 세션은 14일이며 JWT issuer와 Redis 세션 상태를 함께 검증함
 - 내 정보 조회: `GET /api/v1/auth/me`
 - 회원 탈퇴 신청: `DELETE /api/v1/auth/withdraw`
 - 회원 탈퇴 신청 취소: `POST /api/v1/auth/withdraw/cancel`

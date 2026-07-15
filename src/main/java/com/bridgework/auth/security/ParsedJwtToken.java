@@ -6,6 +6,7 @@ public record ParsedJwtToken(
         Long userId,
         UserRole role,
         String tokenId,
-        String tokenType
+        String tokenType,
+        String sessionId
 ) {
 }

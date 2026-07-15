@@ -6,6 +6,7 @@ public record JwtTokenPair(
         String accessToken,
         String refreshToken,
         String refreshTokenId,
+        String sessionId,
         OffsetDateTime accessTokenExpiresAt,
         OffsetDateTime refreshTokenExpiresAt
 ) {

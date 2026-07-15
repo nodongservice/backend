@@ -4,6 +4,7 @@ import com.bridgework.admin.dummy.dto.AdminDummyCaseResponseDto;
 import com.bridgework.admin.dummy.dto.AdminDummyLoginRequestDto;
 import com.bridgework.admin.dummy.dto.AdminDummyLoginResponseDto;
 import com.bridgework.admin.dummy.service.AdminDummyAuthService;
+import com.bridgework.auth.service.RefreshTokenCookieService;
 import com.bridgework.auth.exception.UnauthorizedException;
 import com.bridgework.auth.security.UserPrincipal;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -16,6 +17,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import java.util.List;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.HttpHeaders;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -30,9 +32,12 @@ import org.springframework.web.bind.annotation.RestController;
 public class AdminDummyAuthController {
 
     private final AdminDummyAuthService adminDummyAuthService;
+    private final RefreshTokenCookieService refreshTokenCookieService;
 
-    public AdminDummyAuthController(AdminDummyAuthService adminDummyAuthService) {
+    public AdminDummyAuthController(AdminDummyAuthService adminDummyAuthService,
+                                    RefreshTokenCookieService refreshTokenCookieService) {
         this.adminDummyAuthService = adminDummyAuthService;
+        this.refreshTokenCookieService = refreshTokenCookieService;
     }
 
     @GetMapping("/cases")
@@ -53,7 +58,7 @@ public class AdminDummyAuthController {
     )
     @ApiResponse(responseCode = "200", description = "로그인 성공",
             content = @Content(examples = @ExampleObject(
-                    value = "{\"code\":\"SUCCESS\",\"message\":\"요청이 성공했습니다.\",\"result\":{\"accessToken\":\"<DUMMY_USER_ACCESS_TOKEN>\",\"refreshToken\":\"<DUMMY_USER_REFRESH_TOKEN>\",\"tokenType\":\"Bearer\",\"accessTokenExpiresAt\":\"2026-05-08T08:00:00Z\",\"refreshTokenExpiresAt\":\"2026-05-22T08:00:00Z\",\"userId\":6,\"dummyKey\":\"case-office-rookie\",\"profiles\":[{\"profileId\":3,\"profileKey\":\"office-default\",\"profileLabel\":\"사무신입 기본형\",\"scenarioSummary\":\"필수 입력 위주 기본 프로필\",\"isDefault\":true}]}}"
+                    value = "{\"code\":\"SUCCESS\",\"message\":\"요청이 성공했습니다.\",\"result\":{\"accessToken\":\"<DUMMY_USER_ACCESS_TOKEN>\",\"tokenType\":\"Bearer\",\"accessTokenExpiresAt\":\"2026-05-08T08:00:00Z\",\"refreshTokenExpiresAt\":\"2026-05-22T08:00:00Z\",\"userId\":6,\"dummyKey\":\"case-office-rookie\",\"profiles\":[{\"profileId\":3,\"profileKey\":\"office-default\",\"profileLabel\":\"사무신입 기본형\",\"scenarioSummary\":\"필수 입력 위주 기본 프로필\",\"isDefault\":true}]}}"
             )))
     public ResponseEntity<com.bridgework.common.dto.ApiResponse<AdminDummyLoginResponseDto>> loginAsDummyUser(
             Authentication authentication,
@@ -62,9 +67,10 @@ public class AdminDummyAuthController {
     ) {
         Long adminUserId = currentUserId(authentication);
         String requestIp = resolveRequestIp(httpServletRequest);
-        return ResponseEntity.ok(com.bridgework.common.dto.ApiResponse.success(
-                adminDummyAuthService.loginAsDummyUser(adminUserId, requestIp, request)
-        ));
+        AdminDummyLoginResponseDto response = adminDummyAuthService.loginAsDummyUser(adminUserId, requestIp, request);
+        return ResponseEntity.ok()
+                .header(HttpHeaders.SET_COOKIE, refreshTokenCookieService.createHeader(response.refreshToken()))
+                .body(com.bridgework.common.dto.ApiResponse.success(response));
     }
 
     private Long currentUserId(Authentication authentication) {

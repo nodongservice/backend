@@ -10,6 +10,7 @@ import com.bridgework.auth.entity.AppUser;
 import com.bridgework.auth.entity.UserRole;
 import com.bridgework.auth.entity.UserStatus;
 import com.bridgework.auth.repository.AppUserRepository;
+import com.bridgework.auth.service.RefreshTokenStoreService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.Optional;
 import org.junit.jupiter.api.AfterEach;
@@ -32,6 +33,8 @@ class JwtAuthenticationFilterTest {
     private AppUserRepository appUserRepository;
     @Mock
     private AdminAccountRepository adminAccountRepository;
+    @Mock
+    private RefreshTokenStoreService refreshTokenStoreService;
 
     @AfterEach
     void clearContext() {
@@ -44,11 +47,13 @@ class JwtAuthenticationFilterTest {
                 jwtTokenProvider,
                 appUserRepository,
                 adminAccountRepository,
+                refreshTokenStoreService,
                 new ObjectMapper()
         );
         when(jwtTokenProvider.parse("admin-token"))
-                .thenReturn(new ParsedJwtToken(99L, UserRole.ADMIN, "token-id", JwtTokenProvider.TOKEN_TYPE_ACCESS));
+                .thenReturn(new ParsedJwtToken(99L, UserRole.ADMIN, "token-id", JwtTokenProvider.TOKEN_TYPE_ACCESS, "session-id"));
         when(adminAccountRepository.existsByIdAndActiveTrue(99L)).thenReturn(true);
+        when(refreshTokenStoreService.isSessionActive(99L, UserRole.ADMIN, "session-id")).thenReturn(true);
 
         MockHttpServletRequest request = authorizedRequest("admin-token");
         MockHttpServletResponse response = new MockHttpServletResponse();
@@ -68,10 +73,11 @@ class JwtAuthenticationFilterTest {
                 jwtTokenProvider,
                 appUserRepository,
                 adminAccountRepository,
+                refreshTokenStoreService,
                 new ObjectMapper()
         );
         when(jwtTokenProvider.parse("admin-token"))
-                .thenReturn(new ParsedJwtToken(99L, UserRole.ADMIN, "token-id", JwtTokenProvider.TOKEN_TYPE_ACCESS));
+                .thenReturn(new ParsedJwtToken(99L, UserRole.ADMIN, "token-id", JwtTokenProvider.TOKEN_TYPE_ACCESS, "session-id"));
         when(adminAccountRepository.existsByIdAndActiveTrue(99L)).thenReturn(false);
 
         MockHttpServletRequest request = authorizedRequest("admin-token");
@@ -92,11 +98,13 @@ class JwtAuthenticationFilterTest {
                 jwtTokenProvider,
                 appUserRepository,
                 adminAccountRepository,
+                refreshTokenStoreService,
                 new ObjectMapper()
         );
         when(jwtTokenProvider.parse("user-token"))
-                .thenReturn(new ParsedJwtToken(7L, UserRole.USER, "token-id", JwtTokenProvider.TOKEN_TYPE_ACCESS));
+                .thenReturn(new ParsedJwtToken(7L, UserRole.USER, "token-id", JwtTokenProvider.TOKEN_TYPE_ACCESS, "session-id"));
         when(appUserRepository.findByIdAndStatus(7L, UserStatus.ACTIVE)).thenReturn(Optional.of(new AppUser()));
+        when(refreshTokenStoreService.isSessionActive(7L, UserRole.USER, "session-id")).thenReturn(true);
 
         MockHttpServletRequest request = authorizedRequest("user-token");
         MockHttpServletResponse response = new MockHttpServletResponse();
@@ -107,6 +115,30 @@ class JwtAuthenticationFilterTest {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         assertThat(authentication).isNotNull();
         verify(adminAccountRepository, never()).existsByIdAndActiveTrue(7L);
+    }
+
+    @Test
+    void doFilterInternal_whenSessionWasRevoked_thenReturnsUnauthorized() throws Exception {
+        JwtAuthenticationFilter filter = new JwtAuthenticationFilter(
+                jwtTokenProvider,
+                appUserRepository,
+                adminAccountRepository,
+                refreshTokenStoreService,
+                new ObjectMapper()
+        );
+        when(jwtTokenProvider.parse("user-token"))
+                .thenReturn(new ParsedJwtToken(
+                        7L, UserRole.USER, "token-id", JwtTokenProvider.TOKEN_TYPE_ACCESS, "revoked-session"
+                ));
+        when(appUserRepository.findByIdAndStatus(7L, UserStatus.ACTIVE)).thenReturn(Optional.of(new AppUser()));
+        when(refreshTokenStoreService.isSessionActive(7L, UserRole.USER, "revoked-session")).thenReturn(false);
+
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        filter.doFilter(authorizedRequest("user-token"), response, new MockFilterChain());
+
+        assertThat(response.getStatus()).isEqualTo(401);
+        assertThat(response.getContentAsString()).contains("종료된 로그인 세션입니다.");
+        assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
     }
 
     private MockHttpServletRequest authorizedRequest(String token) {

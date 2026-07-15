@@ -57,12 +57,14 @@ bridgework:
       - http://localhost:3000
     jwt:
       secret: ${BRIDGEWORK_AUTH_JWT_SECRET}
+    refresh-cookie:
+      secure: true
     oauth2:
       kakao:
         client-id: 0d5fffe82670b3aba1f9c1c2e551dbee
         client-secret: ${KAKAO_CLIENT_SECRET}
-        redirect-uri: http://localhost:3000/auth/kakao/callback
+        redirect-uri: https://www.bridgework.cloud/auth/kakao/callback
       naver:
         client-id: sk1Y_ivVnHWKz59glY0x
         client-secret: ${NAVER_CLIENT_SECRET}
-        redirect-uri: http://localhost:3000/auth/naver/callback
+        redirect-uri: https://www.bridgework.cloud/auth/naver/callback
