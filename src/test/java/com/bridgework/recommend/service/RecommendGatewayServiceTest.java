@@ -79,6 +79,19 @@ class RecommendGatewayServiceTest {
     }
 
     @Test
+    void recommendQuick_whenAiDisabled_thenAllowsOffsetBeyondPreviousFrontendCap() {
+        when(recommendJobQueryService.getLatestRecruitments(100, 1_200)).thenReturn(List.of());
+        when(recommendJobQueryService.countLatestRecruitments()).thenReturn(1_250);
+
+        recommendGatewayService.recommendQuick(
+                1L,
+                new RecommendRequestDto(false, null, 100, 1_200)
+        );
+
+        verify(recommendJobQueryService).getLatestRecruitments(100, 1_200);
+    }
+
+    @Test
     void recommendMap_whenAiDisabled_thenReturnsFallbackScoreAndEvidence() {
         RecommendJobResponseDto job = new RecommendJobResponseDto(
                 1L, 1L, "pd_kepad_recruitment", "사업장", "사무보조", "서울", "정규직", "신입",
