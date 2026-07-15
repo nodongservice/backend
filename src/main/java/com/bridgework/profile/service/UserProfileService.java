@@ -100,7 +100,7 @@ public class UserProfileService {
         boolean isDefaultProfile = profileCount == 0;
         profile.setDefault(isDefaultProfile);
         profile.setProfileName(resolveProfileName(request.profileName(), isDefaultProfile, profileCount + 1, null));
-        applyRequestToProfile(profile, request, homeGeoPoint);
+        applyRequestToProfile(profile, request, homeGeoPoint, false);
 
         UserProfile savedProfile = userProfileRepository.saveAndFlush(profile);
         return toResponse(savedProfile);
@@ -115,9 +115,11 @@ public class UserProfileService {
         loadUserForUpdate(userId);
         UserProfile profile = userProfileRepository.findByIdAndUser_Id(profileId, userId)
                 .orElseThrow(() -> new UserProfileNotFoundException(profileId));
+        boolean preserveExistingHomeCoordinates = homeGeoPoint.isEmpty()
+                && sameAddress(profile.getDetailAddress(), request.detailAddress());
 
         profile.setProfileName(resolveProfileName(request.profileName(), profile.isDefault(), null, profile.getProfileName()));
-        applyRequestToProfile(profile, request, homeGeoPoint);
+        applyRequestToProfile(profile, request, homeGeoPoint, preserveExistingHomeCoordinates);
         UserProfile savedProfile = userProfileRepository.saveAndFlush(profile);
         return toResponse(savedProfile);
     }
@@ -165,13 +167,18 @@ public class UserProfileService {
             return toResponse(targetProfile);
         }
 
-        // 기본 프로필은 사용자당 1개만 유지한다.
-        for (UserProfile profile : profiles) {
-            profile.setDefault(profile.getId().equals(profileId));
-        }
+        // DB의 부분 unique index(user_id where is_default=true)와 충돌하지 않도록
+        // 기존 기본값을 먼저 해제하고 flush한 다음 새 기본값을 저장한다.
+        profiles.stream()
+                .filter(UserProfile::isDefault)
+                .findFirst()
+                .ifPresent(currentDefault -> {
+                    currentDefault.setDefault(false);
+                    userProfileRepository.saveAndFlush(currentDefault);
+                });
 
-        userProfileRepository.saveAll(profiles);
-        userProfileRepository.flush();
+        targetProfile.setDefault(true);
+        userProfileRepository.saveAndFlush(targetProfile);
         return toResponse(targetProfile);
     }
 
@@ -197,7 +204,8 @@ public class UserProfileService {
 
     private void applyRequestToProfile(UserProfile profile,
                                        UserProfileUpsertRequestDto request,
-                                       Optional<NormalizedGeoPoint> homeGeoPoint) {
+                                       Optional<NormalizedGeoPoint> homeGeoPoint,
+                                       boolean preserveExistingHomeCoordinates) {
         boolean consented = Boolean.TRUE.equals(request.sensitiveInfoConsentYn());
         List<String> sanitizedRequiredSupports = sanitizeSensitiveList(request.requiredSupports(), consented);
         String sanitizedDisabilityDescription = sanitizeSensitiveText(request.disabilityDescription(), consented);
@@ -273,7 +281,7 @@ public class UserProfileService {
                 sanitizedAssistiveDevices,
                 sanitizedWorkSupportRequirements
         );
-        applyHomeCoordinates(profile, homeGeoPoint);
+        applyHomeCoordinates(profile, homeGeoPoint, preserveExistingHomeCoordinates);
     }
 
     public Optional<NormalizedGeoPoint> prepareHomeCoordinates(String detailAddress) {
@@ -288,13 +296,25 @@ public class UserProfileService {
         }
     }
 
-    private void applyHomeCoordinates(UserProfile profile, Optional<NormalizedGeoPoint> geoPoint) {
+    private void applyHomeCoordinates(UserProfile profile,
+                                      Optional<NormalizedGeoPoint> geoPoint,
+                                      boolean preserveExistingHomeCoordinates) {
         if (geoPoint.isPresent()) {
             NormalizedGeoPoint point = geoPoint.get();
             profile.updateHomeCoordinates(point.latitude(), point.longitude(), point.matchedAddress());
             return;
         }
+        if (preserveExistingHomeCoordinates) {
+            return;
+        }
         profile.updateHomeCoordinates(null, null, null);
+    }
+
+    private boolean sameAddress(String existingAddress, String requestedAddress) {
+        String normalizedExistingAddress = StringUtils.trimWhitespace(existingAddress);
+        String normalizedRequestedAddress = StringUtils.trimWhitespace(requestedAddress);
+        return StringUtils.hasText(normalizedExistingAddress)
+                && normalizedExistingAddress.equals(normalizedRequestedAddress);
     }
 
     private void validateBirthDateOrAgeGroup(UserProfileUpsertRequestDto request) {

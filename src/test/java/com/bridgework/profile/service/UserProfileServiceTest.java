@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -33,6 +34,9 @@ import com.bridgework.profile.repository.UserProfileRepository;
 import com.bridgework.sync.config.BridgeWorkSyncProperties;
 import com.bridgework.sync.normalized.NaverGeocodingService;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import jakarta.validation.Validation;
+import jakarta.validation.Validator;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
@@ -40,6 +44,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
+import org.mockito.InOrder;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -54,14 +59,18 @@ class UserProfileServiceTest {
     private ProfileAiTagService profileAiTagService;
 
     private UserProfileService userProfileService;
+    private ObjectMapper objectMapper;
+    private Validator validator;
 
     @BeforeEach
     void setUp() {
+        objectMapper = new ObjectMapper().findAndRegisterModules();
+        validator = Validation.buildDefaultValidatorFactory().getValidator();
         userProfileService = new UserProfileService(
                 userProfileRepository,
                 appUserRepository,
                 profileAiTagService,
-                new ObjectMapper(),
+                objectMapper,
                 new NaverGeocodingService(null, new ObjectMapper()),
                 new BridgeWorkSyncProperties()
         );
@@ -74,6 +83,29 @@ class UserProfileServiceTest {
         assertThatThrownBy(() -> userProfileService.createWithResolvedHomeCoordinates(1L, request, Optional.empty()))
                 .isInstanceOf(BridgeWorkDomainException.class)
                 .hasMessage("생년월일은 필수입니다.");
+    }
+
+    @Test
+    void requestValidation_rejectsInvalidPhoneAndOversizedNestedEntry() throws Exception {
+        UserProfileUpsertRequestDto baseRequest = baseRequest(
+                LocalDate.of(1995, 5, 10),
+                null,
+                "테스트 프로필"
+        );
+        ObjectNode invalidJson = objectMapper.valueToTree(baseRequest);
+        invalidJson.put("contactPhone", "1234");
+        ((ObjectNode) invalidJson.withArray("educationEntries").get(0))
+                .put("schoolName", "가".repeat(301));
+        UserProfileUpsertRequestDto invalidRequest = objectMapper.treeToValue(
+                invalidJson,
+                UserProfileUpsertRequestDto.class
+        );
+
+        var violations = validator.validate(invalidRequest);
+
+        assertThat(violations)
+                .extracting(violation -> violation.getPropertyPath().toString())
+                .contains("contactPhone", "educationEntries[0].schoolName");
     }
 
     @Test
@@ -167,6 +199,31 @@ class UserProfileServiceTest {
     }
 
     @Test
+    void update_whenGeocodingTemporarilyFailsForUnchangedAddress_preservesExistingCoordinates() {
+        AppUser user = user(1L);
+        UserProfile profile = profile(11L, user, true);
+        profile.updateHomeCoordinates(37.4979, 127.0276, "서울 강남구");
+        UserProfileUpsertRequestDto request = baseRequest(LocalDate.of(1995, 5, 10), null, "테스트 프로필");
+
+        when(appUserRepository.findByIdAndStatusForUpdate(1L, UserStatus.ACTIVE)).thenReturn(Optional.of(user));
+        when(userProfileRepository.findByIdAndUser_Id(11L, 1L)).thenReturn(Optional.of(profile));
+        when(profileAiTagService.buildTags(eq(request), anyList(), any(), any(), any(), any()))
+                .thenReturn(new ProfileAiTags(List.of("사무보조"), List.of("주간"), List.of("휠체어 접근")));
+        when(userProfileRepository.saveAndFlush(profile)).thenReturn(profile);
+
+        UserProfileResponseDto response = userProfileService.updateWithResolvedHomeCoordinates(
+                1L,
+                11L,
+                request,
+                Optional.empty()
+        );
+
+        assertThat(response.homeLat()).isEqualTo(37.4979);
+        assertThat(response.homeLng()).isEqualTo(127.0276);
+        assertThat(response.homeGeocodedAddress()).isEqualTo("서울 강남구");
+    }
+
+    @Test
     void setDefault_shouldSwitchDefaultProfile() {
         AppUser user = user(1L);
         UserProfile defaultProfile = profile(11L, user, true);
@@ -181,7 +238,9 @@ class UserProfileServiceTest {
         assertThat(response.profileId()).isEqualTo(12L);
         assertThat(defaultProfile.isDefault()).isFalse();
         assertThat(secondProfile.isDefault()).isTrue();
-        verify(userProfileRepository).saveAll(any());
+        InOrder saveOrder = inOrder(userProfileRepository);
+        saveOrder.verify(userProfileRepository).saveAndFlush(defaultProfile);
+        saveOrder.verify(userProfileRepository).saveAndFlush(secondProfile);
     }
 
     @Test

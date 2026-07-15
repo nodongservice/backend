@@ -9,6 +9,7 @@ import com.bridgework.profile.enums.ProfileMilitaryService;
 import com.bridgework.profile.enums.ProfileWorkAvailability;
 import com.bridgework.profile.enums.ProfileWorkTimePreference;
 import com.bridgework.profile.enums.ProfileWorkType;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
@@ -16,7 +17,9 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.PastOrPresent;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
+import jakarta.validation.Valid;
 import java.time.LocalDate;
 import java.util.List;
 
@@ -46,9 +49,12 @@ public record UserProfileUpsertRequestDto(
         // 통근 범위는 화면 필터에서 매 요청마다 선택 가능하므로 선택 입력으로 둔다.
         @Size(max = 120, message = "통근 범위는 120자 이하여야 합니다.")
         String commuteRange,
-        List<String> preferredWorkEnvironments,
-        List<String> avoidedWorkEnvironments,
-        List<String> requiredSupports,
+        @Size(max = 50, message = "선호 근무환경은 최대 50개까지 입력할 수 있습니다.")
+        List<@NotBlank @Size(max = 200) String> preferredWorkEnvironments,
+        @Size(max = 50, message = "기피 근무환경은 최대 50개까지 입력할 수 있습니다.")
+        List<@NotBlank @Size(max = 200) String> avoidedWorkEnvironments,
+        @Size(max = 50, message = "필요 지원사항은 최대 50개까지 입력할 수 있습니다.")
+        List<@NotBlank @Size(max = 300) String> requiredSupports,
         ProfileDisabilityType disabilityType,
         @Size(max = 500, message = "경력 요약은 500자 이하여야 합니다.")
         String careerSummary,
@@ -63,6 +69,7 @@ public record UserProfileUpsertRequestDto(
         @Size(max = 100, message = "이름은 100자 이하여야 합니다.")
         String fullName,
         @NotBlank(message = "연락처는 필수입니다.")
+        @Pattern(regexp = "^01[016789]-\\d{3,4}-\\d{4}$", message = "연락처 형식이 올바르지 않습니다.")
         @Size(max = 32, message = "연락처는 32자 이하여야 합니다.")
         String contactPhone,
         @Email(message = "이메일 형식이 올바르지 않습니다.")
@@ -86,13 +93,21 @@ public record UserProfileUpsertRequestDto(
         ProfileHighestEducation highestEducation,
         @NotNull(message = "졸업 여부는 필수입니다.")
         ProfileGraduationStatus graduationStatus,
+        @Valid
+        @Size(max = 50, message = "학력 항목은 최대 50개까지 입력할 수 있습니다.")
         List<ProfileEducationEntryDto> educationEntries,
         @NotBlank(message = "주요 경력은 필수입니다.")
         @Size(max = 500, message = "주요 경력은 500자 이하여야 합니다.")
         String majorCareer,
+        @Valid
+        @Size(max = 50, message = "경력 항목은 최대 50개까지 입력할 수 있습니다.")
         List<ProfileCareerEntryDto> careerEntries,
+        @Size(max = 5000, message = "세부 경력은 5000자 이하여야 합니다.")
         String careerDetail,
+        @Valid
+        @Size(max = 50, message = "프로젝트 항목은 최대 50개까지 입력할 수 있습니다.")
         List<ProfileProjectEntryDto> projectEntries,
+        @Size(max = 5000, message = "프로젝트 경험은 5000자 이하여야 합니다.")
         String projectExperience,
         @Size(max = 500, message = "경력 공백 사유는 500자 이하여야 합니다.")
         String careerGapReason,
@@ -102,25 +117,38 @@ public record UserProfileUpsertRequestDto(
         String targetJob,
         @NotEmpty(message = "보유 기술/역량은 1개 이상 필요합니다.")
         @Size(max = 100, message = "보유 기술/역량은 최대 100개까지 입력할 수 있습니다.")
-        List<@NotBlank(message = "보유 기술/역량에는 빈 값을 넣을 수 없습니다.") String> skills,
+        List<@NotBlank(message = "보유 기술/역량에는 빈 값을 넣을 수 없습니다.") @Size(max = 200) String> skills,
+        @Valid
+        @Size(max = 50, message = "자격증 항목은 최대 50개까지 입력할 수 있습니다.")
         List<ProfileCertificationEntryDto> certificationEntries,
-        List<String> certifications,
+        @Size(max = 100, message = "자격증은 최대 100개까지 입력할 수 있습니다.")
+        List<@NotBlank @Size(max = 300) String> certifications,
+        @Valid
+        @Size(max = 50, message = "어학 항목은 최대 50개까지 입력할 수 있습니다.")
         List<ProfileLanguageEntryDto> languageEntries,
+        @Valid
+        @Size(max = 50, message = "포트폴리오 항목은 최대 50개까지 입력할 수 있습니다.")
         List<ProfilePortfolioEntryDto> portfolioEntries,
         @Size(max = 500, message = "포트폴리오 URL은 500자 이하여야 합니다.")
         String portfolioUrl,
+        @Valid
+        @Size(max = 50, message = "수상 항목은 최대 50개까지 입력할 수 있습니다.")
         List<ProfileAwardEntryDto> awardEntries,
+        @Size(max = 5000, message = "수상 내용은 5000자 이하여야 합니다.")
         String awards,
+        @Valid
+        @Size(max = 50, message = "교육 항목은 최대 50개까지 입력할 수 있습니다.")
         List<ProfileTrainingEntryDto> trainingEntries,
+        @Size(max = 5000, message = "교육 내용은 5000자 이하여야 합니다.")
         String trainings,
 
         ProfileDisabilitySeverity disabilitySeverity,
         Boolean disabilityRegisteredYn,
         @NotNull(message = "민감정보 수집·이용 동의 여부를 선택해 주세요.")
         Boolean sensitiveInfoConsentYn,
-        String disabilityDescription,
-        String assistiveDevices,
-        String workSupportRequirements,
+        @Size(max = 5000) String disabilityDescription,
+        @Size(max = 2000) String assistiveDevices,
+        @Size(max = 5000) String workSupportRequirements,
 
         ProfileWorkAvailability workAvailability,
         @NotEmpty(message = "근무 형태는 1개 이상 필요합니다.")
@@ -132,11 +160,12 @@ public record UserProfileUpsertRequestDto(
         Boolean remoteAvailableYn,
 
         @NotBlank(message = "자기소개는 필수입니다.")
+        @Size(max = 10000, message = "자기소개는 10000자 이하여야 합니다.")
         String selfIntroduction,
-        String motivation,
-        String jobFitDescription,
-        String careerGoal,
-        String strengthsWeaknesses,
+        @Size(max = 5000) String motivation,
+        @Size(max = 5000) String jobFitDescription,
+        @Size(max = 5000) String careerGoal,
+        @Size(max = 5000) String strengthsWeaknesses,
 
         ProfileMilitaryService militaryService,
         Boolean patrioticVeteranYn,
@@ -147,6 +176,7 @@ public record UserProfileUpsertRequestDto(
 ) {
 
     @AssertTrue(message = "민감정보 처리에 동의한 경우 장애 유형, 장애 정도, 장애인 등록 여부를 모두 입력해 주세요.")
+    @JsonIgnore
     public boolean isSensitiveInfoCompleteWhenConsented() {
         return !Boolean.TRUE.equals(sensitiveInfoConsentYn)
                 || (disabilityType != null && disabilitySeverity != null && disabilityRegisteredYn != null);
