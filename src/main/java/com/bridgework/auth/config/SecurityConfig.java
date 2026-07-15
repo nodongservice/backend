@@ -90,7 +90,7 @@ public class SecurityConfig {
                                 "/api/v1/auth/logout").permitAll()
                         .anyRequest().authenticated()
                 )
-                .addFilterBefore(refreshCookieOriginFilter, JwtAuthenticationFilter.class)
+                .addFilterBefore(refreshCookieOriginFilter, UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
                 .addFilterAfter(rateLimitFilter, JwtAuthenticationFilter.class);
 
