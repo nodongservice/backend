@@ -35,7 +35,6 @@ public class RecommendAsyncTaskService {
     private static final int DAILY_CACHE_BOUNDARY_HOUR = 2;
     private static final int DEFAULT_PAGE_LIMIT = 100;
     private static final int MAX_PAGE_LIMIT = 100;
-    private static final int MAX_PAGE_OFFSET = 1000;
     private static final String TASK_SCHEMA_VERSION = "v7-ai-full-results";
     private static final String TASK_KEY_PREFIX = "recommend:task:";
     private static final String TASK_LOCK_KEY_PREFIX = "recommend:task:lock:";
@@ -408,7 +407,7 @@ public class RecommendAsyncTaskService {
     }
 
     private int safeOffset(RecommendRequestDto request) {
-        return request == null ? 0 : request.safeOffset(MAX_PAGE_OFFSET);
+        return request == null ? 0 : request.safeOffset(Integer.MAX_VALUE);
     }
 
     private record RecommendationKeyContext(

@@ -19,7 +19,6 @@ public class RecommendGatewayService {
 
     private static final int DEFAULT_PAGE_LIMIT = 100;
     private static final int MAX_PAGE_LIMIT = 100;
-    private static final int MAX_PAGE_OFFSET = 1000;
 
     private final UserProfileService userProfileService;
     private final RecommendJobQueryService recommendJobQueryService;
@@ -121,7 +120,7 @@ public class RecommendGatewayService {
     }
 
     private int safeOffset(RecommendRequestDto request) {
-        return request == null ? 0 : request.safeOffset(MAX_PAGE_OFFSET);
+        return request == null ? 0 : request.safeOffset(Integer.MAX_VALUE);
     }
 
     private int safeAiLimit(RecommendRequestDto request) {
