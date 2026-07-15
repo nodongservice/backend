@@ -1,12 +1,9 @@
 package com.bridgework.auth.dto;
 
 import io.swagger.v3.oas.annotations.media.Schema;
-import jakarta.validation.constraints.NotBlank;
-
 @Schema(description = "토큰 재발급 요청 DTO")
 public record TokenRefreshRequestDto(
-        @Schema(description = "리프레시 토큰", requiredMode = Schema.RequiredMode.REQUIRED)
-        @NotBlank(message = "refreshToken은 필수입니다.")
+        @Schema(description = "레거시 클라이언트용 리프레시 토큰. 브라우저는 HttpOnly 쿠키를 사용합니다.", requiredMode = Schema.RequiredMode.NOT_REQUIRED)
         String refreshToken
 ) {
 }

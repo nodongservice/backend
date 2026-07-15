@@ -15,7 +15,8 @@ import com.bridgework.admin.auth.exception.AdminAccountLockedException;
 import com.bridgework.admin.auth.exception.InvalidAdminCredentialsException;
 import com.bridgework.admin.auth.repository.AdminAccountRepository;
 import com.bridgework.auth.entity.UserRole;
-import com.bridgework.auth.security.JwtTokenProvider;
+import com.bridgework.auth.dto.TokenPairResponseDto;
+import com.bridgework.auth.service.TokenSessionService;
 import com.bridgework.common.notification.DiscordNotifierService;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -36,7 +37,7 @@ class AdminAuthServiceTest {
     @Mock
     private PasswordEncoder passwordEncoder;
     @Mock
-    private JwtTokenProvider jwtTokenProvider;
+    private TokenSessionService tokenSessionService;
     @Mock
     private DiscordNotifierService discordNotifierService;
 
@@ -47,7 +48,7 @@ class AdminAuthServiceTest {
         adminAuthService = new AdminAuthService(
                 adminAccountRepository,
                 passwordEncoder,
-                jwtTokenProvider,
+                tokenSessionService,
                 discordNotifierService
         );
     }
@@ -59,13 +60,20 @@ class AdminAuthServiceTest {
 
         when(adminAccountRepository.findForUpdateByLoginId("admin01")).thenReturn(Optional.of(adminAccount));
         when(passwordEncoder.matches("plain-password", "$2a$12$dummy.hash.value")).thenReturn(true);
-        when(jwtTokenProvider.issueAccessToken(99L, UserRole.ADMIN))
-                .thenReturn(new JwtTokenProvider.IssuedAccessToken("admin-access-token", expiresAt));
+        when(tokenSessionService.issue(99L, UserRole.ADMIN))
+                .thenReturn(new TokenPairResponseDto(
+                        "admin-access-token",
+                        "admin-refresh-token",
+                        "Bearer",
+                        expiresAt,
+                        expiresAt.plusDays(14)
+                ));
 
         AdminLoginResponseDto response = adminAuthService.login(new AdminLoginRequestDto("admin01", "plain-password"));
 
         assertThat(response.accessToken()).isEqualTo("admin-access-token");
         assertThat(response.tokenType()).isEqualTo("Bearer");
+        assertThat(response.refreshToken()).isEqualTo("admin-refresh-token");
         assertThat(response.accessTokenExpiresAt()).isEqualTo(expiresAt.withOffsetSameInstant(ZoneOffset.UTC));
         verify(discordNotifierService, never()).notifyAdminAccountLocked(any(), any(), any());
     }

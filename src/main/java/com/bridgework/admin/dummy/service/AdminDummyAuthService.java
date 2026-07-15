@@ -13,12 +13,10 @@ import com.bridgework.admin.dummy.exception.AdminDummyAuthException;
 import com.bridgework.admin.dummy.repository.AdminDummyLoginAuditRepository;
 import com.bridgework.admin.dummy.repository.AdminDummyProfileRepository;
 import com.bridgework.admin.dummy.repository.AdminDummyUserRepository;
-import com.bridgework.auth.config.BridgeWorkAuthProperties;
+import com.bridgework.auth.dto.TokenPairResponseDto;
 import com.bridgework.auth.exception.AuthDomainException;
 import com.bridgework.auth.entity.UserRole;
-import com.bridgework.auth.security.JwtTokenProvider;
-import com.bridgework.auth.service.JwtTokenPair;
-import com.bridgework.auth.service.RefreshTokenStoreService;
+import com.bridgework.auth.service.TokenSessionService;
 import com.bridgework.audit.service.PersonalDataAccessAuditService;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -36,26 +34,20 @@ public class AdminDummyAuthService {
     private final AdminDummyProfileRepository adminDummyProfileRepository;
     private final AdminDummyLoginAuditRepository adminDummyLoginAuditRepository;
     private final AdminAccountRepository adminAccountRepository;
-    private final JwtTokenProvider jwtTokenProvider;
-    private final RefreshTokenStoreService refreshTokenStoreService;
-    private final BridgeWorkAuthProperties authProperties;
+    private final TokenSessionService tokenSessionService;
     private final PersonalDataAccessAuditService personalDataAccessAuditService;
 
     public AdminDummyAuthService(AdminDummyUserRepository adminDummyUserRepository,
                                  AdminDummyProfileRepository adminDummyProfileRepository,
                                  AdminDummyLoginAuditRepository adminDummyLoginAuditRepository,
                                  AdminAccountRepository adminAccountRepository,
-                                 JwtTokenProvider jwtTokenProvider,
-                                 RefreshTokenStoreService refreshTokenStoreService,
-                                 BridgeWorkAuthProperties authProperties,
+                                 TokenSessionService tokenSessionService,
                                  PersonalDataAccessAuditService personalDataAccessAuditService) {
         this.adminDummyUserRepository = adminDummyUserRepository;
         this.adminDummyProfileRepository = adminDummyProfileRepository;
         this.adminDummyLoginAuditRepository = adminDummyLoginAuditRepository;
         this.adminAccountRepository = adminAccountRepository;
-        this.jwtTokenProvider = jwtTokenProvider;
-        this.refreshTokenStoreService = refreshTokenStoreService;
-        this.authProperties = authProperties;
+        this.tokenSessionService = tokenSessionService;
         this.personalDataAccessAuditService = personalDataAccessAuditService;
     }
 
@@ -116,15 +108,9 @@ public class AdminDummyAuthService {
             );
         }
 
-        JwtTokenPair tokenPair = jwtTokenProvider.issueTokenPair(
+        TokenPairResponseDto tokenPair = tokenSessionService.issue(
                 dummyUser.getAppUser().getId(),
                 UserRole.USER
-        );
-        refreshTokenStoreService.save(
-                dummyUser.getAppUser().getId(),
-                tokenPair.refreshTokenId(),
-                tokenPair.refreshToken(),
-                authProperties.getJwt().getRefreshTokenValidity()
         );
 
         AdminDummyLoginAudit loginAudit = new AdminDummyLoginAudit();
@@ -153,8 +139,8 @@ public class AdminDummyAuthService {
                 tokenPair.accessToken(),
                 tokenPair.refreshToken(),
                 "Bearer",
-                tokenPair.accessTokenExpiresAt().withOffsetSameInstant(ZoneOffset.UTC),
-                tokenPair.refreshTokenExpiresAt().withOffsetSameInstant(ZoneOffset.UTC),
+                tokenPair.accessTokenExpiresAt(),
+                tokenPair.refreshTokenExpiresAt(),
                 dummyUser.getAppUser().getId(),
                 dummyUser.getDummyKey(),
                 profiles

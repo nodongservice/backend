@@ -39,8 +39,34 @@ public class JwtTokenProvider {
         OffsetDateTime accessExpiresAt = now.plus(authProperties.getJwt().getAccessTokenValidity());
         OffsetDateTime refreshExpiresAt = now.plus(authProperties.getJwt().getRefreshTokenValidity());
         String refreshTokenId = UUID.randomUUID().toString();
+        String sessionId = UUID.randomUUID().toString();
 
-        String accessToken = buildToken(userId, role, TOKEN_TYPE_ACCESS, accessExpiresAt, UUID.randomUUID().toString(), now);
+        return issueTokenPair(userId, role, sessionId, now, accessExpiresAt, refreshExpiresAt, refreshTokenId);
+    }
+
+    public JwtTokenPair rotateTokenPair(Long userId, UserRole role, String sessionId) {
+        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+        return issueTokenPair(
+                userId,
+                role,
+                sessionId,
+                now,
+                now.plus(authProperties.getJwt().getAccessTokenValidity()),
+                now.plus(authProperties.getJwt().getRefreshTokenValidity()),
+                UUID.randomUUID().toString()
+        );
+    }
+
+    private JwtTokenPair issueTokenPair(Long userId,
+                                        UserRole role,
+                                        String sessionId,
+                                        OffsetDateTime now,
+                                        OffsetDateTime accessExpiresAt,
+                                        OffsetDateTime refreshExpiresAt,
+                                        String refreshTokenId) {
+        String accessToken = buildToken(
+                userId, role, TOKEN_TYPE_ACCESS, accessExpiresAt, UUID.randomUUID().toString(), sessionId, now
+        );
 
         String refreshToken = Jwts.builder()
                 .subject(String.valueOf(userId))
@@ -50,23 +76,18 @@ public class JwtTokenProvider {
                 .id(refreshTokenId)
                 .claim("role", role.name())
                 .claim("token_type", TOKEN_TYPE_REFRESH)
+                .claim("sid", sessionId)
                 .signWith(signingKey)
                 .compact();
 
-        return new JwtTokenPair(accessToken, refreshToken, refreshTokenId, accessExpiresAt, refreshExpiresAt);
-    }
-
-    public IssuedAccessToken issueAccessToken(Long userId, UserRole role) {
-        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
-        OffsetDateTime accessExpiresAt = now.plus(authProperties.getJwt().getAccessTokenValidity());
-        String accessToken = buildToken(userId, role, TOKEN_TYPE_ACCESS, accessExpiresAt, UUID.randomUUID().toString(), now);
-        return new IssuedAccessToken(accessToken, accessExpiresAt);
+        return new JwtTokenPair(accessToken, refreshToken, refreshTokenId, sessionId, accessExpiresAt, refreshExpiresAt);
     }
 
     public ParsedJwtToken parse(String token) {
         try {
             Claims claims = Jwts.parser()
                     .verifyWith(signingKey)
+                    .requireIssuer(authProperties.getJwt().getIssuer())
                     .build()
                     .parseSignedClaims(token)
                     .getPayload();
@@ -75,8 +96,9 @@ public class JwtTokenProvider {
             String role = claims.get("role", String.class);
             String tokenType = claims.get("token_type", String.class);
             String tokenId = claims.getId();
+            String sessionId = claims.get("sid", String.class);
 
-            if (subject == null || role == null || tokenType == null || tokenId == null) {
+            if (subject == null || role == null || tokenType == null || tokenId == null || sessionId == null) {
                 throw new InvalidJwtException("JWT 클레임이 유효하지 않습니다.");
             }
 
@@ -84,7 +106,8 @@ public class JwtTokenProvider {
                     Long.parseLong(subject),
                     UserRole.valueOf(role),
                     tokenId,
-                    tokenType
+                    tokenType,
+                    sessionId
             );
         } catch (JwtException | IllegalArgumentException exception) {
             throw new InvalidJwtException("페이지가 유효하지 않습니다 다시 로그인 해주세요.");
@@ -97,6 +120,7 @@ public class JwtTokenProvider {
             String tokenType,
             OffsetDateTime expiresAt,
             String tokenId,
+            String sessionId,
             OffsetDateTime issuedAt
     ) {
         return Jwts.builder()
@@ -107,13 +131,8 @@ public class JwtTokenProvider {
                 .id(tokenId)
                 .claim("role", role.name())
                 .claim("token_type", tokenType)
+                .claim("sid", sessionId)
                 .signWith(signingKey)
                 .compact();
-    }
-
-    public record IssuedAccessToken(
-            String token,
-            OffsetDateTime expiresAt
-    ) {
     }
 }

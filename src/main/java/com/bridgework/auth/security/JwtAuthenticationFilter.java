@@ -5,6 +5,7 @@ import com.bridgework.auth.entity.UserRole;
 import com.bridgework.auth.entity.UserStatus;
 import com.bridgework.auth.exception.InvalidJwtException;
 import com.bridgework.auth.repository.AppUserRepository;
+import com.bridgework.auth.service.RefreshTokenStoreService;
 import com.bridgework.common.dto.ApiResponse;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.FilterChain;
@@ -30,15 +31,18 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private final JwtTokenProvider jwtTokenProvider;
     private final AppUserRepository appUserRepository;
     private final AdminAccountRepository adminAccountRepository;
+    private final RefreshTokenStoreService refreshTokenStoreService;
     private final ObjectMapper objectMapper;
 
     public JwtAuthenticationFilter(JwtTokenProvider jwtTokenProvider,
                                    AppUserRepository appUserRepository,
                                    AdminAccountRepository adminAccountRepository,
+                                   RefreshTokenStoreService refreshTokenStoreService,
                                    ObjectMapper objectMapper) {
         this.jwtTokenProvider = jwtTokenProvider;
         this.appUserRepository = appUserRepository;
         this.adminAccountRepository = adminAccountRepository;
+        this.refreshTokenStoreService = refreshTokenStoreService;
         this.objectMapper = objectMapper;
     }
 
@@ -65,6 +69,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             }
             if (!isActiveAccount(parsedToken)) {
                 throw new InvalidJwtException("비활성화된 계정입니다.");
+            }
+            if (!refreshTokenStoreService.isSessionActive(
+                    parsedToken.userId(), parsedToken.role(), parsedToken.sessionId()
+            )) {
+                throw new InvalidJwtException("종료된 로그인 세션입니다.");
             }
 
             UserPrincipal principal = new UserPrincipal(parsedToken.userId(), parsedToken.role());

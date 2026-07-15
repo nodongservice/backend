@@ -1,6 +1,7 @@
 package com.bridgework.auth.config;
 
 import com.bridgework.auth.security.JwtAuthenticationFilter;
+import com.bridgework.auth.security.RefreshCookieOriginFilter;
 import com.bridgework.common.dto.ApiResponse;
 import com.bridgework.common.ratelimit.RateLimitFilter;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -30,15 +31,18 @@ public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
     private final RateLimitFilter rateLimitFilter;
+    private final RefreshCookieOriginFilter refreshCookieOriginFilter;
     private final BridgeWorkAuthProperties authProperties;
     private final ObjectMapper objectMapper;
 
     public SecurityConfig(JwtAuthenticationFilter jwtAuthenticationFilter,
                           RateLimitFilter rateLimitFilter,
+                          RefreshCookieOriginFilter refreshCookieOriginFilter,
                           BridgeWorkAuthProperties authProperties,
                           ObjectMapper objectMapper) {
         this.jwtAuthenticationFilter = jwtAuthenticationFilter;
         this.rateLimitFilter = rateLimitFilter;
+        this.refreshCookieOriginFilter = refreshCookieOriginFilter;
         this.authProperties = authProperties;
         this.objectMapper = objectMapper;
     }
@@ -82,9 +86,11 @@ public class SecurityConfig {
                                 "/api/v1/auth/social/login",
                                 "/api/v1/auth/social/signup/complete",
                                 "/api/v1/auth/withdraw/cancel",
-                                "/api/v1/auth/token/refresh").permitAll()
+                                "/api/v1/auth/token/refresh",
+                                "/api/v1/auth/logout").permitAll()
                         .anyRequest().authenticated()
                 )
+                .addFilterBefore(refreshCookieOriginFilter, JwtAuthenticationFilter.class)
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
                 .addFilterAfter(rateLimitFilter, JwtAuthenticationFilter.class);
 

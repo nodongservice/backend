@@ -35,7 +35,7 @@ public class SocialOAuthService {
                                               String state) {
         BridgeWorkAuthProperties.Provider providerProperties = getProviderProperties(provider);
         validateProviderConfiguration(provider, providerProperties);
-        String resolvedRedirectUri = StringUtils.hasText(redirectUri) ? redirectUri : providerProperties.getRedirectUri();
+        String resolvedRedirectUri = resolveRedirectUri(redirectUri, providerProperties.getRedirectUri());
 
         String accessToken = exchangeAccessToken(provider, providerProperties, code, resolvedRedirectUri, state);
         String userInfoResponse = requestUserInfo(providerProperties, accessToken);
@@ -174,6 +174,14 @@ public class SocialOAuthService {
                 || !StringUtils.hasText(providerProperties.getRedirectUri())) {
             throw new SocialLoginFailedException(provider.name() + " OAuth 설정이 누락되었습니다.");
         }
+    }
+
+    String resolveRedirectUri(String requestedRedirectUri, String configuredRedirectUri) {
+        if (StringUtils.hasText(requestedRedirectUri)
+                && !requestedRedirectUri.trim().equals(configuredRedirectUri)) {
+            throw new SocialLoginFailedException("허용되지 않은 OAuth 리다이렉트 URI입니다.");
+        }
+        return configuredRedirectUri;
     }
 
     private String asNullableText(JsonNode node) {

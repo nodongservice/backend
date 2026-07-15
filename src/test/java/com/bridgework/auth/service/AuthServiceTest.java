@@ -27,8 +27,6 @@ import com.bridgework.auth.exception.InvalidAuthRequestException;
 import com.bridgework.auth.exception.InvalidRefreshTokenException;
 import com.bridgework.auth.exception.SignupCompletionInProgressException;
 import com.bridgework.auth.repository.AppUserRepository;
-import com.bridgework.auth.security.JwtTokenProvider;
-import com.bridgework.auth.security.ParsedJwtToken;
 import com.bridgework.common.notification.DiscordNotifierService;
 import com.bridgework.profile.entity.UserProfile;
 import com.bridgework.profile.dto.UserProfileUpsertRequestDto;
@@ -40,7 +38,6 @@ import com.bridgework.profile.enums.ProfileWorkAvailability;
 import com.bridgework.profile.enums.ProfileWorkType;
 import com.bridgework.profile.repository.UserProfileRepository;
 import com.bridgework.profile.service.UserProfileCommandFacade;
-import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -62,9 +59,7 @@ class AuthServiceTest {
     @Mock
     private SignupSessionStoreService signupSessionStoreService;
     @Mock
-    private RefreshTokenStoreService refreshTokenStoreService;
-    @Mock
-    private JwtTokenProvider jwtTokenProvider;
+    private TokenSessionService tokenSessionService;
     @Mock
     private SignupCompletionPersistenceService signupCompletionPersistenceService;
     @Mock
@@ -82,14 +77,12 @@ class AuthServiceTest {
     @BeforeEach
     void setUp() {
         BridgeWorkAuthProperties authProperties = new BridgeWorkAuthProperties();
-        authProperties.getJwt().setRefreshTokenValidity(Duration.ofDays(14));
 
         authService = new AuthService(
                 appUserRepository,
                 socialOAuthService,
                 signupSessionStoreService,
-                refreshTokenStoreService,
-                jwtTokenProvider,
+                tokenSessionService,
                 authProperties,
                 signupCompletionPersistenceService,
                 userProfileCommandFacade,
@@ -145,7 +138,7 @@ class AuthServiceTest {
         assertThat(response.signupToken()).isEqualTo("signup-token");
         assertThat(response.accountStatus()).isEqualTo(SocialLoginAccountStatus.SIGNUP_REQUIRED);
         assertThat(response.tokenPair()).isNull();
-        verify(jwtTokenProvider, never()).issueTokenPair(any(), any());
+        verify(tokenSessionService, never()).issue(any(), any());
     }
 
     @Test
@@ -161,10 +154,10 @@ class AuthServiceTest {
                 "소셜이름"
         );
         OffsetDateTime now = OffsetDateTime.now();
-        JwtTokenPair tokenPair = new JwtTokenPair(
+        TokenPairResponseDto tokenPair = new TokenPairResponseDto(
                 "access-token",
                 "refresh-token",
-                "refresh-id",
+                "Bearer",
                 now.plusMinutes(15),
                 now.plusDays(14)
         );
@@ -175,22 +168,22 @@ class AuthServiceTest {
         when(signupCompletionPersistenceService.complete(request, sessionData, Optional.empty()))
                 .thenReturn(new CompletedSignupUser(1L, "social@example.com", UserRole.USER));
         when(appUserRepository.countRealSignedUpUsers()).thenReturn(1L);
-        when(jwtTokenProvider.issueTokenPair(1L, UserRole.USER)).thenReturn(tokenPair);
+        when(tokenSessionService.issue(1L, UserRole.USER)).thenReturn(tokenPair);
 
         TokenPairResponseDto response = authService.completeSignup(request);
 
         assertThat(response.accessToken()).isEqualTo("access-token");
         assertThat(response.refreshToken()).isEqualTo("refresh-token");
         verify(signupSessionStoreService).deleteSession("signup-token");
-        verify(refreshTokenStoreService).save(eq(1L), eq("refresh-id"), eq("refresh-token"), any(Duration.class));
+        verify(tokenSessionService).issue(1L, UserRole.USER);
 
         verify(signupCompletionPersistenceService).complete(request, sessionData, Optional.empty());
         verify(signupSessionStoreService).releaseCompletionLock("signup-token", "lock-owner");
         verify(discordNotifierService).notifySignupCompleted(eq("social@example.com"), eq(1L));
 
-        InOrder completionOrder = inOrder(signupCompletionPersistenceService, refreshTokenStoreService, signupSessionStoreService);
+        InOrder completionOrder = inOrder(signupCompletionPersistenceService, tokenSessionService, signupSessionStoreService);
         completionOrder.verify(signupCompletionPersistenceService).complete(request, sessionData, Optional.empty());
-        completionOrder.verify(refreshTokenStoreService).save(eq(1L), eq("refresh-id"), eq("refresh-token"), any(Duration.class));
+        completionOrder.verify(tokenSessionService).issue(1L, UserRole.USER);
         completionOrder.verify(signupSessionStoreService).deleteSession("signup-token");
     }
 
@@ -233,8 +226,7 @@ class AuthServiceTest {
 
     @Test
     void refreshToken_whenTokenTypeIsNotRefresh_thenThrows() {
-        when(jwtTokenProvider.parse("access-like-token"))
-                .thenReturn(new ParsedJwtToken(1L, UserRole.USER, "token-id", JwtTokenProvider.TOKEN_TYPE_ACCESS));
+        when(tokenSessionService.refresh("access-like-token")).thenThrow(new InvalidRefreshTokenException());
 
         assertThatThrownBy(() -> authService.refreshToken("access-like-token"))
                 .isInstanceOf(InvalidRefreshTokenException.class);
@@ -242,12 +234,9 @@ class AuthServiceTest {
 
     @Test
     void logout_whenUserMatchesRefreshTokenOwner_thenDeletesRefreshToken() {
-        when(jwtTokenProvider.parse("refresh-token"))
-                .thenReturn(new ParsedJwtToken(1L, UserRole.USER, "refresh-id", JwtTokenProvider.TOKEN_TYPE_REFRESH));
+        authService.logout("refresh-token");
 
-        authService.logout(1L, "refresh-token");
-
-        verify(refreshTokenStoreService).delete(1L, "refresh-id");
+        verify(tokenSessionService).revoke("refresh-token");
     }
 
     @Test
@@ -268,7 +257,7 @@ class AuthServiceTest {
         assertThat(user.getStatus()).isEqualTo(UserStatus.PENDING_DELETION);
         assertThat(user.getWithdrawalRequestedAt()).isNotNull();
         assertThat(user.getDeletedAt()).isNull();
-        verify(refreshTokenStoreService).deleteAllByUserId(1L);
+        verify(tokenSessionService).revokeAll(1L, UserRole.USER);
     }
 
     @Test
@@ -285,14 +274,14 @@ class AuthServiceTest {
         when(withdrawalCancelTokenStoreService.getRequiredUserId("cancel-token")).thenReturn(1L);
         when(appUserRepository.findById(1L)).thenReturn(Optional.of(user));
         OffsetDateTime now = OffsetDateTime.now();
-        JwtTokenPair tokenPair = new JwtTokenPair(
+        TokenPairResponseDto tokenPair = new TokenPairResponseDto(
                 "access-token",
                 "refresh-token",
-                "refresh-id",
+                "Bearer",
                 now.plusMinutes(15),
                 now.plusDays(14)
         );
-        when(jwtTokenProvider.issueTokenPair(1L, UserRole.USER)).thenReturn(tokenPair);
+        when(tokenSessionService.issue(1L, UserRole.USER)).thenReturn(tokenPair);
 
         TokenPairResponseDto response = authService.cancelWithdrawal("cancel-token");
 

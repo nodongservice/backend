@@ -12,20 +12,16 @@ import com.bridgework.auth.dto.TokenPairResponseDto;
 import com.bridgework.auth.entity.AppUser;
 import com.bridgework.auth.entity.UserRole;
 import com.bridgework.auth.entity.UserStatus;
-import com.bridgework.auth.exception.InvalidRefreshTokenException;
 import com.bridgework.auth.exception.SignupCompletionInProgressException;
 import com.bridgework.auth.exception.UserNotFoundException;
 import com.bridgework.auth.exception.WithdrawalNotPendingException;
 import com.bridgework.auth.repository.AppUserRepository;
-import com.bridgework.auth.security.JwtTokenProvider;
-import com.bridgework.auth.security.ParsedJwtToken;
 import com.bridgework.common.notification.DiscordNotifierService;
 import com.bridgework.profile.entity.UserProfile;
 import com.bridgework.profile.repository.UserProfileRepository;
 import com.bridgework.profile.service.UserProfileCommandFacade;
 import jakarta.transaction.Transactional;
 import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
 import java.util.List;
 import java.util.UUID;
 import org.slf4j.Logger;
@@ -41,8 +37,7 @@ public class AuthService {
     private final AppUserRepository appUserRepository;
     private final SocialOAuthService socialOAuthService;
     private final SignupSessionStoreService signupSessionStoreService;
-    private final RefreshTokenStoreService refreshTokenStoreService;
-    private final JwtTokenProvider jwtTokenProvider;
+    private final TokenSessionService tokenSessionService;
     private final BridgeWorkAuthProperties authProperties;
     private final SignupCompletionPersistenceService signupCompletionPersistenceService;
     private final UserProfileCommandFacade userProfileCommandFacade;
@@ -54,8 +49,7 @@ public class AuthService {
     public AuthService(AppUserRepository appUserRepository,
                        SocialOAuthService socialOAuthService,
                        SignupSessionStoreService signupSessionStoreService,
-                       RefreshTokenStoreService refreshTokenStoreService,
-                       JwtTokenProvider jwtTokenProvider,
+                       TokenSessionService tokenSessionService,
                        BridgeWorkAuthProperties authProperties,
                        SignupCompletionPersistenceService signupCompletionPersistenceService,
                        UserProfileCommandFacade userProfileCommandFacade,
@@ -66,8 +60,7 @@ public class AuthService {
         this.appUserRepository = appUserRepository;
         this.socialOAuthService = socialOAuthService;
         this.signupSessionStoreService = signupSessionStoreService;
-        this.refreshTokenStoreService = refreshTokenStoreService;
-        this.jwtTokenProvider = jwtTokenProvider;
+        this.tokenSessionService = tokenSessionService;
         this.authProperties = authProperties;
         this.signupCompletionPersistenceService = signupCompletionPersistenceService;
         this.userProfileCommandFacade = userProfileCommandFacade;
@@ -169,46 +162,11 @@ public class AuthService {
 
     @Transactional
     public TokenPairResponseDto refreshToken(String refreshToken) {
-        ParsedJwtToken parsedJwtToken = jwtTokenProvider.parse(refreshToken);
-
-        if (!JwtTokenProvider.TOKEN_TYPE_REFRESH.equals(parsedJwtToken.tokenType())) {
-            throw new InvalidRefreshTokenException();
-        }
-
-        boolean matched = refreshTokenStoreService.matches(parsedJwtToken.userId(), parsedJwtToken.tokenId(), refreshToken);
-        if (!matched) {
-            throw new InvalidRefreshTokenException();
-        }
-
-        AppUser user = appUserRepository.findByIdAndStatus(parsedJwtToken.userId(), UserStatus.ACTIVE)
-                .orElseThrow(UserNotFoundException::new);
-
-        refreshTokenStoreService.delete(parsedJwtToken.userId(), parsedJwtToken.tokenId());
-        return issueAndStoreTokenPair(user);
+        return tokenSessionService.refresh(refreshToken);
     }
 
-    @Transactional
-    public void logout(Long userId, String refreshToken) {
-        if (!StringUtils.hasText(refreshToken)) {
-            return;
-        }
-
-        ParsedJwtToken parsedJwtToken;
-        try {
-            parsedJwtToken = jwtTokenProvider.parse(refreshToken);
-        } catch (Exception exception) {
-            return;
-        }
-
-        if (!JwtTokenProvider.TOKEN_TYPE_REFRESH.equals(parsedJwtToken.tokenType())) {
-            return;
-        }
-
-        if (!userId.equals(parsedJwtToken.userId())) {
-            return;
-        }
-
-        refreshTokenStoreService.delete(parsedJwtToken.userId(), parsedJwtToken.tokenId());
+    public void logout(String refreshToken) {
+        tokenSessionService.revoke(refreshToken);
     }
 
     public AuthMeResponseDto getMe(Long userId, UserRole role) {
@@ -246,7 +204,7 @@ public class AuthService {
         user.setStatus(UserStatus.PENDING_DELETION);
         user.setWithdrawalRequestedAt(OffsetDateTime.now());
 
-        refreshTokenStoreService.deleteAllByUserId(userId);
+        tokenSessionService.revokeAll(userId, UserRole.USER);
     }
 
     @Transactional
@@ -262,6 +220,7 @@ public class AuthService {
         user.setWithdrawalRequestedAt(null);
         user.setDeletedAt(null);
         withdrawalCancelTokenStoreService.deleteToken(withdrawalCancelToken);
+        tokenSessionService.revokeAll(user.getId(), UserRole.USER);
         return issueAndStoreTokenPair(user);
     }
 
@@ -285,22 +244,7 @@ public class AuthService {
     }
 
     private TokenPairResponseDto issueAndStoreTokenPair(Long userId, UserRole role) {
-        JwtTokenPair jwtTokenPair = jwtTokenProvider.issueTokenPair(userId, role);
-
-        refreshTokenStoreService.save(
-                userId,
-                jwtTokenPair.refreshTokenId(),
-                jwtTokenPair.refreshToken(),
-                authProperties.getJwt().getRefreshTokenValidity()
-        );
-
-        return new TokenPairResponseDto(
-                jwtTokenPair.accessToken(),
-                jwtTokenPair.refreshToken(),
-                "Bearer",
-                jwtTokenPair.accessTokenExpiresAt().withOffsetSameInstant(ZoneOffset.UTC),
-                jwtTokenPair.refreshTokenExpiresAt().withOffsetSameInstant(ZoneOffset.UTC)
-        );
+        return tokenSessionService.issue(userId, role);
     }
 
     private void notifySignupCompletedSafely(CompletedSignupUser completedUser) {
@@ -349,7 +293,7 @@ public class AuthService {
             profile.anonymizeForWithdrawal(buildAnonymizedProfileEmail(profile.getId(), userId));
         }
         userProfileRepository.saveAll(profiles);
-        refreshTokenStoreService.deleteAllByUserId(userId);
+        tokenSessionService.revokeAll(userId, UserRole.USER);
     }
 
     private String buildAnonymizedProfileEmail(Long profileId, Long userId) {

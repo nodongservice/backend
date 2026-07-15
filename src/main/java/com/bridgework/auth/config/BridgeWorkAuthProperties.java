@@ -21,6 +21,10 @@ public class BridgeWorkAuthProperties {
     @NotNull
     private OAuth2 oauth2 = new OAuth2();
 
+    @Valid
+    @NotNull
+    private RefreshCookie refreshCookie = new RefreshCookie();
+
     @NotNull
     private Duration signupSessionValidity = Duration.ofMinutes(20);
 
@@ -43,6 +47,14 @@ public class BridgeWorkAuthProperties {
 
     public OAuth2 getOauth2() {
         return oauth2;
+    }
+
+    public RefreshCookie getRefreshCookie() {
+        return refreshCookie;
+    }
+
+    public void setRefreshCookie(RefreshCookie refreshCookie) {
+        this.refreshCookie = refreshCookie;
     }
 
     public void setOauth2(OAuth2 oauth2) {
@@ -152,6 +164,41 @@ public class BridgeWorkAuthProperties {
 
         public void setNaver(Provider naver) {
             this.naver = naver;
+        }
+    }
+
+    public static class RefreshCookie {
+
+        @NotBlank
+        private String name = "bridgework_refresh";
+
+        @NotBlank
+        private String sameSite = "Lax";
+
+        private boolean secure;
+
+        public String getName() {
+            return name;
+        }
+
+        public void setName(String name) {
+            this.name = name;
+        }
+
+        public String getSameSite() {
+            return sameSite;
+        }
+
+        public void setSameSite(String sameSite) {
+            this.sameSite = sameSite;
+        }
+
+        public boolean isSecure() {
+            return secure;
+        }
+
+        public void setSecure(boolean secure) {
+            this.secure = secure;
         }
     }
 
