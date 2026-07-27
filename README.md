@@ -1,98 +1,75 @@
 # BridgeWork Backend
 
-브릿지워크 인증/프로필/추천/공공데이터/공고/관리자 백엔드입니다.
+BridgeWork의 인증·프로필·공고·추천 작업·공공데이터를 담당하는 Spring Boot 메인 API 서버입니다.
+
+프론트엔드의 단일 API 진입점으로 동작하며, AI 추천과 PDF 프로필 초안이 필요할 때만 FastAPI AI/GIS Service를 내부 호출합니다. 현재 유효 공고 전체 추천은 Redis 기반 비동기 task로 관리하고, 공공데이터 19종은 매일 수집해 원본과 정규화 테이블에 함께 저장합니다.
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/nodongservice/.github/main/images_new/dataflow_2.png" alt="BridgeWork 공공데이터 수집 정규화 활용 파이프라인" width="100%" />
+</p>
 
 ## 기술 스택
+
 - Java 17
 - Spring Boot 3.3.6
-- Spring Data JPA + Flyway
-- PostgreSQL
-- Spring Security + JWT
-- Redis
-- ShedLock(분산 스케줄 중복 방지)
+- Spring MVC + WebFlux client
+- Spring Data JPA + Flyway + PostgreSQL/PostGIS
+- Spring Security + JWT + Redis session
+- ShedLock 기반 분산 스케줄 중복 방지
+- Actuator + Micrometer Prometheus
+- JUnit 5 + Testcontainers
+
+## 전체 서비스에서의 역할
+
+```text
+React Frontend
+  -> Spring Backend
+       ├─ 인증·세션·회원 탈퇴
+       ├─ 프로필·공고·스크랩·공지사항
+       ├─ Redis 추천 task·결과 캐시
+       ├─ 공공데이터 수집·정규화·지오코딩
+       └─ FastAPI AI/GIS Service
+            ├─ 추천 스코어링·근거 생성
+            └─ PDF OCR·LLM 프로필 초안
+```
 
 ## 도메인 구조
-`com.bridgework.admin`
-- `auth`
-- `dummy`
 
-`com.bridgework.auth`
-- `controller`
-- `service`
-- `repository`
-- `entity`
-- `dto`
-- `exception`
+| 패키지 | 책임 |
+| --- | --- |
+| `admin` | 관리자 로그인, 권한이 통제된 더미 사용자 조회·대리 로그인 |
+| `auth` | 카카오·네이버 로그인, JWT/Redis 세션, 토큰 회전, 로그아웃, 탈퇴·복구 |
+| `profile` | 최대 3개 프로필 CRUD, 기본 프로필, 암호화, optimistic locking, OCR 중계 |
+| `posting` | 공고 상세·인기 공고, 스크랩, 추천 설명 만족도 피드백 |
+| `recommend` | AI ON/OFF 추천 게이트웨이, Redis task, 부분 결과, 일일 캐시 |
+| `notice` | 공개 공지사항과 관리자 CRUD |
+| `options` | 직무분류 트리, 지역·고용형태·급여방식 옵션 |
+| `map` | 근로지원인 수행기관 지도 레이어 |
+| `sync` | 공공데이터 수집, 원본·정규화 저장, 지오코딩, 운영 API |
+| `audit` | 민감 프로필 접근 이력 |
+| `common` | 응답·예외·보안·rate limit·모니터링·Discord 알림 |
 
-`com.bridgework.common`
-- `config`
-- `dto`
-- `exception`
-- `notification`
+## 팀
 
-`com.bridgework.profile`
-- `controller`
-- `service`
-- `repository`
-- `entity`
-- `dto`
-- `exception`
-
-`com.bridgework.recommend`
-- `controller`
-- `service`
-- `dto`
-- `config`
-- `exception`
-
-`com.bridgework.options`
-- `controller`
-- `service`
-- `dto`
-
-`com.bridgework.map`
-- `controller`
-- `service`
-- `dto`
-
-`com.bridgework.notice`
-- `controller`
-- `service`
-- `repository`
-- `entity`
-- `dto`
-- `exception`
-
-`com.bridgework.posting`
-- `controller`
-- `service`
-- `repository`
-- `entity`
-- `dto`
-- `exception`
-
-`com.bridgework.sync`
-- `admin/controller`
-- `service`
-- `repository`
-- `entity`
-- `dto`
-- `exception`
-- `normalized`
+| 이름 | 담당 |
+| --- | --- |
+| 장혜진 | 기획 |
+| 김수인 | 디자인 |
+| 최성현 | 백엔드 및 인프라 |
+| 박민정 | 프론트 및 AI 개발 |
 
 ## 현재 구현 범위
-- 기능 0: 소셜 로그인/회원가입 완료, JWT 재발급/로그아웃/내 정보 조회
-- 기능 0-1: 회원 탈퇴 신청/취소, 30일 유예 후 최종 비식별화(스케줄러)
-- 기능 1: 프로필 CRUD(최대 3개), 기본 프로필 지정/변경
-- 기능 1-2(OCR): 포트폴리오 PDF 업로드 기반 프로필 초안 생성 게이트웨이
-- 기능 2: 퀵 맞춤 추천 게이트웨이(`aiEnabled` ON/OFF)
-- 기능 3: 지도 추천 게이트웨이(`aiEnabled` ON/OFF)
-- 기능 3-1: 추천 설명 생성 게이트웨이
-- 기능 4: 공고 상세/인기 공고 조회, 공고 스크랩/해제/내 스크랩 목록
-- 기능 5: 관리자 로그인, 더미 사용자 케이스 조회/로그인
-- 기능 6: 공지사항 공개 조회, 관리자 공지사항 CRUD
-- 공공데이터: 스케줄러 동기화 + 수동 실행 + 원본/정규화 저장
-- 화면 옵션/지도 레이어: 직무 트리, 지역/고용형태/급여방식 옵션, 근로지원인 수행기관 마커 조회
+
+- 카카오·네이버 로그인, 회원가입 완료, 사용자·관리자 세션 분리, 1회성 리프레시 토큰 회전
+- 회원 탈퇴 신청·취소, 30일 유예 후 최종 비식별화와 재가입 가능 상태 보장
+- 프로필 CRUD(최대 3개), 기본 프로필, 민감·식별 정보 분리 암호화, 동시 수정 충돌 방지
+- PDF 업로드 검증과 FastAPI OCR·LLM 프로필 초안 게이트웨이
+- 퀵 추천·지도 추천의 AI ON/OFF 분기, 비동기 task, 부분 결과, 일일 결과 캐시
+- 공고 상세·인기 공고, 스크랩, 추천 설명 만족도 피드백
+- 공개 공지사항과 관리자 공지사항 CRUD
+- 관리자 로그인, 권한이 분리된 더미 사용자 조회·대리 로그인과 감사 로그
+- 공공데이터 19종의 스케줄·수동 동기화, 원본·정규화 저장, 주소 지오코딩
+- 직무 트리·지역·고용형태·급여방식 옵션과 근로지원인 수행기관 지도 레이어
 
 ## 추천 비동기 게이트웨이
 
@@ -124,6 +101,10 @@
 
 FastAPI 후보 조회는 모집 중인 공고와 마감일이 지나지 않은 공고를 기준으로 하며, 좌표가 있는 공고를 우선 정렬합니다. Spring은 이 기준을 깨지 않고 FastAPI 또는 DB 조회 결과를 전달합니다.
 
+<p align="center">
+  <img src="https://raw.githubusercontent.com/nodongservice/.github/main/images_new/dataflow_job.png" alt="BridgeWork 퀵 추천과 접근성 지도 추천 처리 흐름" width="100%" />
+</p>
+
 ## 공지사항/관리자 API
 
 공개 공지사항은 비로그인 사용자도 읽을 수 있고, 관리자 공지사항 API는 관리자 JWT가 필요합니다.
@@ -139,6 +120,10 @@ FastAPI 후보 조회는 모집 중인 공고와 마감일이 지나지 않은 �
 관리자 계정은 일반 사용자 기능을 사용할 수 없도록 프론트 라우트에서 관리자 화면으로 분리하고, 백엔드는 관리자 토큰을 `ADMIN`/`ROLE_ADMIN` 권한으로 검증합니다.
 
 ## 프로필 OCR 게이트웨이 API
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/nodongservice/.github/main/images_new/dataflow_ocr.png" alt="BridgeWork PDF OCR 및 LLM 프로필 초안 처리 흐름" width="100%" />
+</p>
 
 - `POST /api/v1/profiles/ocr/extract` (`multipart/form-data`)
 - 파라미터: `file`(PDF)
