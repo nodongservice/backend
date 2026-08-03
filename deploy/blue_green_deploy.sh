@@ -36,6 +36,69 @@ is_container_running() {
   docker ps --format '{{.Names}}' | grep -q "^${container_name}$"
 }
 
+cleanup_old_app_images() {
+  local image_ref="$1"
+  local keep_count="$2"
+  local repository running_image_ids candidate_ids deleted=0
+  repository="${image_ref%%:*}"
+
+  if [[ -z "$repository" || "$repository" == "$image_ref" ]]; then
+    log "이미지 정리를 건너뜁니다. 저장소 파싱 실패: $image_ref"
+    return 0
+  fi
+
+  if ! [[ "$keep_count" =~ ^[0-9]+$ ]] || (( keep_count < 1 )); then
+    keep_count=2
+  fi
+
+  # 실행 중 컨테이너가 참조한 이미지는 삭제 대상에서 제외한다.
+  running_image_ids="$(docker ps --format '{{.Image}}' | xargs -r docker image inspect --format '{{.Id}}' 2>/dev/null | sort -u || true)"
+  candidate_ids="$(
+    docker image ls "$repository" --format '{{.ID}}' | awk '!seen[$0]++' | tail -n +"$((keep_count + 1))"
+  )"
+
+  if [[ -z "$candidate_ids" ]]; then
+    log "이미지 정리 대상이 없습니다. repository=$repository keep=$keep_count"
+    return 0
+  fi
+
+  while IFS= read -r image_id; do
+    [[ -z "$image_id" ]] && continue
+    if grep -q "$image_id" <<<"$running_image_ids"; then
+      continue
+    fi
+    if docker image rm "$image_id" >/dev/null 2>&1; then
+      deleted=$((deleted + 1))
+    fi
+  done <<<"$candidate_ids"
+
+  docker image prune -f >/dev/null 2>&1 || true
+  log "이미지 정리 완료: repository=$repository deleted=$deleted keep=$keep_count"
+}
+
+ensure_minimum_free_disk() {
+  local required_mb="$1"
+  local available_mb
+
+  if ! [[ "$required_mb" =~ ^[0-9]+$ ]] || (( required_mb < 1024 )); then
+    log "최소 여유 공간 설정이 올바르지 않습니다: ${required_mb}MB"
+    exit 1
+  fi
+
+  available_mb="$(df -Pm / | awk 'NR == 2 {print $4}')"
+  if ! [[ "$available_mb" =~ ^[0-9]+$ ]]; then
+    log "루트 디스크 여유 공간을 확인하지 못했습니다."
+    exit 1
+  fi
+
+  log "배포 전 루트 디스크 여유 공간: ${available_mb}MB (필요: ${required_mb}MB)"
+  if (( available_mb < required_mb )); then
+    log "디스크 여유 공간이 부족해 배포를 중단합니다."
+    docker system df || true
+    exit 1
+  fi
+}
+
 release_deploy_lock() {
   if [[ -n "${DEPLOY_LOCK_DIR:-}" && -d "$DEPLOY_LOCK_DIR" && -f "$DEPLOY_LOCK_DIR/pid" ]]; then
     if [[ "$(cat "$DEPLOY_LOCK_DIR/pid" 2>/dev/null || true)" == "$$" ]]; then
@@ -107,7 +170,12 @@ HEALTH_CONNECT_TIMEOUT_SECONDS="${HEALTH_CONNECT_TIMEOUT_SECONDS:-2}"
 HEALTH_REQUEST_TIMEOUT_SECONDS="${HEALTH_REQUEST_TIMEOUT_SECONDS:-3}"
 
 IMAGE_URI="${IMAGE_URI:-}"
-IMAGE_RETENTION_COUNT="${IMAGE_RETENTION_COUNT:-5}"
+IMAGE_RETENTION_COUNT="${IMAGE_RETENTION_COUNT:-2}"
+PRE_PULL_IMAGE_RETENTION_COUNT="${PRE_PULL_IMAGE_RETENTION_COUNT:-2}"
+MIN_FREE_DISK_MB="${MIN_FREE_DISK_MB:-4096}"
+DOCKER_LOG_DRIVER="${DOCKER_LOG_DRIVER:-local}"
+DOCKER_LOG_MAX_SIZE="${DOCKER_LOG_MAX_SIZE:-20m}"
+DOCKER_LOG_MAX_FILE="${DOCKER_LOG_MAX_FILE:-3}"
 if [[ -z "$IMAGE_URI" ]]; then
   log "IMAGE_URI 환경변수는 필수입니다."
   exit 1
@@ -139,6 +207,10 @@ log "애플리케이션 컨테이너 실행 사용자(uid:gid): $APP_CONTAINER_U
 
 mkdir -p "$STATE_DIR"
 
+log "배포 전 구버전 이미지 정리"
+cleanup_old_app_images "$IMAGE_URI" "$PRE_PULL_IMAGE_RETENTION_COUNT"
+ensure_minimum_free_disk "$MIN_FREE_DISK_MB"
+
 if ! docker network inspect "$DOCKER_NETWORK" >/dev/null 2>&1; then
   log "도커 네트워크 생성: $DOCKER_NETWORK"
   docker network create "$DOCKER_NETWORK" >/dev/null
@@ -164,6 +236,9 @@ docker run -d \
   --name "$REDIS_CONTAINER_NAME" \
   --restart unless-stopped \
   --network "$DOCKER_NETWORK" \
+  --log-driver "$DOCKER_LOG_DRIVER" \
+  --log-opt "max-size=$DOCKER_LOG_MAX_SIZE" \
+  --log-opt "max-file=$DOCKER_LOG_MAX_FILE" \
   -v "${REDIS_VOLUME}:/data" \
   "$REDIS_IMAGE" \
   redis-server \
@@ -172,13 +247,20 @@ docker run -d \
   --loglevel warning \
   --requirepass "$REDIS_PASSWORD" >/dev/null
 
+redis_cli() {
+  REDISCLI_AUTH="$REDIS_PASSWORD" docker exec -e REDISCLI_AUTH "$REDIS_CONTAINER_NAME" redis-cli "$@"
+}
+
 wait_for_redis() {
   local timeout_seconds="$1"
   local interval_seconds=1
   local waited=0
+  local write_check_key="bridgework:ops:redis-write-health:$$"
 
   while (( waited < timeout_seconds )); do
-    if docker exec "$REDIS_CONTAINER_NAME" redis-cli -a "$REDIS_PASSWORD" ping | grep -q "PONG"; then
+    if redis_cli ping 2>/dev/null | grep -q "PONG" \
+      && redis_cli set "$write_check_key" "1" EX 10 2>/dev/null | grep -q "OK"; then
+      redis_cli del "$write_check_key" >/dev/null 2>&1 || true
       return 0
     fi
     sleep "$interval_seconds"
@@ -186,47 +268,6 @@ wait_for_redis() {
   done
 
   return 1
-}
-
-cleanup_old_app_images() {
-  local image_ref="$1"
-  local keep_count="$2"
-  local repository running_image_ids candidate_ids deleted=0
-  repository="${image_ref%%:*}"
-
-  if [[ -z "$repository" || "$repository" == "$image_ref" ]]; then
-    log "이미지 정리를 건너뜁니다. 저장소 파싱 실패: $image_ref"
-    return 0
-  fi
-
-  if ! [[ "$keep_count" =~ ^[0-9]+$ ]] || (( keep_count < 1 )); then
-    keep_count=5
-  fi
-
-  # 실행 중 컨테이너가 참조한 이미지는 삭제 대상에서 제외한다.
-  running_image_ids="$(docker ps --format '{{.Image}}' | xargs -r docker image inspect --format '{{.Id}}' 2>/dev/null | sort -u || true)"
-  candidate_ids="$(
-    docker image ls "$repository" --format '{{.ID}}' | awk '!seen[$0]++' | tail -n +"$((keep_count + 1))"
-  )"
-
-  if [[ -z "$candidate_ids" ]]; then
-    log "이미지 정리 대상이 없습니다. repository=$repository keep=$keep_count"
-    return 0
-  fi
-
-  while IFS= read -r image_id; do
-    [[ -z "$image_id" ]] && continue
-    if grep -q "$image_id" <<<"$running_image_ids"; then
-      continue
-    fi
-    if docker image rm "$image_id" >/dev/null 2>&1; then
-      deleted=$((deleted + 1))
-    fi
-  done <<<"$candidate_ids"
-
-  # dangling 레이어는 별도로 정리해 overlay 공간을 회수한다.
-  docker image prune -f >/dev/null 2>&1 || true
-  log "이미지 정리 완료: repository=$repository deleted=$deleted keep=$keep_count"
 }
 
 if ! wait_for_redis 30; then
@@ -299,6 +340,9 @@ docker run -d \
   --name "$TARGET_CONTAINER" \
   --restart no \
   --network "$DOCKER_NETWORK" \
+  --log-driver "$DOCKER_LOG_DRIVER" \
+  --log-opt "max-size=$DOCKER_LOG_MAX_SIZE" \
+  --log-opt "max-file=$DOCKER_LOG_MAX_FILE" \
   --add-host host.docker.internal:host-gateway \
   --user "$APP_CONTAINER_USER" \
   -v "${CONFIG_FILE}:/app/config/application-prod.yml:ro" \
